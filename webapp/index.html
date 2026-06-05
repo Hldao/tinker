@@ -732,10 +732,49 @@
   </div>
 </div>
 
+<!-- LOGIN modal — 邮箱 magic link · 两态: 输入邮箱 / 已发等收件箱 -->
+<div id="modal-login" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 480px;">
+    <!-- 状态 1: 填邮箱 -->
+    <div id="login-state-input">
+      <h3 class="modal-title">进 Tinker 工作室</h3>
+      <p class="modal-sub" id="login-sub">用邮箱 · 我们发个登录链接给你 · 5 分钟内点开就进 · 不用记密码</p>
+      <div class="mb-5">
+        <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的邮箱</label>
+        <input id="login-email" class="input-bare" type="email" placeholder="例如 you@gmail.com" autocomplete="email">
+        <div class="field-hint">新人 / 老人都填同一个框 · 第一次会自动开工作室</div>
+      </div>
+      <div class="flex justify-end gap-4 mt-6">
+        <button onclick="closeModal('modal-login')" class="btn-act" style="border-bottom: none;">取消</button>
+        <button id="login-send-btn" onclick="submitLoginEmail()" class="btn-act-primary">发链接到我邮箱 →</button>
+      </div>
+      <p class="text-xs serif" style="color: var(--sepia); margin-top: 14px; font-style: italic;">
+        不会发广告 · 不会卖给第三方 · alpha 期连密码都不要
+      </p>
+    </div>
+    <!-- 状态 2: 邮件已发 · 等点链接 -->
+    <div id="login-state-sent" class="hidden">
+      <h3 class="modal-title">邮件发出去了 <span style="color: var(--moss);">✓</span></h3>
+      <p class="modal-sub">去看看 <span id="login-sent-to" style="color: var(--vermilion); font-style: normal;"></span> 的收件箱 · 点登录链接进 Tinker</p>
+      <div style="margin: 24px 0;">
+        <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.7;">
+          · 没看到? 检查垃圾邮件文件夹<br>
+          · 1 分钟后可以 <a id="login-resend" class="react-action" style="color: var(--vermilion); cursor: pointer; opacity: 0.5; pointer-events: none;" onclick="resendLoginEmail()">重发一封</a><br>
+          · 邮箱填错了? <a class="react-action" style="color: var(--sepia); cursor: pointer;" onclick="resetLoginForm()">改邮箱</a>
+        </p>
+      </div>
+      <div class="flex justify-end gap-4 mt-6">
+        <button onclick="closeModal('modal-login')" class="btn-act-primary">好</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WELCOME modal — 第一次登录后 (server 返回 needsWelcome=true) · 确认/改 handle + tagline -->
 <div id="modal-set-handle" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
-    <h3 class="modal-title">你是谁?</h3>
-    <p class="modal-sub">填一个 handle 开张你的工作室 · alpha 期没认证 · 跟小伙伴约定不撞就好</p>
+    <h3 class="modal-title">开张你的工作室</h3>
+    <p class="modal-sub">handle 已从你邮箱预填 · 不喜欢可以改 · 现在不填一句话也行</p>
     <div class="mb-4">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">@handle (字母 / 数字 / 下划线 / 中文)</label>
       <input id="sh-handle" class="input-bare" placeholder="比如 zhang3 / wangxiaoming">
@@ -745,7 +784,7 @@
       <input id="sh-tagline" class="input-bare" placeholder="比如 用 AI 帮我妈做小红书">
     </div>
     <div class="flex justify-end gap-4 mt-6">
-      <button id="sh-submit-btn" onclick="submitSetHandle()" class="btn-act-primary">开张 →</button>
+      <button id="sh-submit-btn" onclick="submitWelcome()" class="btn-act-primary">开张 →</button>
     </div>
   </div>
 </div>
@@ -869,7 +908,7 @@
  * API helpers — 替代 localStorage · 同步 server
  * ========================================= */
 async function fetchState() {
-  const res = await fetch('/api/state');
+  const res = await fetch('/api/state', { credentials: 'same-origin' });
   if (!res.ok) throw new Error('server fetch failed');
   return res.json();
 }
@@ -877,19 +916,54 @@ async function fetchState() {
 async function apiAction(type, payload) {
   const res = await fetch('/api/action', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ type, payload: payload || {} }),
   });
   const data = await res.json();
+  if (res.status === 401) {
+    // session 失效 · 让用户重新登录
+    currentUser.id = null; currentUser.handle = null;
+    refreshMastheadHandle();
+    openLogin('继续刚才的操作');
+    throw new Error('请先登录');
+  }
   if (!res.ok) throw new Error(data.error || 'action failed');
   state = data.state;
   return data.result;
 }
 
-async function apiReset() {
-  const res = await fetch('/api/reset', { method: 'POST' });
+async function apiMe() {
+  const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+  if (!res.ok) return null;
   const data = await res.json();
-  state = data.state;
+  return data.user;
+}
+
+async function apiSendLink(email) {
+  const res = await fetch('/api/auth/send-link', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '发送失败');
+  return data;
+}
+
+async function apiWelcome(handle, tagline) {
+  const res = await fetch('/api/auth/welcome', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ handle, tagline }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '保存失败');
+  return data.user;
+}
+
+async function apiLogout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
 }
 
 
@@ -905,7 +979,8 @@ const NOTIF_TEMPLATES = {
 };
 
 let state;
-const currentUser = { handle: localStorage.getItem('tinker_my_handle') || null };
+// v0.3: currentUser 从 /api/auth/me 拉 · 不再走 localStorage handle
+const currentUser = { id: null, handle: null, email: null };
 let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
 let currentToolFilter = 'all';
 let trackingMode = false;
@@ -1468,7 +1543,7 @@ function renderNotifications() {
     root.innerHTML = `
       <div class="serif py-12 text-center" style="color: var(--sepia);">
         <p style="margin-bottom: 16px;">登录之后才能看到对你项目的反馈</p>
-        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openSetHandle('start')">开张我的工作室 →</span>
+        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openLogin('开张你的工作室')">开张我的工作室 →</span>
       </div>`;
     return;
   }
@@ -1616,8 +1691,8 @@ let currentMethodUsedCtx = null; // { projectId, updateIdx }
 
 async function openMethodUsed(projectId, updateIdx) {
   if (!currentUser.handle) {
-    pendingAfterLogin = () => openMethodUsed(projectId, updateIdx);
-    openSetHandle('interact', '说"用了 · 跑通了"');
+    setPending('openMethodUsed', { projectId, updateIdx });
+    openLogin('说"用了 · 跑通了"');
     return;
   }
   const p = projectById(projectId);
@@ -1789,8 +1864,8 @@ function zoomImage(src, caption) {
 async function reactToProject(level) {
   if (!currentUser.handle) {
     const savedProjectCtx = currentProjectCtx;
-    pendingAfterLogin = () => { currentProjectCtx = savedProjectCtx; reactToProject(level); };
-    openSetHandle('interact', level === 'wantToTry' ? '说"想试试"' : '反馈');
+    setPending('reactToProject', { projectCtx: savedProjectCtx, level });
+    openLogin(level === 'wantToTry' ? '说"想试试"' : '反馈');
     return;
   }
   const p = projectById(currentProjectCtx); if (!p) return;
@@ -1804,8 +1879,8 @@ async function reactToProject(level) {
 function openNote() {
   if (!currentUser.handle) {
     const savedProjectCtx = currentProjectCtx;
-    pendingAfterLogin = () => { currentProjectCtx = savedProjectCtx; openNote(); };
-    openSetHandle('interact', '留便签');
+    setPending('openNote', { projectCtx: savedProjectCtx });
+    openLogin('留便签');
     return;
   }
   currentNoteCtx = currentProjectCtx;
@@ -1852,8 +1927,8 @@ async function submitNote() {
 function openTinkered() {
   if (!currentUser.handle) {
     const savedProjectCtx = currentProjectCtx;
-    pendingAfterLogin = () => { currentProjectCtx = savedProjectCtx; openTinkered(); };
-    openSetHandle('interact', '挂自己的延伸版');
+    setPending('openTinkered', { projectCtx: savedProjectCtx });
+    openLogin('挂自己的延伸版');
     return;
   }
   currentTinkeredCtx = currentProjectCtx;
@@ -1989,8 +2064,8 @@ async function deleteUpdate(projectId, updateIdx) {
 
 function openPickProject() {
   if (!currentUser.handle) {
-    pendingAfterLogin = () => openPickProject();
-    openSetHandle('interact', '记一笔');
+    setPending('openPickProject', {});
+    openLogin('记一笔');
     return;
   }
   const me = currentUser.handle;
@@ -2083,8 +2158,8 @@ let editingProjectId = null;
 // 打开编辑项目 modal — 复用 new-project 表单 · 走 editProject action
 function openEditProject(projectId) {
   if (!currentUser.handle) {
-    pendingAfterLogin = () => openEditProject(projectId);
-    openSetHandle('interact', '改项目');
+    setPending('openEditProject', { projectId });
+    openLogin('改项目');
     return;
   }
   const p = projectById(projectId);
@@ -2140,8 +2215,8 @@ function openEditProject(projectId) {
 
 function openNewProject(isFirst) {
   if (!currentUser.handle) {
-    pendingAfterLogin = () => openNewProject(isFirst);
-    openSetHandle('interact', '开新项目');
+    setPending('openNewProject', { isFirst: !!isFirst });
+    openLogin('开新项目');
     return;
   }
   editingProjectId = null;
@@ -2340,130 +2415,220 @@ function refreshMastheadHandle() {
   const el = document.getElementById('masthead-handle-area');
   if (!el) return;
   if (currentUser.handle) {
-    // 已登录 · 显示 @handle (点 = 改 handle) + 出去
-    el.innerHTML = `<span style="color: var(--vermilion); cursor: pointer;" onclick="openSetHandle('rename')" title="换个身份">@${currentUser.handle}</span> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
+    el.innerHTML = `<span style="color: var(--vermilion);">@${currentUser.handle}</span> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
   } else {
-    // 未登录 · 匿名浏览中 · 鼓励但不强制登录
-    el.innerHTML = `<span style="color: var(--sepia); font-style: italic;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openSetHandle('start')">开张我的工作室</a>`;
+    el.innerHTML = `<span style="color: var(--sepia); font-style: italic;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('开张你的工作室')">开张我的工作室</a>`;
   }
 }
 
-// 登出 · 清 localStorage · 不动 server 上的 user/projects
-function logout() {
-  if (!confirm('出去之后回到匿名浏览 · 你的工作室和项目都还在 · 用同样 handle 进来就能继续 · 真的出去?')) return;
-  localStorage.removeItem('tinker_my_handle');
-  currentUser.handle = null;
+// 登出 · 调 /api/auth/logout 清 session cookie
+async function logout() {
+  if (!confirm('出去之后回到匿名浏览 · 你的工作室和项目都还在 · 用同样邮箱登回来就能继续 · 真的出去?')) return;
+  try {
+    await apiLogout();
+  } catch (e) { /* 容错 */ }
+  currentUser.id = null; currentUser.handle = null; currentUser.email = null;
   refreshMastheadHandle();
   updateUnreadBadge();
   showScreen('feed');
   showToast('出去了 · 还能匿名看 · 想互动随时再开');
 }
 
-// pendingAfterLogin: 用户点了需要 handle 的操作 → 弹 modal · 设完 handle 自动继续刚才那个动作
-let pendingAfterLogin = null;
-
-function requireHandle(action, contextDesc) {
-  if (currentUser.handle) {
-    action();
-    return;
-  }
-  pendingAfterLogin = action;
-  openSetHandle('interact', contextDesc);
+// pending 命令 · 走邮箱链接登录会刷新页面 · 必须序列化到 localStorage
+// 触发: 用户点 "想试试" / "+ 记一笔" 等 但没登录
+function setPending(kind, data) {
+  try {
+    localStorage.setItem('tinker_pending', JSON.stringify({ kind, ...data, returnTo: location.hash || '#/' }));
+  } catch (e) {}
 }
 
-// 初始化 — 从 server 拉 state · 按 URL hash 渲染对应屏 (默认 feed) · 不再强制弹 handle modal
-// spec §5.3 "直接进主屏 · 无 onboarding · 无注册墙 · 可匿名浏览全部"
+function clearPending() {
+  try { localStorage.removeItem('tinker_pending'); } catch (e) {}
+}
+
+function readPending() {
+  try { return JSON.parse(localStorage.getItem('tinker_pending') || 'null'); } catch (e) { return null; }
+}
+
+// 已登录 = 直接做 · 未登录 = 记下 pending + 弹登录
+function requireLogin(kind, data, contextDesc) {
+  if (currentUser.handle) {
+    dispatchPending({ kind, ...data });
+    return;
+  }
+  setPending(kind, data);
+  openLogin(contextDesc);
+}
+
+// pending 派发表 · 登录回来后跑
+function dispatchPending(p) {
+  if (!p || !p.kind) return;
+  if (p.kind === 'reactToProject') { currentProjectCtx = p.projectCtx; reactToProject(p.level); }
+  else if (p.kind === 'openTinkered') { currentProjectCtx = p.projectCtx; openTinkered(); }
+  else if (p.kind === 'openNote') { currentProjectCtx = p.projectCtx; openNote(); }
+  else if (p.kind === 'openMethodUsed') { openMethodUsed(p.projectId, p.updateIdx); }
+  else if (p.kind === 'openNewProject') { openNewProject(p.isFirst); }
+  else if (p.kind === 'openEditProject') { openEditProject(p.projectId); }
+  else if (p.kind === 'openPickProject') { openPickProject(); }
+  else if (p.kind === 'navMyWorkshop') { showScreen('workshop', currentUser.handle); }
+}
+
+// 初始化 — 拉 /api/auth/me + /api/state · spec §5.3 匿名浏览全部
 (async function init() {
   try {
-    state = await fetchState();
-    // 已有 handle → 确保 server 也知道这个 user (alpha 容错)
-    if (currentUser.handle && !state.users[currentUser.handle]) {
-      await apiAction('setUserHandle', { handle: currentUser.handle });
-      state = await fetchState();
+    const [user, st] = await Promise.all([apiMe(), fetchState()]);
+    state = st;
+    if (user) {
+      currentUser.id = user.id;
+      currentUser.handle = user.handle;
+      currentUser.email = user.email;
+      currentUser.needsWelcome = user.needsWelcome;
     }
     refreshMastheadHandle();
     updateUnreadBadge();
+
+    // 第一次登录 → 弹 welcome (server 返回 needsWelcome=true)
+    if (user && user.needsWelcome) {
+      openWelcomeAfterLogin();
+      return;  // welcome 提交后会接 pending + navigate
+    }
+
+    // 路由到原位
     navigateFromHash();
+
+    // 登录回来 · 检查 pending 命令
+    const p = readPending();
+    if (user && p) {
+      clearPending();
+      if (p.returnTo && p.returnTo !== location.hash) {
+        location.hash = p.returnTo;
+      }
+      setTimeout(() => dispatchPending(p), 200);
+    }
   } catch (e) {
-    document.body.innerHTML = '<div style="padding:60px;font-family:Newsreader,serif;color:#1c1917;text-align:center"><h1 style="font-size:32px">连不上 server</h1><p style="color:#78716c">server 跑起来了吗? 在 /Users/dadao/tinker/server 里 <code>node index.js</code> · 默认端口 8788</p></div>';
+    document.body.innerHTML = '<div style="padding:60px;font-family:Newsreader,serif;color:#1c1917;text-align:center"><h1 style="font-size:32px">连不上 server</h1><p style="color:#78716c">' + (e.message || 'server 错误') + '</p></div>';
   }
 })();
 
-// modes: 'start' 主动开张 / 'rename' 换 handle / 'interact' 想做某事时被触发
-function openSetHandle(mode, contextDesc) {
-  const titleEl = document.querySelector('#modal-set-handle .modal-title');
-  const subEl = document.querySelector('#modal-set-handle .modal-sub');
-  const btnEl = document.getElementById('sh-submit-btn');
-  if (mode === 'rename') {
-    if (titleEl) titleEl.textContent = '换个身份';
-    if (subEl) subEl.textContent = '改了之后 · 这台机器记的就是新 handle · 旧 handle 的工作室和项目还在 · 用旧 handle 再开张就能继续';
-    if (btnEl) btnEl.textContent = '换 →';
-    document.getElementById('sh-handle').value = currentUser.handle || '';
-  } else if (mode === 'interact') {
-    if (titleEl) titleEl.textContent = '先开张你的工作室';
-    if (subEl) subEl.textContent = (contextDesc ? '想' + contextDesc + ' · ' : '') + '填一个 handle · 之后这台机器认你 · alpha 期没认证 · 跟小伙伴约定不撞就好';
-    if (btnEl) btnEl.textContent = '开张 · 继续刚才的 →';
-    document.getElementById('sh-handle').value = '';
-  } else {
-    // 'start' / 默认
-    if (titleEl) titleEl.textContent = '你是谁?';
-    if (subEl) subEl.textContent = '填一个 handle 开张你的工作室 · alpha 期没认证 · 跟小伙伴约定不撞就好';
-    if (btnEl) btnEl.textContent = '开张 →';
-    document.getElementById('sh-handle').value = currentUser.handle || '';
+// 打开登录 modal · 输入邮箱状态
+function openLogin(contextDesc) {
+  const subEl = document.getElementById('login-sub');
+  if (subEl && contextDesc) {
+    subEl.textContent = '想 ' + contextDesc + ' · 填邮箱发个登录链接 · 5 分钟内点开就进 · 不用记密码';
+  } else if (subEl) {
+    subEl.textContent = '用邮箱 · 我们发个登录链接给你 · 5 分钟内点开就进 · 不用记密码';
   }
+  // 重置到输入态
+  document.getElementById('login-state-input').classList.remove('hidden');
+  document.getElementById('login-state-sent').classList.add('hidden');
+  document.getElementById('login-email').value = localStorage.getItem('tinker_last_email') || '';
+  document.getElementById('modal-login').classList.remove('hidden');
+  setTimeout(() => document.getElementById('login-email').focus(), 80);
+}
+
+let _resendCooldown = 0;
+async function submitLoginEmail() {
+  const email = (document.getElementById('login-email').value || '').trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    showToast('邮箱格式不对');
+    return;
+  }
+  try {
+    localStorage.setItem('tinker_last_email', email);
+    await apiSendLink(email);
+    // 切到 "已发" 状态
+    document.getElementById('login-state-input').classList.add('hidden');
+    document.getElementById('login-state-sent').classList.remove('hidden');
+    document.getElementById('login-sent-to').textContent = email;
+    startResendCooldown();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+function startResendCooldown() {
+  _resendCooldown = 60;
+  const el = document.getElementById('login-resend');
+  if (!el) return;
+  el.style.opacity = '0.5';
+  el.style.pointerEvents = 'none';
+  el.textContent = '60 秒后能重发';
+  const timer = setInterval(() => {
+    _resendCooldown--;
+    if (_resendCooldown <= 0) {
+      clearInterval(timer);
+      el.style.opacity = '1';
+      el.style.pointerEvents = 'auto';
+      el.textContent = '重发一封';
+    } else {
+      el.textContent = _resendCooldown + ' 秒后能重发';
+    }
+  }, 1000);
+}
+
+async function resendLoginEmail() {
+  if (_resendCooldown > 0) return;
+  const email = document.getElementById('login-sent-to').textContent;
+  try {
+    await apiSendLink(email);
+    showToast('再发了一封 · 看邮箱');
+    startResendCooldown();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+function resetLoginForm() {
+  document.getElementById('login-state-sent').classList.add('hidden');
+  document.getElementById('login-state-input').classList.remove('hidden');
+  setTimeout(() => document.getElementById('login-email').focus(), 80);
+}
+
+// 打开 Welcome modal · 第一次登录用 (handle 已被 server 从邮箱预填)
+function openWelcomeAfterLogin() {
+  document.getElementById('sh-handle').value = currentUser.handle || '';
   document.getElementById('sh-tagline').value = '';
   document.getElementById('modal-set-handle').classList.remove('hidden');
   setTimeout(() => document.getElementById('sh-handle').focus(), 80);
 }
 
-// 导航辅助 · 需要 handle 才有意义的入口
+async function submitWelcome() {
+  const handle = (document.getElementById('sh-handle').value || '').trim();
+  const tagline = (document.getElementById('sh-tagline').value || '').trim();
+  if (!handle) { showToast('handle 不能空'); return; }
+  if (!/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) { showToast('handle 只能 1-20 字 字母/数字/下划线/中文'); return; }
+  try {
+    const updated = await apiWelcome(handle, tagline);
+    currentUser.handle = updated.handle;
+    currentUser.needsWelcome = false;
+    closeModal('modal-set-handle');
+    refreshMastheadHandle();
+    state = await fetchState();
+    // 跳回原来想去的地方 + 跑 pending
+    const p = readPending();
+    if (p) {
+      clearPending();
+      if (p.returnTo && p.returnTo !== location.hash) {
+        location.hash = p.returnTo;
+      }
+      setTimeout(() => dispatchPending(p), 200);
+    } else {
+      navigateFromHash();
+    }
+    showToast('开张了 · 你好 @' + handle);
+  } catch (e) { showToast(e.message); }
+}
+
+// 导航辅助 · 互动入口
 function navMyWorkshop() {
   if (currentUser.handle) {
     showScreen('workshop', currentUser.handle);
   } else {
-    openSetHandle('interact', '开张你的工作室');
-    pendingAfterLogin = () => showScreen('workshop', currentUser.handle);
+    requireLogin('navMyWorkshop', {}, '开张你的工作室');
   }
 }
 function navAddUpdate() {
-  requireHandle(() => openPickProject(), '记一笔');
-}
-
-async function submitSetHandle() {
-  const handle = (document.getElementById('sh-handle').value || '').trim();
-  const tagline = (document.getElementById('sh-tagline').value || '').trim();
-  if (!handle) { showToast('handle 不能空'); return; }
-  if (!/^[a-zA-Z0-9_一-龥]+$/.test(handle)) { showToast('handle 只能字母/数字/下划线/中文'); return; }
-  try {
-    await apiAction('setUserHandle', { handle, tagline });
-    localStorage.setItem('tinker_my_handle', handle);
-    currentUser.handle = handle;
-    state = await fetchState();
-    const isNew = !state.users[handle] || (state.users[handle] && !state.projects.some(p => p.owner === handle));
-    closeModal('modal-set-handle');
-    refreshMastheadHandle();
-    updateUnreadBadge();
-    // 优先级 1: 如果有 pending 互动 (用户点了"想试试"等触发了 setHandle) · 设完接着做
-    if (pendingAfterLogin) {
-      const fn = pendingAfterLogin;
-      pendingAfterLogin = null;
-      setTimeout(fn, 80);
-      if (isNew) showToast('你好 @' + handle);
-      return;
-    }
-    // 优先级 2: 从分享链接进来 (hash 有内容) · 跳回那个 project / workshop
-    // 否则默认去 feed
-    if (location.hash && location.hash !== '#/' && location.hash !== '#') {
-      navigateFromHash();
-    } else {
-      showScreen('feed');
-    }
-    if (isNew) {
-      showToast('你好 @' + handle + ' · 看完动静后,去"我的工作室"开张');
-    } else {
-      showToast('欢迎回来 @' + handle);
-    }
-  } catch (e) { showToast(e.message); }
+  requireLogin('openPickProject', {}, '记一笔');
 }
 </script>
 </body>

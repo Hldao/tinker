@@ -40,14 +40,30 @@ const STARTED_AT = Date.now();
 
 // ============================================
 // SQLite · 已在 db.js 单例里 · migrations 自动跑
-// 启动时 log 一下当前 state 概况
+// 自动迁移: 如果 DB 是空的 + 找到 DATA_FILE (data.json) · 自动跑迁移
+// 一次性 · 之后 DB 有内容就不再触发
 // ============================================
 {
   const u = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
   const p = db.prepare('SELECT COUNT(*) AS c FROM projects').get().c;
   logger.info({ users: u, projects: p }, 'SQLite ready');
-  if (u === 0) {
-    logger.warn('数据库为空 · 跑 `node migrate-from-json.js` 或重置 seed');
+
+  const DATA_FILE = process.env.DATA_FILE;
+  if (u === 0 && DATA_FILE && require('fs').existsSync(DATA_FILE)) {
+    logger.info({ src: DATA_FILE }, '空 DB + 找到 data.json · 自动迁移...');
+    try {
+      const { migrateFromJson } = require('./migrate-from-json');
+      const counts = migrateFromJson({
+        jsonPath: DATA_FILE,
+        log: (msg) => logger.info(msg),
+        warn: (msg) => logger.warn(msg),
+      });
+      logger.info(counts, '✓ 自动迁移完成 · data.json → SQLite');
+    } catch (e) {
+      logger.error({ err: e.message }, '自动迁移失败');
+    }
+  } else if (u === 0) {
+    logger.warn('数据库为空 · 等首位用户 magic link 注册');
   }
 }
 

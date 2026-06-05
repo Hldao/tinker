@@ -4,7 +4,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 1. 先装依赖 (利用 Docker 缓存层)
+# 1. better-sqlite3 是 native module · 需要构建工具 (build-base = make+g++)
+#    python3 是 node-gyp 的依赖
+RUN apk add --no-cache python3 make g++
+
+# 2. 先装依赖 (利用 Docker 缓存层)
 COPY server/package*.json ./server/
 WORKDIR /app/server
 RUN npm ci --omit=dev

@@ -20,7 +20,11 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       RATE_LIMIT_ACTION: ${RATE_LIMIT_ACTION:-60}
       RATE_LIMIT_STATE: ${RATE_LIMIT_STATE:-300}
+      DB_FILE: /data/tinker.db
       DATA_FILE: /data/data.json
+      BASE_URL: ${BASE_URL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Tinker <onboarding@resend.dev>}
     volumes:
       - ./data:/data
     healthcheck:
