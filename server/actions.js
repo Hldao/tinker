@@ -52,7 +52,7 @@ function addProject(state, { currentUser = 'daodao', name, desc, productLink, st
     status,
     tools: Array.isArray(tools) ? tools : [],
     updates: [],
-    reactions: { interested: [], wantToTry: [], tinkered: [] },
+    reactions: { wantToTry: [], tinkered: [] },
     notes: [],
   };
   state.projects.unshift(newProject);
@@ -75,6 +75,20 @@ function changeProjectStatus(state, { projectId, newStatus, currentUser = 'daoda
           extra: '你之前说过想试试 · 现在能用了',
         });
       }
+    });
+  }
+  // 卡住了 — 通知 wantToTry + tinkered 的人 (spec §5.3 "接走过你项目的人 + 关注者")
+  if (oldStatus !== 'stuck' && newStatus === 'stuck') {
+    const targets = new Set();
+    (p.reactions.wantToTry || []).forEach(u => targets.add(u));
+    (p.reactions.tinkered || []).forEach(t => targets.add(t.user));
+    targets.delete(currentUser);
+    targets.forEach(u => {
+      addNotification(state, {
+        target: u, fromUser: p.owner, type: 'projectStuck',
+        projectId: p.id, projectName: p.name,
+        extra: '卡住了 · 也许你能搭把手',
+      });
     });
   }
   return p;
@@ -158,7 +172,6 @@ function submitTinkered(state, { projectId, name, link, currentUser = 'daodao' }
   if (!name || !name.trim()) throw new Error('延伸版名字必填');
   if (!isValidUrl(link)) throw new Error('延伸版链接必须是 https://');
   // 清掉这个用户的其他 reactions
-  p.reactions.interested = p.reactions.interested.filter(u => u !== currentUser);
   p.reactions.wantToTry = p.reactions.wantToTry.filter(u => u !== currentUser);
   p.reactions.tinkered.push({ user: currentUser, name: name.trim(), link: link.trim() });
   if (p.owner !== currentUser) {

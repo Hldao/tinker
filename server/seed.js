@@ -135,8 +135,17 @@ function convertAgoToAt(data) {
   return data;
 }
 
+// 数据迁移 (幂等 · 反复调用安全) — 加载 data.json 或返回 seed 前都过一遍
+function migrateState(data) {
+  // 砍掉 reactions.interested · spec 已从 4 级反馈改 3 级
+  (data.projects || []).forEach(p => {
+    if (p.reactions && 'interested' in p.reactions) delete p.reactions.interested;
+  });
+  return data;
+}
+
 function getSeedData() {
-  return convertAgoToAt({
+  return migrateState(convertAgoToAt({
     users: {
       'daodao':   { name: '捣鼓自己',  tagline: '在做 Tinker · 这个产品本身' },
       'zhangsan': { name: '张三',     tagline: '用 AI 帮我妈做小红书' },
@@ -153,7 +162,7 @@ function getSeedData() {
           { text:'决定不做 onboarding wizard,新人点开主屏直接看真实工作室', ago:'昨天' },
           { text:'砍掉了"热门推荐",时间倒序到底', ago:'2 天前' },
         ],
-        reactions:{ interested:['zhangsan','liushi','wangwu'], wantToTry:['lisi'],
+        reactions:{ wantToTry:['lisi'],
           tinkered:[ { user:'liushi', name:'深色版 Tinker', link:'#' } ] },
         notes:[ { user:'wangwu', text:'我觉得卡片高度可以再小一点,信息密度再高一些', ago:'1 小时前' } ] },
 
@@ -165,7 +174,7 @@ function getSeedData() {
           { text:'卡了: GPT 总会编造没填的字段. 试了 temperature=0,没用', ago:'昨天' },
           { text:'跑通了基础版,但优化建议比较套话', ago:'3 天前' },
         ],
-        reactions:{ interested:['liushi','wangwu','maomao'], wantToTry:['lisi','daodao'],
+        reactions:{ wantToTry:['lisi','daodao'],
           tinkered:[ { user:'wangwu', name:'求职信生成器', link:'#p7' } ] },
         notes:[
           { user:'lisi',   text:'你那个 strict mode prompt 第三句可以加 "do not invent fields"', ago:'2 小时前' },
@@ -180,7 +189,7 @@ function getSeedData() {
           { text:'试了让 Claude 模仿小红书博主的笔记风格,但读起来还是有点假', ago:'2 天前' },
           { text:'开始: 想做一个能自动生成小红书图文的小工具给我妈用', ago:'5 天前' },
         ],
-        reactions:{ interested:['maomao','liushi'], wantToTry:[], tinkered:[] },
+        reactions:{ wantToTry:[], tinkered:[] },
         notes:[ { user:'maomao', text:'小红书的关键不是文案,是 emoji 密度. 你试试让 AI 每 2-3 句加一个 emoji,然后开头用"姐妹们..."',
           images:[ { src: svgUri(MOCK_NOTE_EMOJI), caption:'我之前帮另一个店做的,加了 emoji 后转化率明显涨' } ],
           ago:'20 分钟前' } ] },
@@ -190,7 +199,7 @@ function getSeedData() {
           { text:'跑通了 · 加了响铃和暂停', ago:'1 周前' },
           { text:'5 分钟用 Claude Artifact 做的,直接复制粘贴跑起来', ago:'1 周前' },
         ],
-        reactions:{ interested:['lisi','daodao'], wantToTry:[], tinkered:[] },
+        reactions:{ wantToTry:[], tinkered:[] },
         notes:[] },
 
       { id:'p5', owner:'liushi', name:'猫咪表情识别', slug:'cat-mood', desc:'上传猫咪照片,告诉你它现在什么心情', productLink:'https://v0.dev/r/catmood-k9z', status:'stuck', tools:['v0','Claude','TensorFlow.js'],
@@ -201,7 +210,7 @@ function getSeedData() {
           { text:'基础识别能跑了,但准确率只有 50%', ago:'昨天' },
           { text:'开始: 想给我家猫做一个表情识别器', ago:'4 天前' },
         ],
-        reactions:{ interested:['zhangsan','maomao'], wantToTry:['daodao'], tinkered:[] },
+        reactions:{ wantToTry:['daodao'], tinkered:[] },
         notes:[ { user:'daodao', text:'猫的表情可能本来就不适合简单分类,试试做"行为识别"(摇尾巴/竖耳朵)会不会准一点?', ago:'1 小时前' } ] },
 
       { id:'p6', owner:'liushi', name:'UI 灵感图生成器', slug:'ui-inspo', desc:'描述一下场景,生成一组 UI 概念图', productLink:'https://lovable.dev/projects/ui-inspo-92', status:'active', tools:['Lovable','Cursor'],
@@ -209,7 +218,7 @@ function getSeedData() {
           { text:'加了"风格"选项: 极简 / 拟物 / 玻璃拟态 / 杂志感', ago:'5 小时前' },
           { text:'能跑了 · 但是生成的图都长得有点像,要想办法增加多样性', ago:'3 天前' },
         ],
-        reactions:{ interested:['wangwu','maomao','zhangsan'], wantToTry:['lisi'], tinkered:[] },
+        reactions:{ wantToTry:['lisi'], tinkered:[] },
         notes:[] },
 
       { id:'p7', owner:'wangwu', name:'求职信生成器', slug:'cover-letter', desc:'基于 @zhangsan 简历优化器的思路', productLink:'https://cover-letter-ai.vercel.app', status:'active', tools:['Cursor','Claude'],
@@ -217,7 +226,7 @@ function getSeedData() {
           { text:'接走了 @zhangsan 的 strict mode prompt,效果立竿见影', ago:'昨天' },
           { text:'开始: 看到 @zhangsan 的简历优化器,觉得可以延伸做求职信', ago:'2 天前' },
         ],
-        reactions:{ interested:['zhangsan','lisi'], wantToTry:[], tinkered:[] },
+        reactions:{ wantToTry:[], tinkered:[] },
         notes:[] },
 
       { id:'p8', owner:'wangwu', name:'专注一起', slug:'focus-together', desc:'可以看到朋友也在专注 · 互相打气', productLink:'https://focus-together.vercel.app', status:'done', tools:['Bolt','Supabase'],
@@ -225,7 +234,7 @@ function getSeedData() {
           { text:'跑通了, 已经用了一个月,确实比一个人专注更不容易划水', ago:'2 周前' },
           { text:'上线了, 邀请了 5 个朋友一起用', ago:'3 周前' },
         ],
-        reactions:{ interested:['daodao','maomao','lisi','zhangsan'], wantToTry:[],
+        reactions:{ wantToTry:[],
           tinkered:[ { user:'lisi', name:'宿舍版番茄钟', link:'#' } ] },
         notes:[] },
 
@@ -236,7 +245,7 @@ function getSeedData() {
             ago:'昨天' },
           { text:'开始: 老师让我做一个有"实际应用"的毕设', ago:'1 周前' },
         ],
-        reactions:{ interested:['liushi'], wantToTry:[], tinkered:[] },
+        reactions:{ wantToTry:[], tinkered:[] },
         notes:[] },
 
       { id:'p10', owner:'lisi', name:'课堂笔记小工具', slug:'class-notes', desc:'录音 + AI 整理 · 生成结构化笔记', productLink:'https://class-notes.replit.app', status:'done', tools:['Replit','Claude'],
@@ -244,7 +253,7 @@ function getSeedData() {
           { text:'4 个室友都在用 · 实习课已经被点名"做得好"', ago:'3 天前' },
           { text:'跑通了基础版', ago:'1 周前' },
         ],
-        reactions:{ interested:['wangwu','maomao'], wantToTry:['daodao'], tinkered:[] },
+        reactions:{ wantToTry:['daodao'], tinkered:[] },
         notes:[] },
 
       { id:'p11', owner:'maomao', name:'小红书配图工具', slug:'rednote-img', desc:'给文案自动配 3-5 张图 · 风格统一', productLink:'https://lovable.dev/projects/rednote-img', status:'active', tools:['Lovable','Claude','Replicate'],
@@ -255,12 +264,12 @@ function getSeedData() {
             images:[ { src: svgUri(MOCK_RED_GRID), caption:'同一篇文案 · v1 输出的 4 张配图风格各异' } ],
             ago:'4 天前' },
         ],
-        reactions:{ interested:['zhangsan','liushi'], wantToTry:[], tinkered:[] },
+        reactions:{ wantToTry:[], tinkered:[] },
         notes:[] },
 
       { id:'p12', owner:'maomao', name:'公众号一键排版', slug:'wechat-formatter', desc:'粘贴文章自动排版 · 几种模板', productLink:'https://wechat-fmt.vercel.app', status:'done', tools:['Cursor','Claude'],
         updates:[ { text:'跑通了 · 给我朋友的公众号节省了不少时间', ago:'2 周前' } ],
-        reactions:{ interested:['wangwu'], wantToTry:[], tinkered:[] },
+        reactions:{ wantToTry:[], tinkered:[] },
         notes:[] },
     ],
     starters: [
@@ -299,7 +308,7 @@ function getSeedData() {
         ago:'昨天', read:false },
     ],
     availableTools: AVAILABLE_TOOLS,
-  });
+  }));
 }
 
-module.exports = { getSeedData, AVAILABLE_TOOLS };
+module.exports = { getSeedData, AVAILABLE_TOOLS, migrateState };

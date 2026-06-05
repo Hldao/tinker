@@ -165,6 +165,62 @@ test('changeProjectStatus: active → done 时通知 wantToTry 用户', () => {
 });
 
 // ============================================
+// changeProjectStatus → projectStuck 通知 (A4 · spec §5.3)
+// ============================================
+test('changeProjectStatus: active → stuck 时通知 wantToTry + tinkered 用户', () => {
+  const s = freshState();
+  // p2 (zhangsan owns · daodao + lisi 已 wantToTry · wangwu 已 tinkered)
+  const beforeDaodao = s.notifications.filter(n => n.target === 'daodao' && n.type === 'projectStuck').length;
+  const beforeWangwu = s.notifications.filter(n => n.target === 'wangwu' && n.type === 'projectStuck').length;
+  actions.changeProjectStatus(s, {
+    projectId: 'p2', newStatus: 'stuck', currentUser: 'zhangsan',
+  });
+  const afterDaodao = s.notifications.filter(n => n.target === 'daodao' && n.type === 'projectStuck').length;
+  const afterWangwu = s.notifications.filter(n => n.target === 'wangwu' && n.type === 'projectStuck').length;
+  assert.equal(afterDaodao, beforeDaodao + 1, 'daodao 是 wantToTry · 应收到 projectStuck 通知');
+  assert.equal(afterWangwu, beforeWangwu + 1, 'wangwu 是 tinkered · 应收到 projectStuck 通知');
+});
+
+test('changeProjectStatus: stuck → stuck 不重复触发通知', () => {
+  const s = freshState();
+  // 先把 p2 设为 stuck (会触发通知)
+  actions.changeProjectStatus(s, { projectId: 'p2', newStatus: 'stuck', currentUser: 'zhangsan' });
+  const mid = s.notifications.filter(n => n.target === 'daodao' && n.type === 'projectStuck').length;
+  // 再把 stuck 设为 stuck 不应触发新通知
+  actions.changeProjectStatus(s, { projectId: 'p2', newStatus: 'stuck', currentUser: 'zhangsan' });
+  const after = s.notifications.filter(n => n.target === 'daodao' && n.type === 'projectStuck').length;
+  assert.equal(after, mid, 'stuck → stuck 不应触发新通知');
+});
+
+// ============================================
+// A1 · interested 字段已砍 (migration · spec 3 级反馈)
+// ============================================
+test('addProject: 新项目 reactions 只有 wantToTry + tinkered (无 interested)', () => {
+  const s = freshState();
+  const p = actions.addProject(s, {
+    currentUser: 'daodao',
+    name: 'A1 test',
+    desc: 'check reactions shape',
+    productLink: 'https://example.com',
+  });
+  assert.deepEqual(Object.keys(p.reactions).sort(), ['tinkered', 'wantToTry']);
+  assert.equal(p.reactions.interested, undefined, '不再有 interested 字段');
+});
+
+test('migration: 加载老数据时 interested 字段被自动剥离', () => {
+  const { migrateState } = require('../seed');
+  const oldData = {
+    projects: [{
+      id: 'old',
+      reactions: { interested: ['a', 'b'], wantToTry: ['c'], tinkered: [] },
+    }],
+  };
+  const migrated = migrateState(oldData);
+  assert.equal(migrated.projects[0].reactions.interested, undefined);
+  assert.deepEqual(migrated.projects[0].reactions.wantToTry, ['c']);
+});
+
+// ============================================
 // markMethodUsed
 // ============================================
 test('markMethodUsed: 给别人 update 点 used + 通知作者', () => {

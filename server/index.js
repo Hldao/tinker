@@ -21,7 +21,7 @@ const path = require('path');
 
 const { logger } = require('./logger');
 const { JsonStorage } = require('./storage');
-const { getSeedData, AVAILABLE_TOOLS } = require('./seed');
+const { getSeedData, AVAILABLE_TOOLS, migrateState } = require('./seed');
 const actions = require('./actions');
 
 // ============================================
@@ -46,7 +46,7 @@ let state;
 function loadState() {
   const { data, source } = storage.load();
   if (data) {
-    state = data;
+    state = migrateState(data);
     logger.info({ source, projects: state.projects?.length, users: Object.keys(state.users || {}).length }, 'state loaded');
   } else {
     state = getSeedData();
