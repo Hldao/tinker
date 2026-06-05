@@ -56,12 +56,19 @@ case "$ID" in
     $SUDO apt update -qq
     $SUDO apt install -y -qq curl wget git ca-certificates
     ;;
-  centos|rhel|rocky|almalinux)
-    $SUDO yum install -y curl wget git ca-certificates
+  centos|rhel|rocky|almalinux|alinux|anolis|openEuler)
+    # 阿里云 Linux / 龙蜥 / OpenEuler 都是 RHEL 兼容
+    if command -v dnf >/dev/null; then
+      $SUDO dnf install -y curl wget git ca-certificates
+    else
+      $SUDO yum install -y curl wget git ca-certificates
+    fi
     ;;
   *)
-    warn "未知系统 $ID · 尝试通用 apt..."
-    $SUDO apt install -y curl wget git || $SUDO yum install -y curl wget git
+    warn "未知系统 $ID · 尝试 dnf/yum/apt 兜底"
+    $SUDO dnf install -y curl wget git 2>/dev/null \
+      || $SUDO yum install -y curl wget git 2>/dev/null \
+      || $SUDO apt install -y curl wget git
     ;;
 esac
 
