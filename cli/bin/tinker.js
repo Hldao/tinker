@@ -410,6 +410,74 @@ async function cmdPush(opts) {
   }
 }
 
+// 标记项目卡住 + 记一条 "卡在 X" · 触发 server A4 通知 wantToTry + tinkered 用户
+async function cmdStuck(opts) {
+  const cfg = mustHaveConfig();
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  // 卡住命令只对 active 项目有意义 (stuck 项目再 stuck 没意义 · done/archive 也不该用 stuck)
+  const mine = state.projects.filter(p => p.owner === me && p.status === 'active');
+  if (mine.length === 0) {
+    err('你没有 active 的项目可以标卡住 · 去 ' + cfg.serverUrl + ' 看看');
+    process.exit(1);
+  }
+
+  // 选项目
+  let projectId;
+  if (opts.projectId) {
+    projectId = opts.projectId;
+  } else if (mine.length === 1) {
+    projectId = mine[0].id;
+    log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
+  } else {
+    const { select } = require('@inquirer/prompts');
+    projectId = await select({
+      message: '哪个项目卡住了?',
+      choices: mine.map(p => ({
+        name: p.name + sepia('  ' + p.desc.slice(0, 40)),
+        value: p.id,
+      })),
+    });
+  }
+
+  // 决定卡住描述 (-m 给了 / 交互问)
+  let stuckText = opts.text;
+  if (!stuckText) {
+    const { input } = require('@inquirer/prompts');
+    stuckText = await input({
+      message: '卡在哪? (一句话 · 越具体越容易被人接上)',
+      default: undefined,
+    });
+  }
+  stuckText = (stuckText || '').trim();
+  if (!stuckText) { err('得说一下卡在哪 · 不然别人没法帮上忙'); process.exit(1); }
+
+  // server 端要求 commit 文字本身没规定 prefix · 这里加 "卡在 " 让时间线读起来一致
+  if (!stuckText.startsWith('卡')) stuckText = '卡在 ' + stuckText;
+
+  const p = mine.find(x => x.id === projectId);
+
+  // 两步操作 · 顺序: 先改 status (触发 A4 通知) · 再记 commit (出现在时间线)
+  try {
+    await apiAction(cfg, 'changeProjectStatus', { projectId, newStatus: 'stuck', currentUser: me });
+    await apiAction(cfg, 'addUpdate', { projectId, text: stuckText, currentUser: me });
+    log('');
+    ok('标了卡住 — ' + bold(p.name));
+    log(sepia('  写的是: ') + stuckText);
+    const watcherCount = (p.reactions.wantToTry?.length || 0) + (p.reactions.tinkered?.length || 0);
+    if (watcherCount > 0) {
+      log(sepia('  通知了 ') + bold(watcherCount + '') + sepia(' 个想试试 / 延伸过你项目的人 · 也许能搭把手'));
+    } else {
+      log(sepia('  还没人想试试或延伸过 · 但写出来比闷着强'));
+    }
+    log(sepia('  去看: ') + cfg.serverUrl + '/');
+    log('');
+  } catch (e) {
+    err(e.message);
+    process.exit(1);
+  }
+}
+
 function cmdHookInstall() {
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
@@ -450,6 +518,7 @@ function help() {
   log('  ' + vermilion('tinker push --since 1h') + sepia('             抓 1 小时 git 历史作为建议'));
   log('  ' + vermilion('tinker push --auto') + sepia('                 LLM 自动生成 + 推'));
   log('  ' + vermilion('tinker push --since 1h --auto') + sepia('      LLM 总结 1 小时 + 推'));
+  log('  ' + vermilion('tinker stuck -m "..."') + sepia('              标项目卡住 · 通知想试试/延伸过的人'));
   log('  ' + vermilion('tinker draft') + sepia('                       LLM 看建议 (不推)'));
   log('  ' + vermilion('tinker draft --since 30m') + sepia('           自定义时间窗'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
@@ -489,6 +558,7 @@ async function main() {
       case 'config': await cmdConfig(); break;
       case 'projects': case 'ls': await cmdProjects(); break;
       case 'push': await cmdPush(opts); break;
+      case 'stuck': await cmdStuck(opts); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':
         if (args[1] === 'install') cmdHookInstall();

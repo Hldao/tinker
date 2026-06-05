@@ -708,6 +708,21 @@
 </div>
 
 <!-- SET HANDLE modal — 第一次访问时 "你是谁" + 之后换 handle -->
+<!-- WECHAT QR modal — 微信分享走二维码 (没有 web intent) -->
+<div id="modal-wechat-qr" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 360px;">
+    <h3 class="modal-title">分享到微信</h3>
+    <p class="modal-sub">微信里扫一扫 · 或长按图片选"识别二维码"</p>
+    <div style="text-align:center; padding: 8px 0 4px;">
+      <img id="wechat-qr-img" alt="QR code" style="width: 200px; height: 200px; display: block; margin: 0 auto; border: 1px solid var(--sepia-light); padding: 8px; background: white;">
+      <p id="wechat-qr-title" class="serif" style="margin-top: 14px; color: var(--ink-soft); font-size: 14px; line-height: 1.5;"></p>
+    </div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-wechat-qr')" class="btn-act-primary">关掉</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal-set-handle" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
     <h3 class="modal-title">你是谁?</h3>
@@ -918,7 +933,36 @@ function showScreen(name, ...args) {
   else if (name === 'onboard') renderOnboard();
   else if (name === 'notifications') renderNotifications();
   // about 是静态内容,不需要 render
+  // 更新 hash · 让 URL 可分享 + back/forward 工作
+  const newHash = buildHash(name, args);
+  if (location.hash !== newHash) {
+    history.replaceState(null, '', newHash);
+  }
 }
+
+// hash 路由 — 让项目页 / 工作室页有可分享 URL
+function buildHash(name, args) {
+  if (name === 'workshop') return '#/w/' + encodeURIComponent(args[0] || '');
+  if (name === 'project') return '#/p/' + encodeURIComponent(args[0] || '') + '/' + encodeURIComponent(args[1] || '');
+  if (name === 'notifications') return '#/notifications';
+  if (name === 'about') return '#/about';
+  if (name === 'onboard') return '#/onboard';
+  return '#/';
+}
+
+function navigateFromHash() {
+  const h = location.hash || '';
+  if (!h || h === '#/' || h === '#') return showScreen('feed');
+  const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
+  if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
+  if (parts[0] === 'notifications') return showScreen('notifications');
+  if (parts[0] === 'about') return showScreen('about');
+  if (parts[0] === 'onboard') return showScreen('onboard');
+  return showScreen('feed');
+}
+
+window.addEventListener('hashchange', navigateFromHash);
 
 function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
 function projectById(id){ return state.projects.find(p=>p.id===id); }
@@ -1355,12 +1399,13 @@ function renderProject(owner, slug) {
     </div>
 
     <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
-      <div class="serif mb-3" style="color: var(--sepia); font-size: 14px;">把这个产物带走 · 离开社区也行,你的东西永远在</div>
+      <div class="serif mb-3" style="color: var(--sepia); font-size: 14px;">把这个项目带走 · 离开社区也行,你的东西永远在</div>
       <div class="flex flex-wrap gap-4 text-base">
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="fakeShare('X')">${ICONS.share}分享到 X</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="fakeShare('小红书')">${ICONS.share}分享到小红书</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="fakeShare('微信')">${ICONS.share}分享到微信</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.copy}复制链接</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('x')">${ICONS.share}分享到 X</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('xhs')">${ICONS.share}分享到小红书</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('wechat')">${ICONS.share}分享到微信</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('copy')">${ICONS.copy}复制项目链接</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.copy}只复制产物 URL</span>
       </div>
     </div>
   `;
@@ -2038,10 +2083,44 @@ function openWorkshopSetup() {
   openNewProject(true);
 }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-function fakeShare(channel) {
+
+// 分享当前项目页 (Tinker URL) · spec §5.3 "离开路径"
+function shareProject(platform) {
   const p = projectById(currentProjectCtx);
-  if (p) navigator.clipboard.writeText(p.productLink).catch(()=>{});
-  showToast('已复制产物链接 — 可以粘贴到' + channel);
+  if (!p) { showToast('找不到当前项目'); return; }
+  // location.href 已经包含 hash (例 #/p/zhangsan/resume-ai) · 是可分享的 URL
+  const url = location.href;
+  const shareText = `${p.name} · ${p.desc} — @${p.owner} on Tinker / 捣鼓`;
+  if (platform === 'copy') {
+    navigator.clipboard.writeText(`${shareText}\n${url}`).then(() => {
+      showToast('项目链接已复制 · 可以贴到群里 / 朋友圈');
+    }).catch(() => showToast('复制失败 · 手动复制 ' + url));
+    return;
+  }
+  if (platform === 'x') {
+    const intent = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText) + '&url=' + encodeURIComponent(url);
+    window.open(intent, '_blank', 'noopener');
+    return;
+  }
+  if (platform === 'xhs') {
+    // 小红书没有 web share intent · 复制文案+链接,提示用户粘到笔记
+    navigator.clipboard.writeText(`${shareText}\n${url}`).then(() => {
+      showToast('文案+链接已复制 · 去小红书贴到笔记里就行');
+    }).catch(() => showToast('复制失败 · 手动复制'));
+    setTimeout(() => window.open('https://www.xiaohongshu.com', '_blank', 'noopener'), 700);
+    return;
+  }
+  if (platform === 'wechat') {
+    showWeChatQR(url, shareText);
+    return;
+  }
+}
+
+function showWeChatQR(url, title) {
+  // 用 qrserver.com 公共 API · 简单可靠 · 不引入额外依赖
+  document.getElementById('wechat-qr-img').src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url);
+  document.getElementById('wechat-qr-title').textContent = title;
+  document.getElementById('modal-wechat-qr').classList.remove('hidden');
 }
 function copyText(el, text) {
   navigator.clipboard.writeText(text).then(() => {
@@ -2103,11 +2182,11 @@ function refreshMastheadHandle() {
   if (el) el.textContent = currentUser.handle ? '@' + currentUser.handle : '@-';
 }
 
-// 初始化 — 从 server 拉 state · 检查 handle · 然后 render feed
+// 初始化 — 从 server 拉 state · 检查 handle · 然后按 URL hash 渲染对应屏 (默认 feed)
 (async function init() {
   try {
     state = await fetchState();
-    // 第一次来 / 没设过 handle → 弹"你是谁"
+    // 第一次来 / 没设过 handle → 弹"你是谁" (handle 设完会自动 navigateFromHash 回到分享链接)
     if (!currentUser.handle) {
       openSetHandle();
       return;
@@ -2119,7 +2198,7 @@ function refreshMastheadHandle() {
     }
     refreshMastheadHandle();
     updateUnreadBadge();
-    showScreen('feed');
+    navigateFromHash();
   } catch (e) {
     document.body.innerHTML = '<div style="padding:60px;font-family:Newsreader,serif;color:#1c1917;text-align:center"><h1 style="font-size:32px">连不上 server</h1><p style="color:#78716c">server 跑起来了吗? 在 /Users/dadao/tinker/server 里 <code>node index.js</code> · 默认端口 8788</p></div>';
   }
@@ -2146,7 +2225,13 @@ async function submitSetHandle() {
     closeModal('modal-set-handle');
     refreshMastheadHandle();
     updateUnreadBadge();
-    showScreen('feed');
+    // 如果是从分享链接进来的 (hash 有内容) · navigateFromHash 会把他们带到那个项目 / 工作室
+    // 否则默认去 feed
+    if (location.hash && location.hash !== '#/' && location.hash !== '#') {
+      navigateFromHash();
+    } else {
+      showScreen('feed');
+    }
     if (isNew) {
       showToast('你好 @' + handle + ' · 看完动静后,去"我的工作室"开张');
     } else {
