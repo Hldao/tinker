@@ -483,14 +483,14 @@
     <nav class="flex items-center gap-5 text-sm">
       <button onclick="showScreen('feed')">动静</button>
       <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
-      <button onclick="showScreen('workshop', currentUser.handle)">我的工作室</button>
+      <button onclick="navMyWorkshop()">我的工作室</button>
       <button onclick="openSearch()" title="搜索 (⌘K)">找<span class="kbd">⌘K</span></button>
       <button onclick="showScreen('about')" class="text-xs" style="color: var(--sepia);">关于</button>
-      <button onclick="openPickProject()" class="serif" style="color: var(--vermilion);">+ 记一笔</button>
+      <button onclick="navAddUpdate()" class="serif" style="color: var(--vermilion);">+ 记一笔</button>
     </nav>
   </div>
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
-    <span>第 1 期 · 试运行 · <span id="masthead-handle" style="color: var(--vermilion); cursor: pointer;" onclick="openSetHandle()" title="换个 handle">@-</span></span>
+    <span>第 1 期 · 试运行 · <span id="masthead-handle-area"></span></span>
     <span id="masthead-date">2026 / 06 / 05</span>
   </div>
 </header>
@@ -745,7 +745,7 @@
       <input id="sh-tagline" class="input-bare" placeholder="比如 用 AI 帮我妈做小红书">
     </div>
     <div class="flex justify-end gap-4 mt-6">
-      <button onclick="submitSetHandle()" class="btn-act-primary">开张 →</button>
+      <button id="sh-submit-btn" onclick="submitSetHandle()" class="btn-act-primary">开张 →</button>
     </div>
   </div>
 </div>
@@ -898,6 +898,7 @@ const NOTIF_TEMPLATES = {
   methodUsed:  (n) => ({ verb:'用了你的方法 · 跑通了', verbColor:'var(--vermilion)' }),
   mentioned:   (n) => ({ verb:'提到了你 · 在',  verbColor:'var(--vermilion)' }),
   projectDone: (n) => ({ verb:'跑通了 · 你之前说过想试试 · 现在能用了', verbColor:'var(--moss)' }),
+  projectStuck:(n) => ({ verb:'卡住了 · 也许你能搭把手', verbColor:'var(--vermilion)' }),
   wantToTry:   (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
   noted:       (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
 };
@@ -1099,10 +1100,14 @@ function renderFeed() {
     filters.appendChild(span);
   });
 
-  // 我跟进的 切换
+  // 我跟进的 切换 · 匿名时藏起来 (没"我"的概念)
   const toggleWrap = document.getElementById('tracking-toggle-wrap');
   if (toggleWrap) {
-    toggleWrap.innerHTML = `<span class="tracking-toggle${trackingMode ? ' active' : ''}" onclick="toggleTrackingMode()">${trackingMode ? '✓ 只看我跟进的' : '只看我跟进的'}</span>`;
+    if (currentUser.handle) {
+      toggleWrap.innerHTML = `<span class="tracking-toggle${trackingMode ? ' active' : ''}" onclick="toggleTrackingMode()">${trackingMode ? '✓ 只看我跟进的' : '只看我跟进的'}</span>`;
+    } else {
+      toggleWrap.innerHTML = '';
+    }
   }
 
   let events = getFeedEvents();
@@ -1449,6 +1454,15 @@ function renderOnboard() {
 function renderNotifications() {
   const root = document.getElementById('notif-list');
   const me = currentUser.handle;
+  // 未登录 · 没"我"的概念,引导而不是显示空 list
+  if (!me) {
+    root.innerHTML = `
+      <div class="serif py-12 text-center" style="color: var(--sepia);">
+        <p style="margin-bottom: 16px;">登录之后才能看到对你项目的反馈</p>
+        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openSetHandle('start')">开张我的工作室 →</span>
+      </div>`;
+    return;
+  }
   const list = (state.notifications || []).filter(n => n.target === me).sort((a,b) => parseAgoOrder(a.at) - parseAgoOrder(b.at));
 
   if (list.length === 0) {
@@ -1592,6 +1606,11 @@ function doSearch(q) {
 let currentMethodUsedCtx = null; // { projectId, updateIdx }
 
 async function openMethodUsed(projectId, updateIdx) {
+  if (!currentUser.handle) {
+    pendingAfterLogin = () => openMethodUsed(projectId, updateIdx);
+    openSetHandle('interact', '说"用了 · 跑通了"');
+    return;
+  }
   const p = projectById(projectId);
   if (!p) return;
   const u = p.updates[updateIdx];
@@ -1743,6 +1762,12 @@ function zoomImage(src, caption) {
 
 /* ============ ACTIONS ============ */
 async function reactToProject(level) {
+  if (!currentUser.handle) {
+    const savedProjectCtx = currentProjectCtx;
+    pendingAfterLogin = () => { currentProjectCtx = savedProjectCtx; reactToProject(level); };
+    openSetHandle('interact', level === 'wantToTry' ? '说"想试试"' : '反馈');
+    return;
+  }
   const p = projectById(currentProjectCtx); if (!p) return;
   try {
     const r = await apiAction('reactToProject', { projectId: p.id, level });
@@ -1752,6 +1777,12 @@ async function reactToProject(level) {
 }
 
 function openNote() {
+  if (!currentUser.handle) {
+    const savedProjectCtx = currentProjectCtx;
+    pendingAfterLogin = () => { currentProjectCtx = savedProjectCtx; openNote(); };
+    openSetHandle('interact', '留便签');
+    return;
+  }
   currentNoteCtx = currentProjectCtx;
   notePendingImages = [];
   renderNotePendingImages();
@@ -1793,7 +1824,18 @@ async function submitNote() {
   } catch (e) { showToast(e.message); }
 }
 
-function openTinkered() { currentTinkeredCtx = currentProjectCtx; document.getElementById('tinkered-name').value=''; document.getElementById('tinkered-link').value=''; document.getElementById('modal-tinkered').classList.remove('hidden'); }
+function openTinkered() {
+  if (!currentUser.handle) {
+    const savedProjectCtx = currentProjectCtx;
+    pendingAfterLogin = () => { currentProjectCtx = savedProjectCtx; openTinkered(); };
+    openSetHandle('interact', '挂自己的延伸版');
+    return;
+  }
+  currentTinkeredCtx = currentProjectCtx;
+  document.getElementById('tinkered-name').value = '';
+  document.getElementById('tinkered-link').value = '';
+  document.getElementById('modal-tinkered').classList.remove('hidden');
+}
 async function submitTinkered() {
   const name = document.getElementById('tinkered-name').value.trim();
   const link = document.getElementById('tinkered-link').value.trim();
@@ -1921,6 +1963,11 @@ async function deleteUpdate(projectId, updateIdx) {
 }
 
 function openPickProject() {
+  if (!currentUser.handle) {
+    pendingAfterLogin = () => openPickProject();
+    openSetHandle('interact', '记一笔');
+    return;
+  }
   const me = currentUser.handle;
   const myActive = state.projects.filter(p => p.owner === me && ['active','stuck'].includes(p.status));
   const myPaused = state.projects.filter(p => p.owner === me && p.status === 'paused');
@@ -2008,6 +2055,11 @@ async function submitUpdate() {
 let isFirstProject = false;
 
 function openNewProject(isFirst) {
+  if (!currentUser.handle) {
+    pendingAfterLogin = () => openNewProject(isFirst);
+    openSetHandle('interact', '开新项目');
+    return;
+  }
   isFirstProject = !!isFirst;
   npStatus = 'active';
   npTools = new Set();
@@ -2194,21 +2246,47 @@ document.addEventListener('keydown', (e) => {
 })();
 
 function refreshMastheadHandle() {
-  const el = document.getElementById('masthead-handle');
-  if (el) el.textContent = currentUser.handle ? '@' + currentUser.handle : '@-';
+  const el = document.getElementById('masthead-handle-area');
+  if (!el) return;
+  if (currentUser.handle) {
+    // 已登录 · 显示 @handle (点 = 改 handle) + 出去
+    el.innerHTML = `<span style="color: var(--vermilion); cursor: pointer;" onclick="openSetHandle('rename')" title="换个身份">@${currentUser.handle}</span> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
+  } else {
+    // 未登录 · 匿名浏览中 · 鼓励但不强制登录
+    el.innerHTML = `<span style="color: var(--sepia); font-style: italic;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openSetHandle('start')">开张我的工作室</a>`;
+  }
 }
 
-// 初始化 — 从 server 拉 state · 检查 handle · 然后按 URL hash 渲染对应屏 (默认 feed)
+// 登出 · 清 localStorage · 不动 server 上的 user/projects
+function logout() {
+  if (!confirm('出去之后回到匿名浏览 · 你的工作室和项目都还在 · 用同样 handle 进来就能继续 · 真的出去?')) return;
+  localStorage.removeItem('tinker_my_handle');
+  currentUser.handle = null;
+  refreshMastheadHandle();
+  updateUnreadBadge();
+  showScreen('feed');
+  showToast('出去了 · 还能匿名看 · 想互动随时再开');
+}
+
+// pendingAfterLogin: 用户点了需要 handle 的操作 → 弹 modal · 设完 handle 自动继续刚才那个动作
+let pendingAfterLogin = null;
+
+function requireHandle(action, contextDesc) {
+  if (currentUser.handle) {
+    action();
+    return;
+  }
+  pendingAfterLogin = action;
+  openSetHandle('interact', contextDesc);
+}
+
+// 初始化 — 从 server 拉 state · 按 URL hash 渲染对应屏 (默认 feed) · 不再强制弹 handle modal
+// spec §5.3 "直接进主屏 · 无 onboarding · 无注册墙 · 可匿名浏览全部"
 (async function init() {
   try {
     state = await fetchState();
-    // 第一次来 / 没设过 handle → 弹"你是谁" (handle 设完会自动 navigateFromHash 回到分享链接)
-    if (!currentUser.handle) {
-      openSetHandle();
-      return;
-    }
-    // 已经有 handle → 确保 server 知道这个 user (alpha 期容错)
-    if (!state.users[currentUser.handle]) {
+    // 已有 handle → 确保 server 也知道这个 user (alpha 容错)
+    if (currentUser.handle && !state.users[currentUser.handle]) {
       await apiAction('setUserHandle', { handle: currentUser.handle });
       state = await fetchState();
     }
@@ -2220,11 +2298,44 @@ function refreshMastheadHandle() {
   }
 })();
 
-function openSetHandle() {
-  document.getElementById('sh-handle').value = currentUser.handle || '';
+// modes: 'start' 主动开张 / 'rename' 换 handle / 'interact' 想做某事时被触发
+function openSetHandle(mode, contextDesc) {
+  const titleEl = document.querySelector('#modal-set-handle .modal-title');
+  const subEl = document.querySelector('#modal-set-handle .modal-sub');
+  const btnEl = document.getElementById('sh-submit-btn');
+  if (mode === 'rename') {
+    if (titleEl) titleEl.textContent = '换个身份';
+    if (subEl) subEl.textContent = '改了之后 · 这台机器记的就是新 handle · 旧 handle 的工作室和项目还在 · 用旧 handle 再开张就能继续';
+    if (btnEl) btnEl.textContent = '换 →';
+    document.getElementById('sh-handle').value = currentUser.handle || '';
+  } else if (mode === 'interact') {
+    if (titleEl) titleEl.textContent = '先开张你的工作室';
+    if (subEl) subEl.textContent = (contextDesc ? '想' + contextDesc + ' · ' : '') + '填一个 handle · 之后这台机器认你 · alpha 期没认证 · 跟小伙伴约定不撞就好';
+    if (btnEl) btnEl.textContent = '开张 · 继续刚才的 →';
+    document.getElementById('sh-handle').value = '';
+  } else {
+    // 'start' / 默认
+    if (titleEl) titleEl.textContent = '你是谁?';
+    if (subEl) subEl.textContent = '填一个 handle 开张你的工作室 · alpha 期没认证 · 跟小伙伴约定不撞就好';
+    if (btnEl) btnEl.textContent = '开张 →';
+    document.getElementById('sh-handle').value = currentUser.handle || '';
+  }
   document.getElementById('sh-tagline').value = '';
   document.getElementById('modal-set-handle').classList.remove('hidden');
   setTimeout(() => document.getElementById('sh-handle').focus(), 80);
+}
+
+// 导航辅助 · 需要 handle 才有意义的入口
+function navMyWorkshop() {
+  if (currentUser.handle) {
+    showScreen('workshop', currentUser.handle);
+  } else {
+    openSetHandle('interact', '开张你的工作室');
+    pendingAfterLogin = () => showScreen('workshop', currentUser.handle);
+  }
+}
+function navAddUpdate() {
+  requireHandle(() => openPickProject(), '记一笔');
 }
 
 async function submitSetHandle() {
@@ -2241,7 +2352,15 @@ async function submitSetHandle() {
     closeModal('modal-set-handle');
     refreshMastheadHandle();
     updateUnreadBadge();
-    // 如果是从分享链接进来的 (hash 有内容) · navigateFromHash 会把他们带到那个项目 / 工作室
+    // 优先级 1: 如果有 pending 互动 (用户点了"想试试"等触发了 setHandle) · 设完接着做
+    if (pendingAfterLogin) {
+      const fn = pendingAfterLogin;
+      pendingAfterLogin = null;
+      setTimeout(fn, 80);
+      if (isNew) showToast('你好 @' + handle);
+      return;
+    }
+    // 优先级 2: 从分享链接进来 (hash 有内容) · 跳回那个 project / workshop
     // 否则默认去 feed
     if (location.hash && location.hash !== '#/' && location.hash !== '#') {
       navigateFromHash();
