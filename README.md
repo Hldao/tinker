@@ -4,6 +4,18 @@
 >
 > GitHub 是给写代码的人的工作室。我们是给"捣鼓东西的人"的工作室 —— ta 们用 AI · 做出真的能跑的东西 · 但不必是程序员。
 
+## 🟢 Alpha 测试
+
+当前 alpha 在我电脑上跑（ngrok tunnel），公网入口：
+
+**https://herself-awry-blurt.ngrok-free.dev**
+
+⚠️ Alpha 期注意:
+- 我电脑开着才能访问 · 关机/睡眠会断
+- 重启 ngrok 后 URL 会换 · 以最新通知为准
+- 没有真实认证 · 多人测试约定不同 handle (`@xx`) 避免冲突
+- 第一次访问会弹 ngrok 警告页 · 点 "Visit Site" 进入
+
 ---
 
 ## 三件套
