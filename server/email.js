@@ -1,14 +1,26 @@
-// 邮件发送 · Resend wrapper
-// 没设 RESEND_API_KEY 时 fallback 到 console (开发时方便看链接 · 不挡流程)
+// 邮件发送 · SMTP (兼容阿里云邮件推送 / 腾讯云 / Gmail / 任何 SMTP 提供商)
+// 没设 SMTP_HOST 时 fallback 到 console (开发时方便看登录链接 · 不挡流程)
 
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM || 'Tinker <onboarding@resend.dev>';
-// resend.dev sandbox 域名 · 只能发到 RESEND 账号验证过的邮箱
-// 生产前去 Resend dashboard 验证一个域名 · 改 EMAIL_FROM 环境变量
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
+const EMAIL_FROM = process.env.EMAIL_FROM || (SMTP_USER ? `Tinker <${SMTP_USER}>` : 'Tinker <noreply@example.com>');
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+// SMTP 准备好时建一个连接池 · 否则 null (走 dev fallback)
+const transporter = SMTP_HOST && SMTP_USER && SMTP_PASSWORD
+  ? nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,  // 465 = SSL · 587/25 = STARTTLS
+      auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+      pool: true,            // 连接池 · 避免每封信都重新握手
+      maxConnections: 3,
+      maxMessages: 100,
+    })
+  : null;
 
 function buildLoginEmail(magicLink) {
   const subject = '进 Tinker · 5 分钟内点链接';
@@ -44,24 +56,21 @@ ${magicLink}
 
 async function sendLoginEmail(toEmail, magicLink) {
   const { subject, html, text } = buildLoginEmail(magicLink);
-  if (!resend) {
-    // dev fallback · 没 API key 时打印到 console
-    console.log('━━━ EMAIL (dev mode · no RESEND_API_KEY) ━━━');
+  if (!transporter) {
+    // dev fallback · 没配 SMTP 时打印到 console
+    console.log('━━━ EMAIL (dev mode · 未配 SMTP) ━━━');
     console.log(`  TO: ${toEmail}`);
     console.log(`  SUBJECT: ${subject}`);
     console.log(`  LINK: ${magicLink}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     return { id: 'dev-mode-' + Date.now() };
   }
-  const result = await resend.emails.send({
+  const info = await transporter.sendMail({
     from: EMAIL_FROM,
     to: toEmail,
-    subject,
-    html,
-    text,
+    subject, html, text,
   });
-  if (result.error) throw new Error('Resend 发送失败: ' + result.error.message);
-  return result.data;
+  return { id: info.messageId };
 }
 
 module.exports = { sendLoginEmail };
