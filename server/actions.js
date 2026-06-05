@@ -91,6 +91,35 @@ function changeProjectStatus(state, { projectId, newStatus, currentUser = 'daoda
       });
     });
   }
+  // 解卡 (stuck → active) — 跟卡住对称 · 让关注者知道'又动起来了'
+  if (oldStatus === 'stuck' && newStatus === 'active') {
+    const targets = new Set();
+    (p.reactions.wantToTry || []).forEach(u => targets.add(u));
+    (p.reactions.tinkered || []).forEach(t => targets.add(t.user));
+    targets.delete(currentUser);
+    targets.forEach(u => {
+      addNotification(state, {
+        target: u, fromUser: p.owner, type: 'projectUnstuck',
+        projectId: p.id, projectName: p.name,
+        extra: '之前卡住的又动起来了',
+      });
+    });
+  }
+  return p;
+}
+
+// 改项目元信息 (name / desc / productLink / tools) · status 走 changeProjectStatus
+function editProject(state, { projectId, name, desc, productLink, tools, currentUser = 'daodao' }) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner !== currentUser) throw new Error('只能改自己的项目');
+  if (!name || !name.trim()) throw new Error('项目得有个名字');
+  if (!desc || !desc.trim()) throw new Error('描述不能为空');
+  if (!isValidUrl(productLink)) throw new Error('需要 https:// 的可访问产物链接');
+  p.name = name.trim();
+  p.desc = desc.trim();
+  p.productLink = productLink.trim();
+  if (Array.isArray(tools)) p.tools = tools;
   return p;
 }
 
@@ -285,7 +314,7 @@ function setUserHandle(state, { handle, tagline }) {
 }
 
 module.exports = {
-  addProject, changeProjectStatus,
+  addProject, editProject, changeProjectStatus,
   addUpdate, editUpdate, deleteUpdate,
   reactToProject, submitTinkered, markMethodUsed,
   addNote, deleteNote,

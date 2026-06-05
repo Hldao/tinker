@@ -894,13 +894,14 @@ async function apiReset() {
 
 
 const NOTIF_TEMPLATES = {
-  tinkered:    (n) => ({ verb:'接走了你的',     verbColor:'var(--vermilion)' }),
-  methodUsed:  (n) => ({ verb:'用了你的方法 · 跑通了', verbColor:'var(--vermilion)' }),
-  mentioned:   (n) => ({ verb:'提到了你 · 在',  verbColor:'var(--vermilion)' }),
-  projectDone: (n) => ({ verb:'跑通了 · 你之前说过想试试 · 现在能用了', verbColor:'var(--moss)' }),
-  projectStuck:(n) => ({ verb:'卡住了 · 也许你能搭把手', verbColor:'var(--vermilion)' }),
-  wantToTry:   (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
-  noted:       (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
+  tinkered:     (n) => ({ verb:'接走了你的',     verbColor:'var(--vermilion)' }),
+  methodUsed:   (n) => ({ verb:'用了你的方法 · 跑通了', verbColor:'var(--vermilion)' }),
+  mentioned:    (n) => ({ verb:'提到了你 · 在',  verbColor:'var(--vermilion)' }),
+  projectDone:  (n) => ({ verb:'跑通了 · 你之前说过想试试 · 现在能用了', verbColor:'var(--moss)' }),
+  projectStuck: (n) => ({ verb:'卡住了 · 也许你能搭把手', verbColor:'var(--vermilion)' }),
+  projectUnstuck:(n)=> ({ verb:'又动起来了 · 之前卡住的那个', verbColor:'var(--moss)' }),
+  wantToTry:    (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
+  noted:        (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
 };
 
 let state;
@@ -1076,14 +1077,19 @@ function timeAgo(at){
 /* ============ FEED ============ */
 function getFeedEvents() {
   const events = [];
-  state.projects.forEach(p => p.updates.forEach((u, idx) => {
-    events.push({
-      owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
-      text:u.text, at:u.at, agoOrder:parseAgoOrder(u.at),
-      tools:p.tools, status:p.status,
-      images: u.images || null,
+  // spec §5.2 + status-picker 文案: 「归档」从 feed 移除
+  // active / stuck / done / paused 都在 feed · archive 不在
+  state.projects.forEach(p => {
+    if (p.status === 'archive') return;
+    p.updates.forEach((u, idx) => {
+      events.push({
+        owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
+        text:u.text, at:u.at, agoOrder:parseAgoOrder(u.at),
+        tools:p.tools, status:p.status,
+        images: u.images || null,
+      });
     });
-  }));
+  });
   events.sort((a,b) => a.agoOrder - b.agoOrder);
   return events;
 }
@@ -1284,7 +1290,10 @@ function renderProject(owner, slug) {
     <div class="pheader">
       <div class="mb-3 flex items-center gap-3 flex-wrap">
         <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase;">项 目 · ${statusText(p.status)}</span>
-        ${isMine ? `<span class="small-action" onclick="openStatusPicker('${p.id}')">${ICONS.gear}改一下</span>` : ''}
+        ${isMine ? `
+          <span class="small-action" onclick="openStatusPicker('${p.id}')">${ICONS.gear}改状态</span>
+          <span class="small-action" onclick="openEditProject('${p.id}')">${ICONS.edit}改项目</span>
+        ` : ''}
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
       <p class="pdesc">${escapeHtml(p.desc)}</p>
@@ -1665,6 +1674,22 @@ async function submitNewProject() {
   if (!name) { showToast('项目得有个名字'); return; }
   if (!desc) { showToast('一句话描述能让别人知道这是什么'); return; }
   if (!isValidUrl(link)) { showToast('需要一个 https:// 的可访问产物链接 — 反 "AI 装大佬"'); return; }
+
+  // 编辑模式: 走 editProject · 不走 addProject
+  if (editingProjectId) {
+    try {
+      const updated = await apiAction('editProject', {
+        projectId: editingProjectId,
+        name, desc, productLink: link,
+        tools: Array.from(npTools),
+      });
+      closeModal('modal-new-project');
+      editingProjectId = null;
+      renderProject(updated.owner, updated.slug);
+      showToast('改好了');
+      return;
+    } catch (e) { showToast(e.message); return; }
+  }
 
   try {
     const newProject = await apiAction('addProject', {
@@ -2053,6 +2078,65 @@ async function submitUpdate() {
 }
 
 let isFirstProject = false;
+let editingProjectId = null;
+
+// 打开编辑项目 modal — 复用 new-project 表单 · 走 editProject action
+function openEditProject(projectId) {
+  if (!currentUser.handle) {
+    pendingAfterLogin = () => openEditProject(projectId);
+    openSetHandle('interact', '改项目');
+    return;
+  }
+  const p = projectById(projectId);
+  if (!p) { showToast('找不到这个项目'); return; }
+  if (p.owner !== currentUser.handle) { showToast('只能改自己的项目'); return; }
+
+  editingProjectId = projectId;
+  isFirstProject = false;
+  npTools = new Set(p.tools || []);
+  npStatus = p.status; // 不会被提交 · 只是 pill 显示一致
+
+  const titleEl = document.querySelector('#modal-new-project .modal-title');
+  const subEl = document.querySelector('#modal-new-project .modal-sub');
+  const cancelBtn = document.getElementById('np-cancel-btn');
+  const submitBtn = document.getElementById('np-submit-btn');
+  if (titleEl) titleEl.textContent = '改一下项目';
+  if (subEl) subEl.textContent = '改名字 / 描述 / 产物链接 / 工具 · 状态去 "改状态"';
+  if (cancelBtn) cancelBtn.textContent = '取消';
+  if (submitBtn) submitBtn.textContent = '保存改动 →';
+
+  // 预填字段
+  document.getElementById('np-name').value = p.name || '';
+  document.getElementById('np-desc').value = p.desc || '';
+  document.getElementById('np-link').value = p.productLink || '';
+
+  // 渲染 status pills — 编辑时只读 / 灰一点 (用户走 改状态 改)
+  document.querySelectorAll('#np-status-row .status-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.status === p.status);
+    el.onclick = () => showToast('改状态走顶部"改状态"按钮 · 那条路有通知逻辑');
+    el.style.opacity = '0.5';
+    el.style.cursor = 'not-allowed';
+  });
+
+  // 渲染 tools pills — 选中当前
+  const toolsRow = document.getElementById('np-tools-row');
+  toolsRow.innerHTML = '';
+  const makePill = (tool, selected) => {
+    const pill = document.createElement('span');
+    pill.className = 'tools-pill' + (selected ? ' selected' : '');
+    pill.textContent = tool.length > 12 ? tool : tool.toLowerCase();
+    pill.onclick = () => {
+      if (npTools.has(tool)) { npTools.delete(tool); pill.classList.remove('selected'); }
+      else { npTools.add(tool); pill.classList.add('selected'); }
+    };
+    return pill;
+  };
+  const allTools = new Set([...(state.availableTools || []), ...(p.tools || [])]);
+  allTools.forEach(tool => toolsRow.appendChild(makePill(tool, npTools.has(tool))));
+
+  document.getElementById('modal-new-project').classList.remove('hidden');
+  setTimeout(() => document.getElementById('np-name').focus(), 80);
+}
 
 function openNewProject(isFirst) {
   if (!currentUser.handle) {
@@ -2060,6 +2144,7 @@ function openNewProject(isFirst) {
     openSetHandle('interact', '开新项目');
     return;
   }
+  editingProjectId = null;
   isFirstProject = !!isFirst;
   npStatus = 'active';
   npTools = new Set();
@@ -2080,6 +2165,12 @@ function openNewProject(isFirst) {
     if (cancelBtn) cancelBtn.textContent = '取消';
     if (submitBtn) submitBtn.textContent = '挂上 · 开始捣鼓';
   }
+
+  // 重置 status pills 的 opacity/cursor (从 edit 模式来时可能改过)
+  document.querySelectorAll('#np-status-row .status-pill').forEach(el => {
+    el.style.opacity = '';
+    el.style.cursor = '';
+  });
 
   // 加载草稿
   const draftKey = 'new-project';

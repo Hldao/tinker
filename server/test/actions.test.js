@@ -193,6 +193,65 @@ test('changeProjectStatus: stuck → stuck 不重复触发通知', () => {
 });
 
 // ============================================
+// changeProjectStatus → projectUnstuck 通知 (stuck → active 解卡)
+// ============================================
+test('changeProjectStatus: stuck → active 时通知 wantToTry + tinkered 用户 (解卡)', () => {
+  const s = freshState();
+  // 先把 p2 设为 stuck
+  actions.changeProjectStatus(s, { projectId: 'p2', newStatus: 'stuck', currentUser: 'zhangsan' });
+  // 再切回 active · 应触发 projectUnstuck
+  const beforeD = s.notifications.filter(n => n.target === 'daodao' && n.type === 'projectUnstuck').length;
+  const beforeW = s.notifications.filter(n => n.target === 'wangwu' && n.type === 'projectUnstuck').length;
+  actions.changeProjectStatus(s, { projectId: 'p2', newStatus: 'active', currentUser: 'zhangsan' });
+  const afterD = s.notifications.filter(n => n.target === 'daodao' && n.type === 'projectUnstuck').length;
+  const afterW = s.notifications.filter(n => n.target === 'wangwu' && n.type === 'projectUnstuck').length;
+  assert.equal(afterD, beforeD + 1, 'daodao 是 wantToTry · 应收到 projectUnstuck');
+  assert.equal(afterW, beforeW + 1, 'wangwu 是 tinkered · 应收到 projectUnstuck');
+});
+
+// ============================================
+// editProject (改 name / desc / productLink / tools)
+// ============================================
+test('editProject: 改 owner 自己项目的 name + desc + link + tools', () => {
+  const s = freshState();
+  const before = s.projects.find(p => p.id === 'p2');
+  const oldSlug = before.slug;
+  const r = actions.editProject(s, {
+    projectId: 'p2',
+    name: '新名字',
+    desc: '新描述',
+    productLink: 'https://new-url.com',
+    tools: ['Cursor', 'GPT-5'],
+    currentUser: 'zhangsan',
+  });
+  assert.equal(r.name, '新名字');
+  assert.equal(r.desc, '新描述');
+  assert.equal(r.productLink, 'https://new-url.com');
+  assert.deepEqual(r.tools, ['Cursor', 'GPT-5']);
+  assert.equal(r.slug, oldSlug, 'slug 不变 · 分享 URL 不会失效');
+  assert.equal(r.status, before.status, 'status 不变 · 走 changeProjectStatus 改');
+});
+
+test('editProject: 非 owner 拒绝', () => {
+  const s = freshState();
+  assert.throws(() => actions.editProject(s, {
+    projectId: 'p2',
+    name: '改', desc: '改', productLink: 'https://x.com',
+    currentUser: 'wangwu', // p2 owner 是 zhangsan
+  }), /只能改自己/);
+});
+
+test('editProject: 空 name / 非法 url 拒绝', () => {
+  const s = freshState();
+  assert.throws(() => actions.editProject(s, {
+    projectId: 'p2', name: '', desc: 'x', productLink: 'https://x.com', currentUser: 'zhangsan',
+  }));
+  assert.throws(() => actions.editProject(s, {
+    projectId: 'p2', name: 'x', desc: 'y', productLink: 'not-a-url', currentUser: 'zhangsan',
+  }));
+});
+
+// ============================================
 // A1 · interested 字段已砍 (migration · spec 3 级反馈)
 // ============================================
 test('addProject: 新项目 reactions 只有 wantToTry + tinkered (无 interested)', () => {
