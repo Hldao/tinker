@@ -1,0 +1,605 @@
+{
+  "users": {
+    "daodao": {
+      "name": "捣鼓自己",
+      "tagline": "在做 Tinker · 这个产品本身"
+    },
+    "zhangsan": {
+      "name": "张三",
+      "tagline": "用 AI 帮我妈做小红书"
+    },
+    "liushi": {
+      "name": "柳师",
+      "tagline": "设计师 · 用 AI 折腾产品 demo"
+    },
+    "wangwu": {
+      "name": "王五",
+      "tagline": "前 PM · 现在自己做点东西"
+    },
+    "lisi": {
+      "name": "李四",
+      "tagline": "大三 · 用 AI 做毕设"
+    },
+    "maomao": {
+      "name": "猫猫",
+      "tagline": "内容创作者 · 用 AI 做小工具"
+    },
+    "test": {
+      "name": "test",
+      "tagline": "trigger save"
+    }
+  },
+  "projects": [
+    {
+      "id": "p1",
+      "owner": "daodao",
+      "name": "Tinker 主屏",
+      "slug": "tinker-feed",
+      "desc": "\"今天有动静的工作室\" 这个首页本身",
+      "productLink": "https://tinker.so",
+      "githubLink": "https://github.com/daodao/tinker",
+      "status": "active",
+      "tools": [
+        "Cursor",
+        "Claude",
+        "Tailwind"
+      ],
+      "updates": [
+        {
+          "text": "时间戳改造完成 · 现在每条进展都有真实 timestamp · 不再全是\"刚刚\"",
+          "at": 1780656806491
+        },
+        {
+          "text": "今天加了工具筛选,但是想再观察一下要不要默认隐藏",
+          "at": 1780655822028
+        },
+        {
+          "text": "\"卡片来源是项目事件而不是用户发帖\"这个差异要让新人一眼看出",
+          "at": 1780649522028
+        },
+        {
+          "text": "决定不做 onboarding wizard,新人点开主屏直接看真实工作室",
+          "at": 1780570322028
+        },
+        {
+          "text": "砍掉了\"热门推荐\",时间倒序到底",
+          "at": 1780483922028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [
+          "lisi"
+        ],
+        "tinkered": [
+          {
+            "user": "liushi",
+            "name": "深色版 Tinker",
+            "link": "#"
+          }
+        ]
+      },
+      "notes": [
+        {
+          "user": "wangwu",
+          "text": "我觉得卡片高度可以再小一点,信息密度再高一些",
+          "at": 1780653122028
+        }
+      ]
+    },
+    {
+      "id": "p2",
+      "owner": "zhangsan",
+      "name": "AI 简历优化器",
+      "slug": "resume-ai",
+      "desc": "让 AI 改简历但不胡编工作经历",
+      "productLink": "https://resume-ai.vercel.app",
+      "githubLink": "https://github.com/zhangsan/resume-ai",
+      "status": "active",
+      "tools": [
+        "Cursor",
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "终于让 GPT 不胡编工作经历了! 试了 4 种 prompt 模板,最后用了 strict mode",
+          "prompt": "You are a resume editor. STRICT MODE: only rephrase information explicitly provided. Do NOT invent skills, dates, or experiences. If a field is missing, output \"[未填写]\" instead of guessing.",
+          "usedBy": [
+            {
+              "user": "wangwu",
+              "note": "接走思路做了求职信生成器,效果立竿见影",
+              "at": 1780570322028
+            }
+          ],
+          "at": 1780656122028
+        },
+        {
+          "text": "卡了: GPT 总会编造没填的字段. 试了 temperature=0,没用",
+          "at": 1780570322028
+        },
+        {
+          "text": "跑通了基础版,但优化建议比较套话",
+          "at": 1780397522028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [
+          "lisi",
+          "daodao"
+        ],
+        "tinkered": [
+          {
+            "user": "wangwu",
+            "name": "求职信生成器",
+            "link": "#p7"
+          }
+        ]
+      },
+      "notes": [
+        {
+          "user": "lisi",
+          "text": "你那个 strict mode prompt 第三句可以加 \"do not invent fields\"",
+          "at": 1780649522028
+        },
+        {
+          "user": "wangwu",
+          "text": "我之前做过类似的,卡在了 streaming 输出,后来用 SSE 解决了",
+          "at": 1780570322028
+        }
+      ]
+    },
+    {
+      "id": "p3",
+      "owner": "zhangsan",
+      "name": "给我妈做小红书",
+      "slug": "mom-rednote",
+      "desc": "给我妈的护肤品店做小红书图文",
+      "productLink": "https://v0.dev/r/momred-x7a",
+      "status": "stuck",
+      "tools": [
+        "v0",
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "卡了 3 天: 我妈说 AI 写的\"太像广告\",她想要那种像朋友推荐的口气",
+          "images": [
+            {
+              "src": "data:image/svg+xml;charset=utf-8,%3Csvg%20width%3D%22640%22%20height%3D%22420%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Crect%20width%3D%22640%22%20height%3D%22420%22%20fill%3D%22%23faf9f6%22%2F%3E%0A%20%20%3Crect%20x%3D%2220%22%20y%3D%2220%22%20width%3D%22290%22%20height%3D%22380%22%20fill%3D%22white%22%20stroke%3D%22%23e5e5e5%22%2F%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%2250%22%20font-family%3D%22sans-serif%22%20font-size%3D%2212%22%20fill%3D%22%23737373%22%3EAI%20%E8%8D%89%E7%A8%BF%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%2280%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E6%9C%AC%E5%BA%97%E7%B2%BE%E9%80%89%E6%8A%A4%E8%82%A4%E4%BA%A7%E5%93%81%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%22102%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E9%87%87%E7%94%A8%E6%97%A5%E6%9C%AC%E8%BF%9B%E5%8F%A3%E5%8E%9F%E6%96%99%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%22124%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E6%B8%A9%E5%92%8C%E4%B8%8D%E5%88%BA%E6%BF%80%2C%E9%80%82%E5%90%88%E6%95%8F%E6%84%9F%E8%82%8C%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%22146%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E7%8E%B0%E5%9C%A8%E8%B4%AD%E4%B9%B0%E7%AB%8B%E4%BA%AB%208%20%E6%8A%98%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%22168%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E4%BB%85%E9%99%90%E6%9C%AC%E5%91%A8%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2240%22%20y%3D%22208%22%20font-family%3D%22sans-serif%22%20font-size%3D%2211%22%20fill%3D%22%23c2410c%22%20font-style%3D%22italic%22%3E%E2%80%94%20%22%E5%A4%AA%E5%83%8F%E5%B9%BF%E5%91%8A%E4%BA%86%22%20%E2%80%94%20%E6%88%91%E5%A6%88%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%22330%22%20y%3D%2220%22%20width%3D%22290%22%20height%3D%22380%22%20fill%3D%22white%22%20stroke%3D%22%23e5e5e5%22%2F%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%2250%22%20font-family%3D%22sans-serif%22%20font-size%3D%2212%22%20fill%3D%22%23737373%22%3E%E5%A6%88%E5%A6%88%E6%83%B3%E8%A6%81%E7%9A%84%E5%8F%A3%E6%B0%94%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%2280%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E5%A7%90%E5%A6%B9%E4%BB%AC%20%E6%95%91%E5%91%BD%E4%BA%86%20%F0%9F%A5%BA%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%22102%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E8%BF%99%E4%B8%AA%E7%9C%9F%E7%9A%84%E5%A5%BD%E7%94%A8%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%22124%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E6%88%91%E7%94%A8%E4%BA%86%E4%B8%A4%E5%91%A8%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%22146%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E7%9A%AE%E8%82%A4%E6%98%8E%E6%98%BE%E7%BB%86%E8%85%BB%E4%BA%86%20%E2%9C%A8%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%22168%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E6%9C%AC%E6%9D%A5%E6%80%95%E8%B8%A9%E9%9B%B7%E7%9A%84%E6%88%91%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%22190%22%20font-family%3D%22sans-serif%22%20font-size%3D%2214%22%20fill%3D%22%231c1917%22%3E%E7%8E%B0%E5%9C%A8%E5%9B%9E%E8%B4%AD%E7%AC%AC%E4%B8%89%E7%93%B6%20%F0%9F%9B%92%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22350%22%20y%3D%22230%22%20font-family%3D%22sans-serif%22%20font-size%3D%2211%22%20fill%3D%22%2315803d%22%20font-style%3D%22italic%22%3E%E2%80%94%20%22%E8%BF%99%E4%B8%AA%E6%89%8D%E5%83%8F%22%20%E2%80%94%20%E6%88%91%E5%A6%88%3C%2Ftext%3E%0A%3C%2Fsvg%3E",
+              "caption": "AI 草稿 vs 我妈想要的口气"
+            }
+          ],
+          "at": 1780570322028
+        },
+        {
+          "text": "试了让 Claude 模仿小红书博主的笔记风格,但读起来还是有点假",
+          "at": 1780483922028
+        },
+        {
+          "text": "开始: 想做一个能自动生成小红书图文的小工具给我妈用",
+          "at": 1780224722028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": []
+      },
+      "notes": [
+        {
+          "user": "maomao",
+          "text": "小红书的关键不是文案,是 emoji 密度. 你试试让 AI 每 2-3 句加一个 emoji,然后开头用\"姐妹们...\"",
+          "images": [
+            {
+              "src": "data:image/svg+xml;charset=utf-8,%3Csvg%20width%3D%22500%22%20height%3D%22240%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Crect%20width%3D%22500%22%20height%3D%22240%22%20fill%3D%22%23fafaf7%22%2F%3E%0A%20%20%3Ctext%20x%3D%22250%22%20y%3D%2228%22%20font-family%3D%22serif%22%20font-size%3D%2213%22%20font-style%3D%22italic%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3E%E5%8F%82%E8%80%83%20%C2%B7%20emoji%20%E5%AF%86%E5%BA%A6%E5%AF%B9%E6%AF%94%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%2230%22%20y%3D%2245%22%20width%3D%22200%22%20height%3D%22170%22%20fill%3D%22white%22%20stroke%3D%22%23e5e5e5%22%2F%3E%0A%20%20%3Ctext%20x%3D%2250%22%20y%3D%2272%22%20font-family%3D%22sans-serif%22%20font-size%3D%2211%22%20fill%3D%22%23a8a29e%22%3E%E5%8E%9F%E7%A8%BF%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2250%22%20y%3D%22100%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E6%9C%AC%E5%BA%97%E4%BA%A7%E5%93%81%E9%87%87%E7%94%A8%E6%97%A5%E6%9C%AC%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2250%22%20y%3D%22118%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E8%BF%9B%E5%8F%A3%E5%8E%9F%E6%96%99%2C%E6%B8%A9%E5%92%8C%E4%B8%8D%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2250%22%20y%3D%22136%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E5%88%BA%E6%BF%80%2C%E9%80%82%E5%90%88%E6%95%8F%E6%84%9F%E8%82%8C%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2250%22%20y%3D%22154%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E4%BD%BF%E7%94%A8%E3%80%82%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2250%22%20y%3D%22195%22%20font-family%3D%22sans-serif%22%20font-size%3D%2211%22%20fill%3D%22%23c2410c%22%20font-style%3D%22italic%22%3E%E5%A4%AA%E5%B9%B2%20%C2%B7%20%E5%83%8F%E5%B9%BF%E5%91%8A%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%22270%22%20y%3D%2245%22%20width%3D%22200%22%20height%3D%22170%22%20fill%3D%22white%22%20stroke%3D%22%23e5e5e5%22%2F%3E%0A%20%20%3Ctext%20x%3D%22290%22%20y%3D%2272%22%20font-family%3D%22sans-serif%22%20font-size%3D%2211%22%20fill%3D%22%2315803d%22%3E%E5%8A%A0%E4%BA%86%20emoji%20%E5%90%8E%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22290%22%20y%3D%22100%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E5%A7%90%E5%A6%B9%E4%BB%AC%20%E6%95%91%E5%91%BD%E4%BA%86%20%F0%9F%A5%BA%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22290%22%20y%3D%22118%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E8%BF%99%E4%B8%AA%E7%9C%9F%E7%9A%84%E5%A5%BD%E7%94%A8%20%E2%9C%A8%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22290%22%20y%3D%22136%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E6%97%A5%E6%9C%AC%E8%BF%9B%E5%8F%A3%20%E6%B8%A9%E5%92%8C%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22290%22%20y%3D%22154%22%20font-family%3D%22sans-serif%22%20font-size%3D%2213%22%20fill%3D%22%231c1917%22%3E%E6%95%8F%E6%84%9F%E8%82%8C%E4%B9%9F%E8%83%BD%E7%94%A8%20%F0%9F%8C%B8%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22290%22%20y%3D%22195%22%20font-family%3D%22sans-serif%22%20font-size%3D%2211%22%20fill%3D%22%2315803d%22%20font-style%3D%22italic%22%3E%E6%9C%89%20vibe%20%E4%BA%86%3C%2Ftext%3E%0A%3C%2Fsvg%3E",
+              "caption": "我之前帮另一个店做的,加了 emoji 后转化率明显涨"
+            }
+          ],
+          "at": 1780655522028
+        }
+      ]
+    },
+    {
+      "id": "p4",
+      "owner": "zhangsan",
+      "name": "番茄钟",
+      "slug": "pomodoro",
+      "desc": "最简单的网页番茄钟",
+      "productLink": "https://claude.ai/chat/pomodoro-artifact",
+      "status": "done",
+      "tools": [
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "跑通了 · 加了响铃和暂停",
+          "at": 1780051922028
+        },
+        {
+          "text": "5 分钟用 Claude Artifact 做的,直接复制粘贴跑起来",
+          "at": 1780051922028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": []
+      },
+      "notes": []
+    },
+    {
+      "id": "p5",
+      "owner": "liushi",
+      "name": "猫咪表情识别",
+      "slug": "cat-mood",
+      "desc": "上传猫咪照片,告诉你它现在什么心情",
+      "productLink": "https://v0.dev/r/catmood-k9z",
+      "status": "stuck",
+      "tools": [
+        "v0",
+        "Claude",
+        "TensorFlow.js"
+      ],
+      "updates": [
+        {
+          "text": "卡住 6 小时: 表情分类总把\"生气\"识别成\"开心\". 训练数据集可能有问题. @daodao 你之前提过的\"行为识别\"思路靠谱吗?",
+          "images": [
+            {
+              "src": "data:image/svg+xml;charset=utf-8,%3Csvg%20width%3D%22640%22%20height%3D%22380%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Crect%20width%3D%22640%22%20height%3D%22380%22%20fill%3D%22%231a1a1a%22%2F%3E%0A%20%20%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22640%22%20height%3D%2232%22%20fill%3D%22%232a2a2a%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%2218%22%20cy%3D%2216%22%20r%3D%226%22%20fill%3D%22%23dc2626%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%2238%22%20cy%3D%2216%22%20r%3D%226%22%20fill%3D%22%23ca8a04%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%2258%22%20cy%3D%2216%22%20r%3D%226%22%20fill%3D%22%2316a34a%22%2F%3E%0A%20%20%3Ctext%20x%3D%22320%22%20y%3D%2220%22%20font-family%3D%22monospace%22%20font-size%3D%2211%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3Ecat-mood%20%E2%80%94%20predict.py%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%2268%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23a3a3a3%22%3E%24%20python%20train.py%20--epoch%2010%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%2292%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23737373%22%3ELoading%20dataset%20(320%20images)...%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22116%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23737373%22%3ETraining%20epoch%201%2F10...%20loss%3D2.43%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22140%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23737373%22%3ETraining%20epoch%2010%2F10...%20loss%3D0.41%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22164%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23737373%22%3ETraining%20complete.%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22200%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23a3a3a3%22%3E%24%20python%20predict.py%20test%2Fangry_*.jpg%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22224%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23dc2626%22%3Etest%2Fangry_01.jpg%20%20-%3E%20%20happy%20%20%20(conf%200.71)%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22248%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23dc2626%22%3Etest%2Fangry_02.jpg%20%20-%3E%20%20happy%20%20%20(conf%200.83)%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22272%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23dc2626%22%3Etest%2Fangry_03.jpg%20%20-%3E%20%20happy%20%20%20(conf%200.69)%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22296%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23dc2626%22%3Etest%2Fangry_04.jpg%20%20-%3E%20%20curious%20(conf%200.55)%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%2224%22%20y%3D%22334%22%20font-family%3D%22monospace%22%20font-size%3D%2213%22%20fill%3D%22%23737373%22%3EAccuracy%20on%20angry%20set%3A%200.06%20%20(%3F%3F)%3C%2Ftext%3E%0A%3C%2Fsvg%3E",
+              "caption": "angry 测试集 accuracy 只有 0.06 · 几乎全部预测成 happy"
+            }
+          ],
+          "at": 1780649522028
+        },
+        {
+          "text": "基础识别能跑了,但准确率只有 50%",
+          "at": 1780570322028
+        },
+        {
+          "text": "开始: 想给我家猫做一个表情识别器",
+          "at": 1780311122028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [
+          "daodao"
+        ],
+        "tinkered": []
+      },
+      "notes": [
+        {
+          "user": "daodao",
+          "text": "猫的表情可能本来就不适合简单分类,试试做\"行为识别\"(摇尾巴/竖耳朵)会不会准一点?",
+          "at": 1780653122028
+        }
+      ]
+    },
+    {
+      "id": "p6",
+      "owner": "liushi",
+      "name": "UI 灵感图生成器",
+      "slug": "ui-inspo",
+      "desc": "描述一下场景,生成一组 UI 概念图",
+      "productLink": "https://lovable.dev/projects/ui-inspo-92",
+      "status": "active",
+      "tools": [
+        "Lovable",
+        "Cursor"
+      ],
+      "updates": [
+        {
+          "text": "加了\"风格\"选项: 极简 / 拟物 / 玻璃拟态 / 杂志感",
+          "at": 1780638722028
+        },
+        {
+          "text": "能跑了 · 但是生成的图都长得有点像,要想办法增加多样性",
+          "at": 1780397522028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [
+          "lisi"
+        ],
+        "tinkered": []
+      },
+      "notes": []
+    },
+    {
+      "id": "p7",
+      "owner": "wangwu",
+      "name": "求职信生成器",
+      "slug": "cover-letter",
+      "desc": "基于 @zhangsan 简历优化器的思路",
+      "productLink": "https://cover-letter-ai.vercel.app",
+      "status": "active",
+      "tools": [
+        "Cursor",
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "接走了 @zhangsan 的 strict mode prompt,效果立竿见影",
+          "at": 1780570322028
+        },
+        {
+          "text": "开始: 看到 @zhangsan 的简历优化器,觉得可以延伸做求职信",
+          "at": 1780483922028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": []
+      },
+      "notes": []
+    },
+    {
+      "id": "p8",
+      "owner": "wangwu",
+      "name": "专注一起",
+      "slug": "focus-together",
+      "desc": "可以看到朋友也在专注 · 互相打气",
+      "productLink": "https://focus-together.vercel.app",
+      "status": "done",
+      "tools": [
+        "Bolt",
+        "Supabase"
+      ],
+      "updates": [
+        {
+          "text": "跑通了, 已经用了一个月,确实比一个人专注更不容易划水",
+          "at": 1779447122028
+        },
+        {
+          "text": "上线了, 邀请了 5 个朋友一起用",
+          "at": 1778842322028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": [
+          {
+            "user": "lisi",
+            "name": "宿舍版番茄钟",
+            "link": "#"
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "id": "p9",
+      "owner": "lisi",
+      "name": "毕设: 校园二手书识别",
+      "slug": "book-recog",
+      "desc": "拍照识别书名 + 估价 · 毕设",
+      "productLink": "https://v0.dev/r/bookrecog-3a",
+      "status": "active",
+      "tools": [
+        "v0",
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "能跑了基础识别,但估价模块还不准 · 数据来源用了多抓鱼公开页",
+          "images": [
+            {
+              "src": "data:image/svg+xml;charset=utf-8,%3Csvg%20width%3D%22640%22%20height%3D%22320%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Crect%20width%3D%22640%22%20height%3D%22320%22%20fill%3D%22%23faf8f3%22%2F%3E%0A%20%20%3Crect%20x%3D%2240%22%20y%3D%2240%22%20width%3D%22180%22%20height%3D%22240%22%20fill%3D%22%2378716c%22%2F%3E%0A%20%20%3Ctext%20x%3D%22130%22%20y%3D%2290%22%20font-family%3D%22serif%22%20font-size%3D%2214%22%20fill%3D%22white%22%20text-anchor%3D%22middle%22%3E%E7%BA%BF%E6%80%A7%E4%BB%A3%E6%95%B0%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22130%22%20y%3D%22112%22%20font-family%3D%22serif%22%20font-size%3D%2212%22%20fill%3D%22%23e7e5e4%22%20text-anchor%3D%22middle%22%3E%E5%90%8C%E6%B5%8E%E7%89%88%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22130%22%20y%3D%22270%22%20font-family%3D%22monospace%22%20font-size%3D%2210%22%20fill%3D%22%23a8a29e%22%20text-anchor%3D%22middle%22%3E%5Bscan%20photo%5D%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%22260%22%20y%3D%2240%22%20width%3D%22340%22%20height%3D%22240%22%20fill%3D%22white%22%20stroke%3D%22%23d6d3d1%22%2F%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%2274%22%20font-family%3D%22monospace%22%20font-size%3D%2211%22%20fill%3D%22%23737373%22%3E%E8%AF%86%E5%88%AB%E7%BB%93%E6%9E%9C%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%22104%22%20font-family%3D%22serif%22%20font-size%3D%2218%22%20fill%3D%22%231c1917%22%3E%E3%80%8A%E7%BA%BF%E6%80%A7%E4%BB%A3%E6%95%B0%E3%80%8B%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%22128%22%20font-family%3D%22serif%22%20font-size%3D%2213%22%20fill%3D%22%2344403c%22%20font-style%3D%22italic%22%3E%E5%90%8C%E6%B5%8E%E5%A4%A7%E5%AD%A6%E6%95%B0%E5%AD%A6%E7%B3%BB%20%C2%B7%20%E7%AC%AC%E5%85%AD%E7%89%88%3C%2Ftext%3E%0A%20%20%3Cline%20x1%3D%22280%22%20y1%3D%22148%22%20x2%3D%22580%22%20y2%3D%22148%22%20stroke%3D%22%23d6d3d1%22%2F%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%22172%22%20font-family%3D%22monospace%22%20font-size%3D%2211%22%20fill%3D%22%23737373%22%3E%E4%BC%B0%E4%BB%B7%20%C2%B7%209.5%20%E6%88%90%E6%96%B0%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%22196%22%20font-family%3D%22serif%22%20font-size%3D%2222%22%20fill%3D%22%23c2410c%22%3E%C2%A5%208%20%E2%80%94%2032%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%22220%22%20font-family%3D%22serif%22%20font-size%3D%2212%22%20fill%3D%22%2378716c%22%20font-style%3D%22italic%22%3E(%E4%BC%B0%E4%BB%B7%E8%B7%A8%E5%BA%A6%E5%A4%AA%E5%A4%A7%20%C2%B7%20%E6%95%B0%E6%8D%AE%E6%9D%A5%E6%BA%90%3A%E5%A4%9A%E6%8A%93%E9%B1%BC%E5%85%AC%E5%BC%80%E9%A1%B5%20%2B%20%E9%97%B2%E9%B1%BC%E6%90%9C%E7%B4%A2)%3C%2Ftext%3E%0A%20%20%3Ctext%20x%3D%22280%22%20y%3D%22258%22%20font-family%3D%22monospace%22%20font-size%3D%2211%22%20fill%3D%22%23c2410c%22%3E%5B%20%E4%BC%B0%E4%BB%B7%E6%A8%A1%E5%9D%97%E8%BF%98%E4%B8%8D%E5%87%86%20%5D%3C%2Ftext%3E%0A%3C%2Fsvg%3E",
+              "caption": "识别 OK · 估价跨度 ¥8 – ¥32 太大"
+            }
+          ],
+          "at": 1780570322028
+        },
+        {
+          "text": "开始: 老师让我做一个有\"实际应用\"的毕设",
+          "at": 1780051922028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": []
+      },
+      "notes": []
+    },
+    {
+      "id": "p10",
+      "owner": "lisi",
+      "name": "课堂笔记小工具",
+      "slug": "class-notes",
+      "desc": "录音 + AI 整理 · 生成结构化笔记",
+      "productLink": "https://class-notes.replit.app",
+      "status": "done",
+      "tools": [
+        "Replit",
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "4 个室友都在用 · 实习课已经被点名\"做得好\"",
+          "at": 1780397522028
+        },
+        {
+          "text": "跑通了基础版",
+          "at": 1780051922028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [
+          "daodao"
+        ],
+        "tinkered": []
+      },
+      "notes": []
+    },
+    {
+      "id": "p11",
+      "owner": "maomao",
+      "name": "小红书配图工具",
+      "slug": "rednote-img",
+      "desc": "给文案自动配 3-5 张图 · 风格统一",
+      "productLink": "https://lovable.dev/projects/rednote-img",
+      "status": "active",
+      "tools": [
+        "Lovable",
+        "Claude",
+        "Replicate"
+      ],
+      "updates": [
+        {
+          "text": "加了 \"风格一致性\" 的小技巧: 所有图用同一个 seed",
+          "usedBy": [
+            {
+              "user": "liushi",
+              "note": "借鉴到我的 UI 灵感图生成器 · 终于不再乱跳风格了",
+              "at": 1780638722028
+            }
+          ],
+          "at": 1780570322028
+        },
+        {
+          "text": "能跑了, 但配图风格不统一",
+          "images": [
+            {
+              "src": "data:image/svg+xml;charset=utf-8,%3Csvg%20width%3D%22640%22%20height%3D%22420%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%20%20%3Crect%20width%3D%22640%22%20height%3D%22420%22%20fill%3D%22%23fafaf7%22%2F%3E%0A%20%20%3Ctext%20x%3D%22320%22%20y%3D%2232%22%20font-family%3D%22serif%22%20font-size%3D%2214%22%20font-style%3D%22italic%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3E%E5%90%8C%E4%B8%80%E7%AF%87%E6%96%87%E6%A1%88%20%C2%B7%204%20%E5%BC%A0%E9%85%8D%E5%9B%BE%E9%A3%8E%E6%A0%BC%E5%90%84%E5%BC%82%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%2260%22%20y%3D%2260%22%20width%3D%22240%22%20height%3D%22140%22%20fill%3D%22%23f5f5f4%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%22180%22%20cy%3D%22130%22%20r%3D%2240%22%20fill%3D%22%23e7e5e4%22%2F%3E%0A%20%20%3Ctext%20x%3D%22180%22%20y%3D%22220%22%20font-family%3D%22serif%22%20font-size%3D%2212%22%20font-style%3D%22italic%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3E%E6%9E%81%E7%AE%80%E9%A3%8E%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%22340%22%20y%3D%2260%22%20width%3D%22240%22%20height%3D%22140%22%20fill%3D%22%237c2d12%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%22460%22%20cy%3D%22130%22%20r%3D%2240%22%20fill%3D%22%23fbbf24%22%2F%3E%0A%20%20%3Ctext%20x%3D%22460%22%20y%3D%22220%22%20font-family%3D%22serif%22%20font-size%3D%2212%22%20font-style%3D%22italic%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3E%E6%B2%B9%E7%94%BB%E9%A3%8E%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%2260%22%20y%3D%22240%22%20width%3D%22240%22%20height%3D%22140%22%20fill%3D%22%231e3a8a%22%2F%3E%0A%20%20%3Crect%20x%3D%22160%22%20y%3D%22290%22%20width%3D%2240%22%20height%3D%2240%22%20fill%3D%22%23fde047%22%2F%3E%0A%20%20%3Ctext%20x%3D%22180%22%20y%3D%22400%22%20font-family%3D%22serif%22%20font-size%3D%2212%22%20font-style%3D%22italic%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3E%E5%83%8F%E7%B4%A0%E9%A3%8E%3C%2Ftext%3E%0A%20%20%3Crect%20x%3D%22340%22%20y%3D%22240%22%20width%3D%22240%22%20height%3D%22140%22%20fill%3D%22%23fce7f3%22%2F%3E%0A%20%20%3Ccircle%20cx%3D%22460%22%20cy%3D%22310%22%20r%3D%2240%22%20fill%3D%22%23f9a8d4%22%20opacity%3D%220.7%22%2F%3E%0A%20%20%3Ctext%20x%3D%22460%22%20y%3D%22400%22%20font-family%3D%22serif%22%20font-size%3D%2212%22%20font-style%3D%22italic%22%20fill%3D%22%23737373%22%20text-anchor%3D%22middle%22%3E%E6%B0%B4%E5%BD%A9%E9%A3%8E%3C%2Ftext%3E%0A%3C%2Fsvg%3E",
+              "caption": "同一篇文案 · v1 输出的 4 张配图风格各异"
+            }
+          ],
+          "at": 1780311122028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": []
+      },
+      "notes": []
+    },
+    {
+      "id": "p12",
+      "owner": "maomao",
+      "name": "公众号一键排版",
+      "slug": "wechat-formatter",
+      "desc": "粘贴文章自动排版 · 几种模板",
+      "productLink": "https://wechat-fmt.vercel.app",
+      "status": "done",
+      "tools": [
+        "Cursor",
+        "Claude"
+      ],
+      "updates": [
+        {
+          "text": "跑通了 · 给我朋友的公众号节省了不少时间",
+          "at": 1779447122028
+        }
+      ],
+      "reactions": {
+        "wantToTry": [],
+        "tinkered": []
+      },
+      "notes": []
+    }
+  ],
+  "starters": [
+    {
+      "title": "用 Claude Artifact 做\"今晚不想想\"清单",
+      "prompt": "做一个网页. 我能列出今晚不想想的事 · 一条一条加 · 每加完它变浅色/划掉 · 给我\"已经放下了\"的感觉. 不要计数 · 不要鼓励语 · 数据存浏览器.",
+      "toolName": "Claude",
+      "toolUrl": "https://claude.ai"
+    },
+    {
+      "title": "用 v0 做\"扔硬币帮我决定\"工具",
+      "prompt": "做一个简单的决定器. 我输入两个选项 (比如 \"出门\" vs \"在家\") · 按一个大按钮 · 它用扔硬币的方式选一个并简单说明为什么. 风格俏皮但不卖萌.",
+      "toolName": "v0",
+      "toolUrl": "https://v0.dev"
+    },
+    {
+      "title": "用 Bolt 做\"给明天的自己\"留言板",
+      "prompt": "做一个网页. 我能写一条给明天自己的话 · 数据存浏览器 · 每天打开第一次自动显示昨天给今天的话. 风格安静 · 不要计数 · 不要打卡感.",
+      "toolName": "Bolt",
+      "toolUrl": "https://bolt.new"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "n10",
+      "target": "daodao",
+      "type": "projectDone",
+      "fromUser": "lisi",
+      "projectId": "p10",
+      "projectName": "课堂笔记小工具",
+      "extra": "你之前说过想试试 · 现在能用了",
+      "read": false,
+      "at": 1780656422028
+    },
+    {
+      "id": "n1",
+      "target": "daodao",
+      "type": "tinkered",
+      "fromUser": "liushi",
+      "projectId": "p1",
+      "projectName": "Tinker 主屏",
+      "extra": "深色版 Tinker",
+      "read": false,
+      "at": 1780656122028
+    },
+    {
+      "id": "n2",
+      "target": "daodao",
+      "type": "noted",
+      "fromUser": "wangwu",
+      "projectId": "p1",
+      "projectName": "Tinker 主屏",
+      "extra": "我觉得卡片高度可以再小一点,信息密度再高一些",
+      "read": false,
+      "at": 1780653122028
+    },
+    {
+      "id": "n8",
+      "target": "daodao",
+      "type": "mentioned",
+      "fromUser": "liushi",
+      "projectId": "p5",
+      "projectName": "猫咪表情识别",
+      "extra": "@daodao 你之前提过的\"行为识别\"思路靠谱吗?",
+      "read": false,
+      "at": 1780649522028
+    },
+    {
+      "id": "n7",
+      "target": "daodao",
+      "type": "methodUsed",
+      "fromUser": "wangwu",
+      "projectId": "p1",
+      "projectName": "Tinker 主屏",
+      "extra": "借鉴了\"主屏卡片来源是项目事件而不是用户发帖\"的设计 · 用在我自己的笔记应用 feed 上",
+      "read": false,
+      "at": 1780645922028
+    },
+    {
+      "id": "n3",
+      "target": "daodao",
+      "type": "wantToTry",
+      "fromUser": "lisi",
+      "projectId": "p1",
+      "projectName": "Tinker 主屏",
+      "read": false,
+      "at": 1780570322028
+    }
+  ],
+  "availableTools": [
+    "Cursor",
+    "Claude",
+    "v0",
+    "Bolt",
+    "Lovable",
+    "Replit",
+    "Windsurf",
+    "Trae",
+    "通义灵码",
+    "CodeGeex",
+    "文心 Comate",
+    "ChatGPT",
+    "DeepSeek",
+    "豆包",
+    "Kimi",
+    "通义千问",
+    "Tailwind",
+    "Supabase",
+    "Vercel"
+  ]
+}

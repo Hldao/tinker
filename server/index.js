@@ -21,16 +21,15 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 
 const { logger } = require('./logger');
-const { JsonStorage } = require('./storage');
-const { getSeedData, AVAILABLE_TOOLS, migrateState } = require('./seed');
-const actions = require('./actions');
+const db = require('./db');                  // SQLite · 启动时自动跑 migrations
+const { buildState } = require('./state');
+const actions = require('./actions-sql');
 const auth = require('./auth');
 
 // ============================================
 // 配置
 // ============================================
 const PORT = parseInt(process.env.PORT || '8788', 10);
-const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 const WEBAPP_DIR = path.join(__dirname, '..', 'webapp');
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -40,24 +39,17 @@ const BODY_LIMIT = process.env.BODY_LIMIT || '10mb';
 const STARTED_AT = Date.now();
 
 // ============================================
-// 数据加载 / 保存 (atomic + backup rotation)
+// SQLite · 已在 db.js 单例里 · migrations 自动跑
+// 启动时 log 一下当前 state 概况
 // ============================================
-const storage = new JsonStorage(DATA_FILE, logger);
-let state;
-
-function loadState() {
-  const { data, source } = storage.load();
-  if (data) {
-    state = migrateState(data);
-    logger.info({ source, projects: state.projects?.length, users: Object.keys(state.users || {}).length }, 'state loaded');
-  } else {
-    state = getSeedData();
-    storage.save(state);
-    logger.info({ projects: state.projects.length }, 'state seeded from initial');
+{
+  const u = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+  const p = db.prepare('SELECT COUNT(*) AS c FROM projects').get().c;
+  logger.info({ users: u, projects: p }, 'SQLite ready');
+  if (u === 0) {
+    logger.warn('数据库为空 · 跑 `node migrate-from-json.js` 或重置 seed');
   }
 }
-
-loadState();
 
 // ============================================
 // Express setup
@@ -134,12 +126,14 @@ const sendLinkLimiter = rateLimit({
 // 健康检查
 app.get('/api/health', (req, res) => {
   const mem = process.memoryUsage();
+  const userCount = db.prepare('SELECT COUNT(*) AS c FROM users').get().c;
+  const projectCount = db.prepare('SELECT COUNT(*) AS c FROM projects').get().c;
   res.json({
     status: 'ok',
     uptime: Math.floor((Date.now() - STARTED_AT) / 1000),
     memoryMb: Math.round(mem.rss / 1024 / 1024),
-    projects: state.projects?.length || 0,
-    users: Object.keys(state.users || {}).length,
+    projects: projectCount,
+    users: userCount,
     nodeVersion: process.version,
     env: process.env.NODE_ENV || 'development',
   });
@@ -216,37 +210,30 @@ app.post('/api/auth/logout', (req, res) => {
 // ============================================
 
 app.get('/api/state', stateLimiter, (req, res) => {
+  const state = buildState({ targetUserId: req.user?.id });
   res.json(state);
 });
 
 app.get('/api/tools', stateLimiter, (req, res) => {
-  res.json(AVAILABLE_TOOLS);
+  const tools = db.prepare('SELECT tool FROM available_tools ORDER BY position').all().map(r => r.tool);
+  res.json(tools);
 });
 
-app.post('/api/action', actionLimiter, async (req, res, next) => {
+// 业务 action · 全部要求登录 · 用 session.user.id 代替信任 payload.currentUser
+app.post('/api/action', actionLimiter, auth.requireSession, async (req, res) => {
   const { type, payload } = req.body || {};
   if (!type) return res.status(400).json({ error: 'type required' });
   const action = actions[type];
   if (!action) return res.status(400).json({ error: 'Unknown action: ' + type });
   try {
-    const result = action(state, payload || {});
-    await storage.save(state);
-    res.json({ ok: true, result, state });
+    const result = action(payload || {}, { currentUserId: req.user.id });
+    const newState = buildState({ targetUserId: req.user.id });
+    res.json({ ok: true, result, state: newState });
   } catch (e) {
     req.log.warn({ action: type, err: e.message }, 'action rejected');
     res.status(400).json({ error: e.message });
   }
 });
-
-// 重置数据 (开发用 · 生产应 disable)
-if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_RESET === '1') {
-  app.post('/api/reset', async (req, res) => {
-    state = getSeedData();
-    await storage.save(state);
-    logger.warn('state reset to seed');
-    res.json({ ok: true, state });
-  });
-}
 
 // ============================================
 // 静态服务 webapp (放在 API 之后 · API 优先匹配)
@@ -269,7 +256,7 @@ const server = app.listen(PORT, () => {
   logger.info({
     port: PORT,
     env: process.env.NODE_ENV || 'development',
-    dataFile: DATA_FILE,
+    dbFile: process.env.DB_FILE || 'server/tinker.db',
     corsOrigins: CORS_ORIGINS.length ? CORS_ORIGINS : 'open',
     rateLimit: { action: RATE_LIMIT_ACTION, state: RATE_LIMIT_STATE },
   }, 'Tinker server up');
@@ -278,10 +265,10 @@ const server = app.listen(PORT, () => {
 function shutdown(signal) {
   logger.info({ signal }, 'shutting down');
   server.close(() => {
-    storage.save(state).then(() => {
-      logger.info('state flushed · bye');
-      process.exit(0);
-    });
+    // SQLite 同步写入 · 不需要 flush · WAL checkpoint 自动
+    db.close();
+    logger.info('db closed · bye');
+    process.exit(0);
   });
   // 强制 10s 后退出
   setTimeout(() => { logger.warn('force exit'); process.exit(1); }, 10000).unref();
