@@ -982,7 +982,7 @@ let state;
 // v0.3: currentUser 从 /api/auth/me 拉 · 不再走 localStorage handle
 const currentUser = { id: null, handle: null, email: null };
 let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
-let currentToolFilter = 'all';
+let currentStatusFilter = 'all';
 let trackingMode = false;
 let pendingImages = [];
 let notePendingImages = [];
@@ -1172,12 +1172,18 @@ function getFeedEvents() {
 function renderFeed() {
   const filters = document.getElementById('tool-filters');
   filters.innerHTML = '';
-  ['全部','Cursor','Claude','v0','Bolt','Lovable','Replit'].forEach(t => {
-    const key = t==='全部'?'all':t;
+  // 按状态筛选 · 跟项目本身的状态对齐 · 让用户能选"想看跑通了的"/"想看谁卡住"
+  [
+    { key: 'all',    label: '全部' },
+    { key: 'active', label: '在做' },
+    { key: 'stuck',  label: '卡住了' },
+    { key: 'done',   label: '跑通了' },
+    { key: 'paused', label: '暂停' },
+  ].forEach(({ key, label }) => {
     const span = document.createElement('span');
-    span.className = 'filter-pill' + (currentToolFilter===key?' active':'');
-    span.textContent = t.toLowerCase();
-    span.onclick = () => { currentToolFilter = key; renderFeed(); };
+    span.className = 'filter-pill' + (currentStatusFilter===key?' active':'');
+    span.textContent = label;
+    span.onclick = () => { currentStatusFilter = key; renderFeed(); };
     filters.appendChild(span);
   });
 
@@ -1192,8 +1198,8 @@ function renderFeed() {
   }
 
   let events = getFeedEvents();
-  if (currentToolFilter !== 'all') {
-    events = events.filter(e => e.tools.some(x => x.toLowerCase().includes(currentToolFilter.toLowerCase())));
+  if (currentStatusFilter !== 'all') {
+    events = events.filter(e => e.status === currentStatusFilter);
   }
   if (trackingMode) {
     const me = currentUser.handle;
@@ -1212,7 +1218,10 @@ function renderFeed() {
   const list = document.getElementById('feed-list');
   list.innerHTML = '';
   if (events.length === 0) {
-    list.innerHTML = '<div class="text-center py-16 serif" style="color: var(--sepia);">这个工具下今天没动静</div>';
+    // 文案随当前筛选 · 让空状态有解释
+    const labels = { all: '今天还没什么动静', active: '现在没人在做的项目', stuck: '没人卡住 · 好事', done: '还没有跑通的项目', paused: '没暂停的项目' };
+    const msg = labels[currentStatusFilter] || '没东西';
+    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">${msg}</div>`;
     return;
   }
   events.forEach(e => {
