@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tinker · 在做的现场</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #faf8f3;
+    --paper:       #f5f1e8;
+    --ink:         #1c1917;
+    --ink-soft:    #44403c;
+    --sepia:       #78716c;
+    --sepia-light: #d6d3d1;
+    --rule:        #d6cfb8;
+    --vermilion:   #c2410c;
+    --indigo-ink:  #1e3a8a;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .serif { font-family: 'Newsreader', 'Source Serif Pro', Georgia, serif; }
+  .mono  { font-family: 'JetBrains Mono', ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
+
+  /* ============ HEADER (报纸刊头) ============ */
+  .masthead {
+    border-bottom: 2px solid var(--ink);
+    background: var(--bg);
+  }
+  .masthead .title {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .masthead .tagline { color: var(--sepia); font-style: italic; }
+  .masthead a, .masthead button {
+    color: var(--ink);
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.15s;
+    cursor: pointer;
+  }
+  .masthead a:hover, .masthead button:hover { border-bottom-color: var(--ink); }
+
+  /* ============ SCREENS ============ */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ============ FEED ============ */
+  .feed-title {
+    font-family: 'Newsreader', serif;
+    font-weight: 500;
+    font-size: 44px;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    color: var(--ink);
+  }
+  .feed-sub {
+    color: var(--sepia);
+    font-style: italic;
+    font-family: 'Newsreader', serif;
+    font-size: 17px;
+  }
+
+  .filter-row {
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 10px 0;
+  }
+  .filter-pill {
+    color: var(--sepia);
+    font-size: 13px;
+    padding: 2px 0;
+    margin-right: 18px;
+    cursor: pointer;
+    border-bottom: 1px solid transparent;
+    transition: all 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .filter-pill:hover { color: var(--ink); }
+  .filter-pill.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+  /* 每条动静 — 像田野笔记 entry */
+  .entry {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 24px;
+    padding: 28px 0;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .entry:hover { background: rgba(194, 65, 12, 0.025); }
+  .entry-time {
+    color: var(--sepia);
+    font-size: 13px;
+    padding-top: 4px;
+  }
+  .entry-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .entry-handle {
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 15px;
+  }
+  .entry-handle:hover { color: var(--vermilion); }
+  .entry-slash { color: var(--sepia-light); }
+  .entry-project {
+    color: var(--ink-soft);
+    font-size: 15px;
+    font-style: italic;
+    font-family: 'Newsreader', serif;
+  }
+  .entry-status {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--sepia);
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .entry-status.stuck { color: var(--vermilion); }
+  .entry-status.done { color: var(--indigo-ink); }
+  .entry-text {
+    color: var(--ink);
+    font-size: 16px;
+    line-height: 1.55;
+    margin-bottom: 8px;
+    font-family: 'Newsreader', serif;
+  }
+  .entry-meta {
+    color: var(--sepia);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .entry-meta .dot { color: var(--sepia-light); }
+
+  /* ============ WORKSHOP ============ */
+  .workshop-name {
+    font-family: 'Newsreader', serif;
+    font-size: 48px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .workshop-tagline {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    color: var(--sepia);
+    font-size: 19px;
+  }
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 6px;
+    margin-bottom: 18px;
+  }
+  .pcard {
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+  }
+  .pcard:hover .pcard-name { color: var(--vermilion); }
+  .pcard-name {
+    font-family: 'Newsreader', serif;
+    font-size: 19px;
+    color: var(--ink);
+    margin-bottom: 4px;
+    transition: color 0.15s;
+  }
+  .pcard-desc {
+    color: var(--sepia);
+    font-size: 14px;
+    font-style: italic;
+    margin-bottom: 8px;
+  }
+  .pcard-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    text-transform: lowercase;
+    letter-spacing: 0.05em;
+  }
+  .pcard-meta .stuck { color: var(--vermilion); }
+  .pcard-meta .done { color: var(--indigo-ink); }
+
+  /* ============ PROJECT ============ */
+  .pheader {
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+  }
+  .pname {
+    font-family: 'Newsreader', serif;
+    font-size: 52px;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .pdesc {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 22px;
+    line-height: 1.4;
+    margin-bottom: 20px;
+  }
+  .pmeta-line {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--sepia);
+    text-transform: lowercase;
+  }
+  .pmeta-line .vermilion { color: var(--vermilion); }
+  .pmeta-line .ink-link { color: var(--ink); text-decoration: underline; text-decoration-color: var(--sepia-light); text-underline-offset: 3px; }
+  .pmeta-line .ink-link:hover { text-decoration-color: var(--vermilion); }
+
+  /* timeline */
+  .tl-entry {
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 24px;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .tl-entry:last-child { border-bottom: none; }
+  .tl-time { color: var(--sepia); font-size: 13px; padding-top: 3px; font-family: 'JetBrains Mono', monospace; }
+  .tl-text {
+    font-family: 'Newsreader', serif;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .tl-prompt-box {
+    margin-top: 12px;
+    border-left: 2px solid var(--vermilion);
+    padding: 12px 16px;
+    background: var(--paper);
+  }
+  .tl-prompt-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--vermilion);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .tl-prompt-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    margin-bottom: 10px;
+  }
+
+  /* 反馈区 — 没有 button,只有动作短语 + 下划线 */
+  .react-line {
+    font-family: 'Newsreader', serif;
+    font-size: 17px;
+    color: var(--ink);
+    font-style: italic;
+  }
+  .react-action {
+    cursor: pointer;
+    border-bottom: 1px solid var(--sepia-light);
+    color: var(--ink);
+    font-style: normal;
+    padding-bottom: 1px;
+    transition: border-color 0.15s, color 0.15s;
+    margin-right: 8px;
+    display: inline-block;
+  }
+  .react-action:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
+  .react-action.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+  /* 接走过的人 — 像参考文献列表 */
+  .ref-entry {
+    font-family: 'Newsreader', serif;
+    font-size: 16px;
+    color: var(--ink);
+    padding: 8px 0;
+    border-bottom: 1px dotted var(--rule);
+  }
+  .ref-entry .arrow { color: var(--vermilion); margin-right: 8px; }
+  .ref-entry .ref-user { font-weight: 600; }
+  .ref-entry .ref-name { font-style: italic; }
+
+  /* 便签 — 像 marginalia 批注 */
+  .note-entry {
+    padding: 14px 0;
+    border-bottom: 1px dotted var(--rule);
+  }
+  .note-head {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    margin-bottom: 4px;
+  }
+  .note-head .nu { color: var(--ink); font-weight: 500; }
+  .note-text {
+    font-family: 'Newsreader', serif;
+    font-size: 16px;
+    color: var(--ink);
+    line-height: 1.5;
+    font-style: italic;
+  }
+
+  /* 输入框 / 模态 */
+  .input-bare {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--sepia-light);
+    color: var(--ink);
+    font-family: 'Newsreader', serif;
+    font-size: 17px;
+    width: 100%;
+    padding: 8px 0;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-bare:focus { border-bottom-color: var(--vermilion); }
+  .input-bare::placeholder { color: var(--sepia-light); font-style: italic; }
+
+  .btn-act {
+    font-family: 'Newsreader', serif;
+    font-size: 16px;
+    background: transparent;
+    border: none;
+    border-bottom: 1.5px solid var(--ink);
+    color: var(--ink);
+    padding: 4px 0;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-act:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
+  .btn-act-primary {
+    background: var(--ink);
+    color: var(--bg);
+    padding: 8px 16px;
+    border: none;
+    font-family: 'Newsreader', serif;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-act-primary:hover { background: var(--vermilion); }
+
+  /* modal */
+  .modal-back {
+    background: rgba(28, 25, 23, 0.4);
+  }
+  .modal-paper {
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    padding: 28px 32px;
+    max-width: 480px;
+  }
+  .modal-title {
+    font-family: 'Newsreader', serif;
+    font-size: 24px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+  }
+  .modal-sub { color: var(--sepia); font-style: italic; font-family: 'Newsreader', serif; font-size: 14px; margin-bottom: 18px; }
+
+  /* toast */
+  .toast-paper {
+    background: var(--ink);
+    color: var(--bg);
+    font-family: 'Newsreader', serif;
+    font-size: 15px;
+    padding: 12px 18px;
+    border-radius: 0;
+  }
+
+  /* ONBOARD */
+  .onboard-num {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 60px;
+    color: var(--vermilion);
+    line-height: 1;
+  }
+  .onboard-h1 {
+    font-family: 'Newsreader', serif;
+    font-size: 56px;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: var(--ink);
+  }
+  .starter-card {
+    padding: 28px 0;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 24px;
+  }
+  .starter-title {
+    font-family: 'Newsreader', serif;
+    font-size: 22px;
+    margin-bottom: 12px;
+  }
+  .starter-prompt {
+    border-left: 2px solid var(--rule);
+    padding: 4px 16px;
+    margin-bottom: 14px;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ============ MASTHEAD ============ -->
+<header class="masthead">
+  <div class="max-w-3xl mx-auto px-8 py-5 flex items-end justify-between">
+    <div class="flex items-baseline gap-3 cursor-pointer" onclick="showScreen('feed')">
+      <span class="title">Tinker</span>
+      <span class="tagline serif">在做的现场</span>
+    </div>
+    <nav class="flex items-center gap-6 text-sm">
+      <button onclick="showScreen('feed')">动静</button>
+      <button onclick="showScreen('workshop', currentUser.handle)">我的工作室</button>
+      <button onclick="showScreen('onboard')" class="serif italic">开张 →</button>
+    </nav>
+  </div>
+  <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
+    <span>第 1 期 · 试运行</span>
+    <span id="masthead-date">2026 / 06 / 05</span>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-8 py-12">
+
+  <!-- ============ FEED ============ -->
+  <section class="screen active" id="screen-feed">
+    <div class="mb-8">
+      <h1 class="feed-title mb-3">今天有动静</h1>
+      <p class="feed-sub">路过看一眼别人在做什么 — 时间倒序,不是热门排名</p>
+    </div>
+
+    <div class="filter-row mb-4" id="tool-filters"></div>
+
+    <div id="feed-list"></div>
+
+    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
+      — 就这些了。我们刚起步,宁可这里空,也不刷数据 —
+    </div>
+  </section>
+
+  <!-- ============ WORKSHOP ============ -->
+  <section class="screen" id="screen-workshop">
+    <div id="workshop-content"></div>
+  </section>
+
+  <!-- ============ PROJECT ============ -->
+  <section class="screen" id="screen-project">
+    <div id="project-content"></div>
+  </section>
+
+  <!-- ============ ONBOARD ============ -->
+  <section class="screen" id="screen-onboard">
+    <div class="mb-12">
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.1em;">入 场 仪 式</div>
+      <h1 class="onboard-h1 mb-4">先做一个小东西</h1>
+      <p class="serif italic text-lg" style="color: var(--sepia);">不是看完教程才能进来 — 我们觉得"做出来"比"学会了"更接近 vibe coding 的本质。挑一个,5 分钟。</p>
+    </div>
+
+    <div id="onboard-starters" class="border-t" style="border-color: var(--rule);"></div>
+
+    <div class="mt-12 pt-8 border-t-2" style="border-color: var(--ink);">
+      <p class="serif italic mb-4" style="color: var(--sepia);">做完了?</p>
+      <button onclick="openWorkshopSetup()" class="btn-act-primary">挂上我的产物 · 开张工作室</button>
+      <p class="mt-6 text-sm serif italic" style="color: var(--sepia);">
+        已经有作品了? <span class="react-action" onclick="openWorkshopSetup()">直接挂上来</span>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ MODALS ============ -->
+<div id="modal-note" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">留个便签</h3>
+    <p class="modal-sub">独立显示 · 不能盖楼</p>
+    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句..." style="font-size: 17px; resize: vertical;"></textarea>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-note')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitNote()" class="btn-act-primary">留下</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-tinkered" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">挂上你的延伸版</h3>
+    <p class="modal-sub">原作者能看到你真的做了什么 — 不只是点了赞</p>
+    <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的项目名</label>
+      <input id="tinkered-name" class="input-bare" placeholder="中文版求职信生成器">
+    </div>
+    <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">产物链接</label>
+      <input id="tinkered-link" class="input-bare" placeholder="https://...">
+    </div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-tinkered')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitTinkered()" class="btn-act-primary">挂上 · 通知原作者</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">记一笔</h3>
+    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
+    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitUpdate()" class="btn-act-primary">记上</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
+
+<button onclick="resetState()" class="fixed bottom-4 right-4 text-xs mono px-2 py-1" style="color: var(--sepia); background: var(--bg); border: 1px solid var(--rule);">重置原型数据</button>
+
+<script>
+/* =========================================
+ * SEED DATA — 同 v0.1
+ * ========================================= */
+const SEED_DATA = {
+  users: {
+    'daodao':   { name: '捣鼓自己',  tagline: '在做 Tinker · 这个产品本身' },
+    'zhangsan': { name: '张三',     tagline: '用 AI 帮我妈做小红书' },
+    'liushi':   { name: '柳师',     tagline: '设计师 · 用 AI 折腾产品 demo' },
+    'wangwu':   { name: '王五',     tagline: '前 PM · 现在自己做点东西' },
+    'lisi':     { name: '李四',     tagline: '大三 · 用 AI 做毕设' },
+    'maomao':   { name: '猫猫',     tagline: '内容创作者 · 用 AI 做小工具' },
+  },
+  projects: [
+    { id:'p1', owner:'daodao', name:'Tinker 主屏', slug:'tinker-feed', desc:'"今天有动静的工作室" 这个首页本身', productLink:'https://tinker.so', githubLink:'https://github.com/daodao/tinker', status:'active', tools:['Cursor','Claude','Tailwind'],
+      updates:[
+        { text:'今天加了工具筛选,但是想再观察一下要不要默认隐藏', ago:'15 分钟前' },
+        { text:'"卡片来源是项目事件而不是用户发帖"这个差异要让新人一眼看出', ago:'2 小时前' },
+        { text:'决定不做 onboarding wizard,新人点开主屏直接看真实工作室', ago:'昨天' },
+        { text:'砍掉了"热门推荐",时间倒序到底', ago:'2 天前' },
+      ],
+      reactions:{ interested:['zhangsan','liushi','wangwu'], wantToTry:['lisi'], tinkered:[] },
+      notes:[ { user:'wangwu', text:'我觉得卡片高度可以再小一点,信息密度再高一些', ago:'1 小时前' } ] },
+
+    { id:'p2', owner:'zhangsan', name:'AI 简历优化器', slug:'resume-ai', desc:'让 AI 改简历但不胡编工作经历', productLink:'https://resume-ai.vercel.app', githubLink:'https://github.com/zhangsan/resume-ai', status:'active', tools:['Cursor','Claude'],
+      updates:[
+        { text:'终于让 GPT 不胡编工作经历了! 试了 4 种 prompt 模板,最后用了 strict mode', ago:'10 分钟前',
+          prompt:'You are a resume editor. STRICT MODE: only rephrase information explicitly provided. Do NOT invent skills, dates, or experiences. If a field is missing, output "[未填写]" instead of guessing.' },
+        { text:'卡了: GPT 总会编造没填的字段. 试了 temperature=0,没用', ago:'昨天' },
+        { text:'跑通了基础版,但优化建议比较套话', ago:'3 天前' },
+      ],
+      reactions:{ interested:['liushi','wangwu','maomao'], wantToTry:['lisi','daodao'],
+        tinkered:[ { user:'wangwu', name:'求职信生成器', link:'#p7' } ] },
+      notes:[
+        { user:'lisi',   text:'你那个 strict mode prompt 第三句可以加 "do not invent fields"', ago:'2 小时前' },
+        { user:'wangwu', text:'我之前做过类似的,卡在了 streaming 输出,后来用 SSE 解决了', ago:'昨天' },
+      ] },
+
+    { id:'p3', owner:'zhangsan', name:'给我妈做小红书', slug:'mom-rednote', desc:'给我妈的护肤品店做小红书图文', productLink:'https://v0.dev/r/momred-x7a', status:'stuck', tools:['v0','Claude'],
+      updates:[
+        { text:'卡了 3 天: 我妈说 AI 写的"太像广告",她想要那种像朋友推荐的口气', ago:'昨天' },
+        { text:'试了让 Claude 模仿小红书博主的笔记风格,但读起来还是有点假', ago:'2 天前' },
+        { text:'开始: 想做一个能自动生成小红书图文的小工具给我妈用', ago:'5 天前' },
+      ],
+      reactions:{ interested:['maomao','liushi'], wantToTry:[], tinkered:[] },
+      notes:[ { user:'maomao', text:'小红书的关键不是文案,是 emoji 密度. 你试试让 AI 每 2-3 句加一个 emoji,然后开头用"姐妹们..."', ago:'20 分钟前' } ] },
+
+    { id:'p4', owner:'zhangsan', name:'番茄钟', slug:'pomodoro', desc:'最简单的网页番茄钟', productLink:'https://claude.ai/chat/pomodoro-artifact', status:'done', tools:['Claude'],
+      updates:[
+        { text:'跑通了 · 加了响铃和暂停', ago:'1 周前' },
+        { text:'5 分钟用 Claude Artifact 做的,直接复制粘贴跑起来', ago:'1 周前' },
+      ],
+      reactions:{ interested:['lisi','daodao'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p5', owner:'liushi', name:'猫咪表情识别', slug:'cat-mood', desc:'上传猫咪照片,告诉你它现在什么心情', productLink:'https://v0.dev/r/catmood-k9z', status:'stuck', tools:['v0','Claude','TensorFlow.js'],
+      updates:[
+        { text:'卡住 6 小时: 表情分类总把"生气"识别成"开心". 训练数据集可能有问题', ago:'2 小时前' },
+        { text:'基础识别能跑了,但准确率只有 50%', ago:'昨天' },
+        { text:'开始: 想给我家猫做一个表情识别器', ago:'4 天前' },
+      ],
+      reactions:{ interested:['zhangsan','maomao'], wantToTry:['daodao'], tinkered:[] },
+      notes:[ { user:'daodao', text:'猫的表情可能本来就不适合简单分类,试试做"行为识别"(摇尾巴/竖耳朵)会不会准一点?', ago:'1 小时前' } ] },
+
+    { id:'p6', owner:'liushi', name:'UI 灵感图生成器', slug:'ui-inspo', desc:'描述一下场景,生成一组 UI 概念图', productLink:'https://lovable.dev/projects/ui-inspo-92', status:'active', tools:['Lovable','Cursor'],
+      updates:[
+        { text:'加了"风格"选项: 极简 / 拟物 / 玻璃拟态 / 杂志感', ago:'5 小时前' },
+        { text:'能跑了 · 但是生成的图都长得有点像,要想办法增加多样性', ago:'3 天前' },
+      ],
+      reactions:{ interested:['wangwu','maomao','zhangsan'], wantToTry:['lisi'], tinkered:[] },
+      notes:[] },
+
+    { id:'p7', owner:'wangwu', name:'求职信生成器', slug:'cover-letter', desc:'基于 @zhangsan 简历优化器的思路', productLink:'https://cover-letter-ai.vercel.app', status:'active', tools:['Cursor','Claude'],
+      updates:[
+        { text:'接走了 @zhangsan 的 strict mode prompt,效果立竿见影', ago:'昨天' },
+        { text:'开始: 看到 @zhangsan 的简历优化器,觉得可以延伸做求职信', ago:'2 天前' },
+      ],
+      reactions:{ interested:['zhangsan','lisi'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p8', owner:'wangwu', name:'专注一起', slug:'focus-together', desc:'可以看到朋友也在专注 · 互相打气', productLink:'https://focus-together.vercel.app', status:'done', tools:['Bolt','Supabase'],
+      updates:[
+        { text:'跑通了, 已经用了一个月,确实比一个人专注更不容易划水', ago:'2 周前' },
+        { text:'上线了, 邀请了 5 个朋友一起用', ago:'3 周前' },
+      ],
+      reactions:{ interested:['daodao','maomao','lisi','zhangsan'], wantToTry:[],
+        tinkered:[ { user:'lisi', name:'宿舍版番茄钟', link:'#' } ] },
+      notes:[] },
+
+    { id:'p9', owner:'lisi', name:'毕设: 校园二手书识别', slug:'book-recog', desc:'拍照识别书名 + 估价 · 毕设', productLink:'https://v0.dev/r/bookrecog-3a', status:'active', tools:['v0','Claude'],
+      updates:[
+        { text:'能跑了基础识别,但估价模块还不准 · 数据来源用了多抓鱼公开页', ago:'昨天' },
+        { text:'开始: 老师让我做一个有"实际应用"的毕设', ago:'1 周前' },
+      ],
+      reactions:{ interested:['liushi'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p10', owner:'lisi', name:'课堂笔记小工具', slug:'class-notes', desc:'录音 + AI 整理 · 生成结构化笔记', productLink:'https://class-notes.replit.app', status:'done', tools:['Replit','Claude'],
+      updates:[
+        { text:'4 个室友都在用 · 实习课已经被点名"做得好"', ago:'3 天前' },
+        { text:'跑通了基础版', ago:'1 周前' },
+      ],
+      reactions:{ interested:['wangwu','maomao'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p11', owner:'maomao', name:'小红书配图工具', slug:'rednote-img', desc:'给文案自动配 3-5 张图 · 风格统一', productLink:'https://lovable.dev/projects/rednote-img', status:'active', tools:['Lovable','Claude','Replicate'],
+      updates:[
+        { text:'加了 "风格一致性" 的小技巧: 所有图用同一个 seed', ago:'昨天' },
+        { text:'能跑了, 但配图风格不统一', ago:'4 天前' },
+      ],
+      reactions:{ interested:['zhangsan','liushi'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p12', owner:'maomao', name:'公众号一键排版', slug:'wechat-formatter', desc:'粘贴文章自动排版 · 几种模板', productLink:'https://wechat-fmt.vercel.app', status:'done', tools:['Cursor','Claude'],
+      updates:[
+        { text:'跑通了 · 给我朋友的公众号节省了不少时间', ago:'2 周前' },
+      ],
+      reactions:{ interested:['wangwu'], wantToTry:[], tinkered:[] },
+      notes:[] },
+  ],
+  starters: [
+    { title:'用 Claude Artifact 做一个倒计时', prompt:'做一个网页倒计时器,可以输入分钟数,有开始/暂停/重置按钮,时间到了响铃. 设计要简洁,默认 25 分钟番茄时间.', toolName:'Claude', toolUrl:'https://claude.ai' },
+    { title:'用 v0 做一个咖啡选择器',           prompt:'做一个帮我决定喝什么咖啡的网页. 我可以告诉它今天的心情(困/累/想专注/想放松),它推荐一种咖啡,显示咖啡因含量和制作方法.', toolName:'v0', toolUrl:'https://v0.dev' },
+    { title:'用 Bolt 做一个待办列表',           prompt:'做一个极简的待办列表,可以添加/删除/标记完成. 不需要登录,数据存浏览器. 设计要像 Things 或 Linear 那种.', toolName:'Bolt', toolUrl:'https://bolt.new' },
+  ],
+};
+
+let state;
+const currentUser = { handle: 'daodao' };
+let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
+let currentToolFilter = 'all';
+
+function loadState() {
+  const raw = localStorage.getItem('tinker_v02_state');
+  if (raw) { try { return JSON.parse(raw); } catch(e){} }
+  return JSON.parse(JSON.stringify(SEED_DATA));
+}
+function saveState() { localStorage.setItem('tinker_v02_state', JSON.stringify(state)); }
+function resetState() {
+  if (!confirm('重置所有原型数据?')) return;
+  localStorage.removeItem('tinker_v02_state');
+  state = JSON.parse(JSON.stringify(SEED_DATA));
+  saveState();
+  showScreen('feed');
+  showToast('数据已重置');
+}
+
+function showScreen(name, ...args) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const t = document.getElementById('screen-' + name);
+  if (t) t.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (name === 'feed') renderFeed();
+  else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
+  else if (name === 'project') renderProject(args[0], args[1]);
+  else if (name === 'onboard') renderOnboard();
+}
+
+function projectByOwnerSlug(owner, slug) { return state.projects.find(p => p.owner === owner && p.slug === slug); }
+function projectById(id) { return state.projects.find(p => p.id === id); }
+function statusText(s) { return { active:'在做', stuck:'卡住', done:'跑通了', paused:'暂停', archive:'归档' }[s] || s; }
+function escapeHtml(s) { if (!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function parseAgoOrder(ago) {
+  if (ago.includes('刚刚')) return 0;
+  if (ago.includes('分钟')) return parseInt(ago);
+  if (ago.includes('小时')) return 60 + parseInt(ago);
+  if (ago.includes('昨天')) return 60*24;
+  if (ago.includes('天')) return 60*24*parseInt(ago);
+  if (ago.includes('周')) return 60*24*7*parseInt(ago);
+  return 9999;
+}
+function shortAgo(ago) {
+  if (ago.includes('刚刚')) return '刚';
+  if (ago.includes('分钟')) return parseInt(ago) + 'm';
+  if (ago.includes('小时')) return parseInt(ago) + 'h';
+  if (ago.includes('昨天')) return '昨天';
+  if (ago.includes('天')) return parseInt(ago) + ' 天';
+  if (ago.includes('周')) return parseInt(ago) + ' 周';
+  return ago;
+}
+
+/* ============ FEED ============ */
+function getFeedEvents() {
+  const events = [];
+  state.projects.forEach(p => p.updates.forEach((u, idx) => {
+    events.push({
+      owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
+      text:u.text, ago:u.ago, agoOrder:parseAgoOrder(u.ago),
+      tools:p.tools, status:p.status, isFirstUpdate: idx === 0,
+    });
+  }));
+  events.sort((a,b) => a.agoOrder - b.agoOrder);
+  return events;
+}
+
+function renderFeed() {
+  const filters = document.getElementById('tool-filters');
+  filters.innerHTML = '';
+  const allTools = ['全部','Cursor','Claude','v0','Bolt','Lovable','Replit'];
+  allTools.forEach(t => {
+    const key = t === '全部' ? 'all' : t;
+    const isActive = currentToolFilter === key;
+    const btn = document.createElement('span');
+    btn.className = 'filter-pill' + (isActive ? ' active' : '');
+    btn.textContent = t.toLowerCase();
+    btn.onclick = () => { currentToolFilter = key; renderFeed(); };
+    filters.appendChild(btn);
+  });
+
+  let events = getFeedEvents();
+  if (currentToolFilter !== 'all') {
+    events = events.filter(e => e.tools.some(t => t.toLowerCase().includes(currentToolFilter.toLowerCase())));
+  }
+
+  const list = document.getElementById('feed-list');
+  list.innerHTML = '';
+  if (events.length === 0) {
+    list.innerHTML = '<div class="text-center py-16 serif italic" style="color: var(--sepia);">这个工具下今天没动静</div>';
+    return;
+  }
+  events.forEach(e => {
+    const entry = document.createElement('div');
+    entry.className = 'entry';
+    entry.onclick = (ev) => {
+      if (ev.target.classList.contains('entry-handle')) return;
+      showScreen('project', e.owner, e.projectSlug);
+    };
+    entry.innerHTML = `
+      <div class="entry-time mono">${shortAgo(e.ago)}</div>
+      <div>
+        <div class="entry-headline">
+          <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
+          <span class="entry-slash">/</span>
+          <span class="entry-project">${escapeHtml(e.projectName)}</span>
+          <span class="entry-status ${e.status}">${statusText(e.status)}</span>
+        </div>
+        <div class="entry-text">${escapeHtml(e.text)}</div>
+        <div class="entry-meta">
+          <span>${e.tools.slice(0,3).join(' · ')}</span>
+        </div>
+      </div>
+    `;
+    list.appendChild(entry);
+  });
+}
+
+/* ============ WORKSHOP ============ */
+function renderWorkshop(handle) {
+  const user = state.users[handle];
+  const root = document.getElementById('workshop-content');
+  if (!user) { root.innerHTML = '<p class="serif italic" style="color: var(--sepia);">找不到这间工作室</p>'; return; }
+
+  const projects = state.projects.filter(p => p.owner === handle);
+  const recent    = projects.filter(p => ['active','stuck'].includes(p.status));
+  const alsoDoing = projects.filter(p => p.status === 'paused');
+  const done      = projects.filter(p => ['done','archive'].includes(p.status));
+
+  const recentEvents = [];
+  projects.forEach(p => p.updates.slice(0,2).forEach(u => recentEvents.push({ projectName:p.name, projectSlug:p.slug, text:u.text, ago:u.ago, agoOrder:parseAgoOrder(u.ago) })));
+  recentEvents.sort((a,b) => a.agoOrder - b.agoOrder);
+
+  const isMe = handle === currentUser.handle;
+
+  const renderPcards = (list) => list.map(p => `
+    <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
+      <div class="pcard-name">${escapeHtml(p.name)}</div>
+      <div class="pcard-desc">${escapeHtml(p.desc)}</div>
+      <div class="pcard-meta"><span class="${p.status}">— ${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
+    </div>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
+      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.1em;">${isMe ? '你 的 工 作 室' : '一 间 工 作 室'}</div>
+      <h1 class="workshop-name mb-3">@${handle}</h1>
+      <p class="workshop-tagline">「${escapeHtml(user.tagline)}」</p>
+    </div>
+
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>最近在动 (${recent.length})</span>
+        ${isMe ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNewProject()">+ 新项目</span>' : ''}
+      </div>
+      ${recent.length === 0
+        ? '<p class="serif italic py-8 text-center" style="color: var(--sepia);">' + (isMe ? '还没有进行中的项目 — 开一个?' : '最近没有进行中的项目') + '</p>'
+        : renderPcards(recent)}
+    </div>
+
+    ${alsoDoing.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">也在做 (${alsoDoing.length})</div>
+        ${renderPcards(alsoDoing)}
+      </div>
+    ` : ''}
+
+    ${done.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">做过的 (${done.length})</div>
+        ${renderPcards(done)}
+      </div>
+    ` : ''}
+
+    <div class="mt-16">
+      <div class="section-label">最近的动静</div>
+      ${recentEvents.slice(0,5).map(e => `
+        <div class="entry" onclick="showScreen('project','${handle}','${e.projectSlug}')">
+          <div class="entry-time mono">${shortAgo(e.ago)}</div>
+          <div>
+            <div class="mono text-xs mb-1" style="color: var(--sepia);">在「${escapeHtml(e.projectName)}」</div>
+            <div class="entry-text">${escapeHtml(e.text)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ============ PROJECT ============ */
+function renderProject(owner, slug) {
+  const p = projectByOwnerSlug(owner, slug);
+  const root = document.getElementById('project-content');
+  if (!p) { root.innerHTML = '<p class="serif italic" style="color: var(--sepia);">找不到这个项目</p>'; return; }
+  const user = state.users[owner];
+  const isMine = owner === currentUser.handle;
+  currentProjectCtx = p.id;
+
+  const me = currentUser.handle;
+  const myReaction =
+    p.reactions.tinkered.find(t => t.user === me) ? 'tinkered' :
+    p.reactions.wantToTry.includes(me) ? 'wantToTry' :
+    p.reactions.interested.includes(me) ? 'interested' : null;
+
+  root.innerHTML = `
+    <div class="mb-6">
+      <a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${owner}')">← @${owner} 的工作室</a>
+    </div>
+
+    <div class="pheader">
+      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase;">项 目 · ${statusText(p.status)}</div>
+      <h1 class="pname">${escapeHtml(p.name)}</h1>
+      <p class="pdesc">${escapeHtml(p.desc)}</p>
+      <div class="pmeta-line">
+        ${p.tools.map(t => `<span>${t}</span>`).join('<span style="color: var(--sepia-light);">·</span>')}
+        <span style="color: var(--sepia-light);">·</span>
+        <a class="ink-link" href="${p.productLink}" target="_blank">${p.productLink}</a>
+        ${p.githubLink ? `<span style="color: var(--sepia-light);">·</span><a class="ink-link" href="${p.githubLink}" target="_blank" style="opacity: 0.7;">github</a>` : ''}
+      </div>
+    </div>
+
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>时间线 (${p.updates.length})</span>
+        ${isMine ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openUpdate()">+ 记一笔</span>' : ''}
+      </div>
+      ${p.updates.map((u, i) => `
+        <div class="tl-entry">
+          <div class="tl-time">${shortAgo(u.ago)}</div>
+          <div>
+            <div class="tl-text">${escapeHtml(u.text)}</div>
+            ${u.prompt ? `
+              <div class="tl-prompt-box">
+                <div class="tl-prompt-label">prompt</div>
+                <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
+                <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; font-size: 14px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    ${p.reactions.tinkered.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">有人接走了这个想法 (${p.reactions.tinkered.length})</div>
+        ${p.reactions.tinkered.map(t => `
+          <div class="ref-entry">
+            <span class="arrow">→</span>
+            <span class="ref-user">@${t.user}</span>
+            <span style="color: var(--sepia);"> 做了 </span>
+            <span class="ref-name">「${escapeHtml(t.name)}」</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${(p.reactions.interested.length + p.reactions.wantToTry.length) > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">反馈过的人</div>
+        ${p.reactions.wantToTry.length > 0 ? `
+          <div class="ref-entry serif" style="font-size: 15px;">
+            <span style="color: var(--sepia); font-style: italic;">想试试: </span>
+            ${p.reactions.wantToTry.map(u => `<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
+          </div>
+        ` : ''}
+        ${p.reactions.interested.length > 0 ? `
+          <div class="ref-entry serif" style="font-size: 15px;">
+            <span style="color: var(--sepia); font-style: italic;">觉得有意思: </span>
+            ${p.reactions.interested.map(u => `<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
+          </div>
+        ` : ''}
+      </div>
+    ` : ''}
+
+    ${!isMine ? `
+      <div class="mb-12 py-6" style="border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);">
+        <div class="react-line">
+          你 —
+          <span class="react-action ${myReaction === 'interested' ? 'active' : ''}" onclick="reactToProject('interested')">觉得有意思</span>
+          <span class="react-action ${myReaction === 'wantToTry' ? 'active' : ''}" onclick="reactToProject('wantToTry')">想试试</span>
+          <span class="react-action ${myReaction === 'tinkered' ? 'active' : ''}" onclick="openTinkered()">做了延伸版 →</span>
+        </div>
+        <p class="mt-2 text-xs serif italic" style="color: var(--sepia);">显示具体是谁,不显示总数 · 不按反馈数排序</p>
+      </div>
+    ` : ''}
+
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>便签墙 (${p.notes.length})</span>
+        <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNote()">+ 留个便签</span>
+      </div>
+      <p class="mb-4 text-xs serif italic" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
+      ${p.notes.length === 0 ? '<p class="serif italic py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
+      ${p.notes.map(n => `
+        <div class="note-entry">
+          <div class="note-head"><span class="nu">@${n.user}</span> · ${n.ago}</div>
+          <div class="note-text">"${escapeHtml(n.text)}"</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
+      <div class="serif italic mb-3" style="color: var(--sepia); font-size: 14px;">把这个产物带走 · 离开社区也行,你的东西永远在</div>
+      <div class="flex flex-wrap gap-4 text-base">
+        <span class="react-action serif" onclick="fakeShare('X')">分享到 X</span>
+        <span class="react-action serif" onclick="fakeShare('小红书')">分享到小红书</span>
+        <span class="react-action serif" onclick="fakeShare('微信')">分享到微信</span>
+        <span class="react-action serif" onclick="copyText(this, '${p.productLink}')">复制链接</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ============ ONBOARD ============ */
+function renderOnboard() {
+  const list = document.getElementById('onboard-starters');
+  list.innerHTML = state.starters.map((s, i) => `
+    <div class="starter-card">
+      <div class="onboard-num serif italic">${i+1}</div>
+      <div>
+        <h3 class="starter-title">${escapeHtml(s.title)}</h3>
+        <div class="starter-prompt">"${escapeHtml(s.prompt)}"</div>
+        <div class="flex gap-5 items-center">
+          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
+          <a href="${s.toolUrl}" target="_blank" class="react-action serif" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">打开 ${s.toolName} →</a>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ============ ACTIONS ============ */
+function reactToProject(level) {
+  const p = projectById(currentProjectCtx);
+  if (!p) return;
+  const me = currentUser.handle;
+  p.reactions.interested = p.reactions.interested.filter(u => u !== me);
+  p.reactions.wantToTry  = p.reactions.wantToTry.filter(u => u !== me);
+  if (level === 'interested') { p.reactions.interested.push(me); showToast('记下了 — 你觉得有意思'); }
+  else if (level === 'wantToTry') { p.reactions.wantToTry.push(me); showToast('记下了 — 等你真的做了,回来挂上延伸版'); }
+  saveState();
+  renderProject(p.owner, p.slug);
+}
+
+function openNote() { currentNoteCtx = currentProjectCtx; document.getElementById('note-text').value = ''; document.getElementById('modal-note').classList.remove('hidden'); }
+function submitNote() {
+  const text = document.getElementById('note-text').value.trim();
+  if (!text) { showToast('便签是空的'); return; }
+  const p = projectById(currentNoteCtx);
+  p.notes.unshift({ user: currentUser.handle, text, ago: '刚刚' });
+  saveState(); closeModal('modal-note'); renderProject(p.owner, p.slug); showToast('便签留下了');
+}
+
+function openTinkered() { currentTinkeredCtx = currentProjectCtx; document.getElementById('tinkered-name').value = ''; document.getElementById('tinkered-link').value = ''; document.getElementById('modal-tinkered').classList.remove('hidden'); }
+function submitTinkered() {
+  const name = document.getElementById('tinkered-name').value.trim();
+  const link = document.getElementById('tinkered-link').value.trim();
+  if (!name || !link) { showToast('名字和链接都要填 — 没有产物不算延伸版'); return; }
+  const p = projectById(currentTinkeredCtx);
+  p.reactions.interested = p.reactions.interested.filter(u => u !== currentUser.handle);
+  p.reactions.wantToTry  = p.reactions.wantToTry.filter(u => u !== currentUser.handle);
+  p.reactions.tinkered.push({ user: currentUser.handle, name, link });
+  saveState(); closeModal('modal-tinkered'); renderProject(p.owner, p.slug);
+  showToast('挂上了 — 原作者会收到通知');
+}
+
+function openUpdate() { currentUpdateCtx = currentProjectCtx; document.getElementById('update-text').value = ''; document.getElementById('modal-update').classList.remove('hidden'); }
+function submitUpdate() {
+  const text = document.getElementById('update-text').value.trim();
+  if (!text) { showToast('写点什么?'); return; }
+  const p = projectById(currentUpdateCtx);
+  p.updates.unshift({ text, ago: '刚刚' });
+  saveState(); closeModal('modal-update'); renderProject(p.owner, p.slug); showToast('记上了');
+}
+
+function openNewProject() { showToast('原型阶段简化 — 新项目创建流程会在下一版做'); }
+function openWorkshopSetup() {
+  showToast('原型阶段 — 默认登录为 @daodao,直接去工作室');
+  setTimeout(() => showScreen('workshop', currentUser.handle), 700);
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function fakeShare(channel) {
+  const p = projectById(currentProjectCtx);
+  if (p) navigator.clipboard.writeText(p.productLink).catch(()=>{});
+  showToast('已复制产物链接 — 可以粘贴到' + channel);
+}
+function copyText(el, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = el.textContent;
+    el.textContent = '已复制';
+    setTimeout(() => { el.textContent = orig; }, 1500);
+  }).catch(() => showToast('复制失败,手动复制吧'));
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.add('hidden'), 2400);
+}
+
+// 顶部日期
+(function() {
+  const d = new Date();
+  document.getElementById('masthead-date').textContent =
+    d.getFullYear() + ' / ' + String(d.getMonth()+1).padStart(2,'0') + ' / ' + String(d.getDate()).padStart(2,'0');
+})();
+
+state = loadState();
+showScreen('feed');
+</script>
+</body>
+</html>

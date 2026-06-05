@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+.npm
+package-lock.json.bak
+
+# runtime data (会从 seed.js 自动生成)
+server/data.json
+
+# config & secrets
+.env
+.env.local
+.env.*.local
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# CLI 用户配置 (在 ~/.tinker/ · 不在仓库)
+.tinker/
+
+# logs
+*.log
+npm-debug.log*

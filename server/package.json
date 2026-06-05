@@ -1,0 +1,18 @@
+{
+  "name": "tinker-server",
+  "version": "0.1.0",
+  "description": "Tinker / 捣鼓 — server API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "commonjs"
+}

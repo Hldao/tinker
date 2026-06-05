@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tinker · 设计气质对比</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .prose-mono { font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace; }
+
+  /* ========== 方向 A · 现在 v0.1 ========== */
+  .a-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.12s;
+  }
+  .a-card:hover { border-color: #818cf8; transform: translateY(-1px); }
+  .a-status-active { color: #10b981; }
+  .a-status-stuck  { color: #f59e0b; }
+  .a-status-done   { color: #06b6d4; }
+  .a-accent { color: #4f46e5; }
+
+  /* ========== 方向 B · 工艺人感 + 高密度 ========== */
+  .b-frame {
+    background: #fafaf7;
+    border-radius: 12px;
+    padding: 4px 24px;
+  }
+  .b-row {
+    border-bottom: 1px solid #e7e5e0;
+    padding: 14px 0;
+  }
+  .b-row:last-child { border-bottom: none; }
+  .b-row:hover { background: rgba(0,0,0,0.015); margin: 0 -16px; padding: 14px 16px; border-radius: 4px; }
+  .b-handle { color: #111; font-weight: 600; }
+  .b-project { color: #44403c; font-weight: 500; }
+  .b-text { color: #292524; line-height: 1.45; }
+  .b-meta { color: #a8a29e; font-size: 12px; }
+  .b-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; vertical-align: middle; margin-right: 6px; }
+  .b-dot-active { background: #15803d; }      /* 苔绿 */
+  .b-dot-stuck  { background: #b91c1c; }      /* 锈红 */
+  .b-dot-done   { background: #a8a29e; }      /* 灰 */
+  .b-accent { color: #b91c1c; }
+
+  /* ========== 方向 C · 印刷物气质 ========== */
+  .c-frame {
+    background: #faf9f6;
+    border-radius: 12px;
+    padding: 32px 36px;
+  }
+  .c-row {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 24px;
+    padding: 18px 0;
+    border-bottom: 1px solid #ede9e0;
+  }
+  .c-row:last-child { border-bottom: none; }
+  .c-time {
+    color: #a8a29e;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    padding-top: 1px;
+  }
+  .c-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+  }
+  .c-handle { color: #111; font-weight: 600; font-size: 14px; }
+  .c-project { color: #44403c; font-size: 14px; }
+  .c-status { color: #a8a29e; font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .c-status-stuck { color: #b91c1c; }
+  .c-text { color: #292524; font-size: 14px; line-height: 1.55; margin-bottom: 4px; }
+  .c-meta { color: #a8a29e; font-size: 12px; }
+  .c-section-title { font-family: 'Newsreader', serif; font-size: 22px; font-weight: 500; color: #111; margin-bottom: 8px; letter-spacing: -0.01em; }
+  .c-section-sub { color: #a8a29e; font-size: 13px; font-style: italic; margin-bottom: 20px; }
+
+</style>
+</head>
+<body class="bg-white text-gray-900">
+
+<header class="border-b border-gray-200 bg-white sticky top-0 z-10">
+  <div class="max-w-3xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="text-lg font-semibold tracking-tight">Tinker</span>
+      <span class="text-sm text-gray-400">· 设计气质对比</span>
+    </div>
+    <a href="/v0.1.html" class="text-sm text-gray-500 hover:text-gray-900">← 回到 v0.1 原型</a>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-6 py-10 space-y-16">
+
+  <!-- ========== INTRO ========== -->
+  <section>
+    <div class="text-xs text-gray-400 uppercase tracking-wider mb-2">主屏 feed 三种气质</div>
+    <h1 class="text-2xl font-medium tracking-tight mb-2">同一份动静 · 三种长法</h1>
+    <p class="text-sm text-gray-500">数据完全一样,只换视觉。看哪个气质对。</p>
+  </section>
+
+  <!-- ========== 方向 A · 现在 v0.1 ========== -->
+  <section>
+    <div class="mb-5">
+      <div class="text-xs uppercase tracking-wider text-gray-400 mb-1">方向 A</div>
+      <h2 class="text-xl font-medium mb-1">现在 v0.1 · 通用 SaaS 友好</h2>
+      <div class="text-xs text-gray-500 prose-mono">
+        indigo · 圆角 12 · emoji 状态 · 130px 高 · 一屏 6-7 张
+      </div>
+    </div>
+
+    <div class="space-y-3 bg-gray-50 p-4 rounded-2xl">
+      <div class="a-card cursor-pointer">
+        <div class="flex items-center gap-2 text-xs text-gray-500 mb-2 flex-wrap">
+          <span class="font-medium text-gray-900">@zhangsan</span>
+          <span class="text-gray-300">·</span>
+          <span class="font-medium text-gray-700">AI 简历优化器</span>
+          <span class="text-gray-300">·</span>
+          <span class="a-status-active">🟢 进行中</span>
+        </div>
+        <p class="text-gray-800 leading-relaxed mb-3">"终于让 GPT 不胡编工作经历了! 试了 4 种 prompt 模板,最后用了 strict mode"</p>
+        <div class="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
+          <span>via Cursor + Claude</span><span class="text-gray-300">·</span><span>10 分钟前</span>
+        </div>
+      </div>
+
+      <div class="a-card cursor-pointer">
+        <div class="flex items-center gap-2 text-xs text-gray-500 mb-2 flex-wrap">
+          <span class="font-medium text-gray-900">@liushi</span>
+          <span class="text-gray-300">·</span>
+          <span class="font-medium text-gray-700">猫咪表情识别</span>
+          <span class="text-gray-300">·</span>
+          <span class="a-status-stuck">🟡 卡住</span>
+        </div>
+        <p class="text-gray-800 leading-relaxed mb-3">"卡住 6 小时: 表情分类总把'生气'识别成'开心'. 训练数据集可能有问题"</p>
+        <div class="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
+          <span>via v0 + Claude</span><span class="text-gray-300">·</span><span>2 小时前</span>
+        </div>
+      </div>
+
+      <div class="a-card cursor-pointer">
+        <div class="flex items-center gap-2 text-xs text-gray-500 mb-2 flex-wrap">
+          <span class="font-medium text-gray-900">@zhangsan</span>
+          <span class="text-gray-300">·</span>
+          <span class="font-medium text-gray-700">给我妈做小红书</span>
+          <span class="text-gray-300">·</span>
+          <span class="a-status-stuck">🟡 卡住</span>
+        </div>
+        <p class="text-gray-800 leading-relaxed mb-3">"卡了 3 天: 我妈说 AI 写的'太像广告',她想要那种像朋友推荐的口气"</p>
+        <div class="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
+          <span>via v0 + Claude</span><span class="text-gray-300">·</span><span>昨天</span>
+        </div>
+      </div>
+
+      <div class="a-card cursor-pointer">
+        <div class="flex items-center gap-2 text-xs text-gray-500 mb-2 flex-wrap">
+          <span class="font-medium text-gray-900">@wangwu</span>
+          <span class="text-gray-300">·</span>
+          <span class="font-medium text-gray-700">求职信生成器</span>
+          <span class="text-gray-300">·</span>
+          <span class="a-status-active">🟢 进行中</span>
+        </div>
+        <p class="text-gray-800 leading-relaxed mb-3">"接走了 @zhangsan 的 strict mode prompt,效果立竿见影"</p>
+        <div class="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
+          <span>via Cursor + Claude</span><span class="text-gray-300">·</span><span>昨天</span>
+        </div>
+      </div>
+
+      <div class="a-card cursor-pointer">
+        <div class="flex items-center gap-2 text-xs text-gray-500 mb-2 flex-wrap">
+          <span class="font-medium text-gray-900">@lisi</span>
+          <span class="text-gray-300">·</span>
+          <span class="font-medium text-gray-700">课堂笔记小工具</span>
+          <span class="text-gray-300">·</span>
+          <span class="a-status-done">✅ 跑通了</span>
+        </div>
+        <p class="text-gray-800 leading-relaxed mb-3">"4 个室友都在用 · 实习课已经被点名'做得好'"</p>
+        <div class="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
+          <span>via Replit + Claude</span><span class="text-gray-300">·</span><span>3 天前</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 方向 B · 工艺人感 + 高密度 ========== -->
+  <section>
+    <div class="mb-5">
+      <div class="text-xs uppercase tracking-wider text-gray-400 mb-1">方向 B · 推荐</div>
+      <h2 class="text-xl font-medium mb-1">工艺人感 · 高密度</h2>
+      <div class="text-xs text-gray-500 prose-mono">
+        锈红/苔绿/灰 · 无 box · 细线分隔 · 圆点状态 · 80px 行 · 一屏 10-12 行
+      </div>
+    </div>
+
+    <div class="b-frame cursor-pointer">
+      <div class="b-row">
+        <div class="flex items-baseline justify-between gap-3 mb-1.5">
+          <div class="text-sm">
+            <span class="b-handle">@zhangsan</span><span class="text-gray-300 mx-1.5">/</span><span class="b-project">AI 简历优化器</span>
+          </div>
+          <div class="text-xs text-gray-500 whitespace-nowrap">
+            <span class="b-dot b-dot-active"></span>进行中
+          </div>
+        </div>
+        <div class="b-text text-sm mb-1.5">"终于让 GPT 不胡编工作经历了! 试了 4 种 prompt 模板,最后用了 strict mode"</div>
+        <div class="flex justify-between items-center">
+          <div class="b-meta">Cursor · Claude</div>
+          <div class="b-meta prose-mono">10m</div>
+        </div>
+      </div>
+
+      <div class="b-row">
+        <div class="flex items-baseline justify-between gap-3 mb-1.5">
+          <div class="text-sm">
+            <span class="b-handle">@liushi</span><span class="text-gray-300 mx-1.5">/</span><span class="b-project">猫咪表情识别</span>
+          </div>
+          <div class="text-xs whitespace-nowrap b-accent">
+            <span class="b-dot b-dot-stuck"></span>卡住
+          </div>
+        </div>
+        <div class="b-text text-sm mb-1.5">"卡住 6 小时: 表情分类总把'生气'识别成'开心'. 训练数据集可能有问题"</div>
+        <div class="flex justify-between items-center">
+          <div class="b-meta">v0 · Claude</div>
+          <div class="b-meta prose-mono">2h</div>
+        </div>
+      </div>
+
+      <div class="b-row">
+        <div class="flex items-baseline justify-between gap-3 mb-1.5">
+          <div class="text-sm">
+            <span class="b-handle">@zhangsan</span><span class="text-gray-300 mx-1.5">/</span><span class="b-project">给我妈做小红书</span>
+          </div>
+          <div class="text-xs whitespace-nowrap b-accent">
+            <span class="b-dot b-dot-stuck"></span>卡住
+          </div>
+        </div>
+        <div class="b-text text-sm mb-1.5">"卡了 3 天: 我妈说 AI 写的'太像广告',她想要那种像朋友推荐的口气"</div>
+        <div class="flex justify-between items-center">
+          <div class="b-meta">v0 · Claude</div>
+          <div class="b-meta prose-mono">昨天</div>
+        </div>
+      </div>
+
+      <div class="b-row">
+        <div class="flex items-baseline justify-between gap-3 mb-1.5">
+          <div class="text-sm">
+            <span class="b-handle">@wangwu</span><span class="text-gray-300 mx-1.5">/</span><span class="b-project">求职信生成器</span>
+          </div>
+          <div class="text-xs text-gray-500 whitespace-nowrap">
+            <span class="b-dot b-dot-active"></span>进行中
+          </div>
+        </div>
+        <div class="b-text text-sm mb-1.5">"接走了 @zhangsan 的 strict mode prompt,效果立竿见影"</div>
+        <div class="flex justify-between items-center">
+          <div class="b-meta">Cursor · Claude</div>
+          <div class="b-meta prose-mono">昨天</div>
+        </div>
+      </div>
+
+      <div class="b-row">
+        <div class="flex items-baseline justify-between gap-3 mb-1.5">
+          <div class="text-sm">
+            <span class="b-handle">@lisi</span><span class="text-gray-300 mx-1.5">/</span><span class="b-project">课堂笔记小工具</span>
+          </div>
+          <div class="text-xs text-gray-500 whitespace-nowrap">
+            <span class="b-dot b-dot-done"></span>跑通了
+          </div>
+        </div>
+        <div class="b-text text-sm mb-1.5">"4 个室友都在用 · 实习课已经被点名'做得好'"</div>
+        <div class="flex justify-between items-center">
+          <div class="b-meta">Replit · Claude</div>
+          <div class="b-meta prose-mono">3 天</div>
+        </div>
+      </div>
+
+      <div class="b-row">
+        <div class="flex items-baseline justify-between gap-3 mb-1.5">
+          <div class="text-sm">
+            <span class="b-handle">@maomao</span><span class="text-gray-300 mx-1.5">/</span><span class="b-project">小红书配图工具</span>
+          </div>
+          <div class="text-xs text-gray-500 whitespace-nowrap">
+            <span class="b-dot b-dot-active"></span>进行中
+          </div>
+        </div>
+        <div class="b-text text-sm mb-1.5">"加了风格一致性的小技巧: 所有图用同一个 seed + 风格描述放最前"</div>
+        <div class="flex justify-between items-center">
+          <div class="b-meta">Lovable · Claude</div>
+          <div class="b-meta prose-mono">昨天</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 方向 C · 印刷物气质 ========== -->
+  <section>
+    <div class="mb-5">
+      <div class="text-xs uppercase tracking-wider text-gray-400 mb-1">方向 C · 最激进</div>
+      <h2 class="text-xl font-medium mb-1">印刷物气质 · 极致工艺</h2>
+      <div class="text-xs text-gray-500 prose-mono">
+        无 box 无边框 · 衬线标题 · 时间标尺 · 留白分组 · 像 NYTimes / Substack
+      </div>
+    </div>
+
+    <div class="c-frame">
+      <h3 class="c-section-title">今天有动静</h3>
+      <p class="c-section-sub">路过看一眼别人在做什么 · 时间倒序</p>
+
+      <div class="c-row">
+        <div class="c-time prose-mono">10m</div>
+        <div>
+          <div class="c-headline">
+            <span class="c-handle">@zhangsan</span>
+            <span class="c-project">AI 简历优化器</span>
+            <span class="c-status">进行中</span>
+          </div>
+          <div class="c-text">终于让 GPT 不胡编工作经历了! 试了 4 种 prompt 模板,最后用了 strict mode</div>
+          <div class="c-meta">Cursor · Claude</div>
+        </div>
+      </div>
+
+      <div class="c-row">
+        <div class="c-time prose-mono">2h</div>
+        <div>
+          <div class="c-headline">
+            <span class="c-handle">@liushi</span>
+            <span class="c-project">猫咪表情识别</span>
+            <span class="c-status c-status-stuck">卡住</span>
+          </div>
+          <div class="c-text">卡住 6 小时: 表情分类总把"生气"识别成"开心". 训练数据集可能有问题</div>
+          <div class="c-meta">v0 · Claude</div>
+        </div>
+      </div>
+
+      <div class="c-row">
+        <div class="c-time prose-mono">昨天</div>
+        <div>
+          <div class="c-headline">
+            <span class="c-handle">@zhangsan</span>
+            <span class="c-project">给我妈做小红书</span>
+            <span class="c-status c-status-stuck">卡住</span>
+          </div>
+          <div class="c-text">卡了 3 天: 我妈说 AI 写的"太像广告",她想要那种像朋友推荐的口气</div>
+          <div class="c-meta">v0 · Claude</div>
+        </div>
+      </div>
+
+      <div class="c-row">
+        <div class="c-time prose-mono">昨天</div>
+        <div>
+          <div class="c-headline">
+            <span class="c-handle">@wangwu</span>
+            <span class="c-project">求职信生成器</span>
+            <span class="c-status">进行中</span>
+          </div>
+          <div class="c-text">接走了 @zhangsan 的 strict mode prompt,效果立竿见影</div>
+          <div class="c-meta">Cursor · Claude</div>
+        </div>
+      </div>
+
+      <div class="c-row">
+        <div class="c-time prose-mono">3 天</div>
+        <div>
+          <div class="c-headline">
+            <span class="c-handle">@lisi</span>
+            <span class="c-project">课堂笔记小工具</span>
+            <span class="c-status">跑通了</span>
+          </div>
+          <div class="c-text">4 个室友都在用 · 实习课已经被点名"做得好"</div>
+          <div class="c-meta">Replit · Claude</div>
+        </div>
+      </div>
+
+      <div class="c-row">
+        <div class="c-time prose-mono">昨天</div>
+        <div>
+          <div class="c-headline">
+            <span class="c-handle">@maomao</span>
+            <span class="c-project">小红书配图工具</span>
+            <span class="c-status">进行中</span>
+          </div>
+          <div class="c-text">加了风格一致性的小技巧: 所有图用同一个 seed + 风格描述放最前</div>
+          <div class="c-meta">Lovable · Claude</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 总结 ========== -->
+  <section class="border-t border-gray-200 pt-10">
+    <h2 class="text-base font-medium mb-4">三个方向对照表</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse">
+        <thead>
+          <tr class="text-left text-gray-500 text-xs uppercase tracking-wider">
+            <th class="py-2 pr-4 font-medium">维度</th>
+            <th class="py-2 pr-4 font-medium">A · 现在</th>
+            <th class="py-2 pr-4 font-medium">B · 推荐</th>
+            <th class="py-2 font-medium">C · 激进</th>
+          </tr>
+        </thead>
+        <tbody class="text-gray-800">
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">气质</td><td class="py-2 pr-4">通用 SaaS</td><td class="py-2 pr-4">工艺人</td><td class="py-2">印刷物</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">一屏行数</td><td class="py-2 pr-4">6-7</td><td class="py-2 pr-4">10-12</td><td class="py-2">8-10</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">强调色</td><td class="py-2 pr-4">indigo 紫蓝</td><td class="py-2 pr-4">锈红 / 苔绿</td><td class="py-2">黑白 + 锈红</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">状态视觉</td><td class="py-2 pr-4">🟢🟡 emoji</td><td class="py-2 pr-4">● ○ 圆点</td><td class="py-2">纯文字</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">边框</td><td class="py-2 pr-4">box + 圆角 12</td><td class="py-2 pr-4">细线分隔</td><td class="py-2">无边框 留白</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">非技术友好度</td><td class="py-2 pr-4">最高</td><td class="py-2 pr-4">中</td><td class="py-2">低</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">反 SaaS 程度</td><td class="py-2 pr-4">弱</td><td class="py-2 pr-4">强</td><td class="py-2">极强</td></tr>
+          <tr class="border-t border-gray-100"><td class="py-2 pr-4 text-gray-500">记得住</td><td class="py-2 pr-4">弱</td><td class="py-2 pr-4">强</td><td class="py-2">最强</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-xs text-gray-400 mt-6">看完告诉我选哪个 · 也可以说"B 的密度 + C 的衬线标题"这种混搭</p>
+  </section>
+
+</main>
+
+</body>
+</html>

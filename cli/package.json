@@ -1,0 +1,18 @@
+{
+  "name": "tinker-cli",
+  "version": "0.1.0",
+  "description": "Tinker / 捣鼓 — 在 coding 时一句话发布",
+  "bin": {
+    "tinker": "./bin/tinker.js"
+  },
+  "scripts": {
+    "start": "node bin/tinker.js"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.2.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "commonjs"
+}

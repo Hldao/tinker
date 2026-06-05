@@ -1,0 +1,2044 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tinker · 在做的现场</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:          #faf8f3;
+    --paper:       #f5f1e8;
+    --ink:         #1c1917;
+    --ink-soft:    #44403c;
+    --sepia:       #78716c;
+    --sepia-light: #d6d3d1;
+    --rule:        #d6cfb8;
+    --vermilion:   #c2410c;
+    --indigo-ink:  #1e3a8a;
+  }
+  body { background: var(--bg); color: var(--ink); font-family: 'Inter', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
+  .serif { font-family: 'Newsreader', 'Source Serif Pro', Georgia, serif; }
+  .mono  { font-family: 'JetBrains Mono', ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
+
+  /* HEADER */
+  .masthead { border-bottom: 2px solid var(--ink); background: var(--bg); }
+  .masthead .title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 28px; letter-spacing: -0.02em; color: var(--ink); }
+  .masthead .title-cn { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; color: var(--ink); letter-spacing: 0.02em; }
+  .masthead .tagline { color: var(--sepia); font-style: italic; }
+  .masthead a, .masthead button { color: var(--ink); border-bottom: 1px solid transparent; transition: border-color 0.15s; cursor: pointer; }
+  .masthead a:hover, .masthead button:hover { border-bottom-color: var(--ink); }
+
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* FEED */
+  .feed-title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 44px; letter-spacing: -0.02em; line-height: 1.05; color: var(--ink); }
+  .feed-sub { color: var(--sepia); font-style: italic; font-family: 'Newsreader', serif; font-size: 17px; }
+  .filter-row { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 10px 0; }
+  .filter-pill { color: var(--sepia); font-size: 13px; padding: 2px 0; margin-right: 18px; cursor: pointer; border-bottom: 1px solid transparent; transition: all 0.15s; font-family: 'JetBrains Mono', monospace; }
+  .filter-pill:hover { color: var(--ink); }
+  .filter-pill.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+  .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
+  .entry:hover { background: rgba(194, 65, 12, 0.025); }
+  .entry-time { color: var(--sepia); font-size: 13px; padding-top: 4px; }
+  .entry-headline { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .entry-handle { font-weight: 600; color: var(--ink); font-size: 15px; }
+  .entry-handle:hover { color: var(--vermilion); }
+  .entry-slash { color: var(--sepia-light); }
+  .entry-project { color: var(--ink-soft); font-size: 15px; font-style: italic; font-family: 'Newsreader', serif; }
+  .entry-status { margin-left: auto; font-size: 12px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.04em; font-family: 'JetBrains Mono', monospace; }
+  .entry-status.stuck { color: var(--vermilion); }
+  .entry-status.done { color: var(--indigo-ink); }
+  .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; }
+  .entry-meta { color: var(--sepia); font-size: 12px; font-family: 'JetBrains Mono', monospace; display: flex; gap: 14px; align-items: center; }
+
+  /* feed 缩略图 — 田野笔记气质 · max-height 200px */
+  .feed-figure { margin-top: 14px; display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+  .feed-figure-frame {
+    border: 1px solid var(--sepia-light);
+    padding: 5px;
+    background: white;
+    cursor: zoom-in;
+    display: inline-block;
+    max-width: 100%;
+    transition: border-color 0.15s;
+  }
+  .feed-figure-frame:hover { border-color: var(--vermilion); }
+  .feed-figure-frame img {
+    display: block;
+    max-height: 200px;
+    max-width: 100%;
+    width: auto;
+    height: auto;
+  }
+  .feed-figure-more {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    padding: 4px 10px;
+    border: 1px dotted var(--sepia-light);
+    align-self: center;
+  }
+
+  /* WORKSHOP */
+  .workshop-name { font-family: 'Newsreader', serif; font-size: 48px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
+  .workshop-tagline { font-family: 'Newsreader', serif; font-style: italic; color: var(--sepia); font-size: 19px; }
+  .section-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 18px; }
+  .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
+  .pcard:hover .pcard-name { color: var(--vermilion); }
+  .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
+  .pcard-desc { color: var(--sepia); font-size: 14px; font-style: italic; margin-bottom: 8px; }
+  .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; }
+  .pcard-meta .stuck { color: var(--vermilion); }
+  .pcard-meta .done { color: var(--indigo-ink); }
+
+  /* PROJECT */
+  .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
+  .pname { font-family: 'Newsreader', serif; font-size: 52px; font-weight: 500; letter-spacing: -0.025em; line-height: 1; margin-bottom: 12px; }
+  .pdesc { font-family: 'Newsreader', serif; font-style: italic; color: var(--ink-soft); font-size: 22px; line-height: 1.4; margin-bottom: 20px; }
+  .pmeta-line { display: flex; gap: 18px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); text-transform: lowercase; }
+  .pmeta-line .vermilion { color: var(--vermilion); }
+  .pmeta-line .ink-link { color: var(--ink); text-decoration: underline; text-decoration-color: var(--sepia-light); text-underline-offset: 3px; }
+  .pmeta-line .ink-link:hover { text-decoration-color: var(--vermilion); }
+
+  .tl-entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 22px 0; border-bottom: 1px solid var(--rule); }
+  .tl-entry:last-child { border-bottom: none; }
+  .tl-time { color: var(--sepia); font-size: 13px; padding-top: 3px; font-family: 'JetBrains Mono', monospace; }
+  .tl-text { font-family: 'Newsreader', serif; font-size: 17px; line-height: 1.55; color: var(--ink); }
+  .tl-prompt-box { margin-top: 12px; border-left: 2px solid var(--vermilion); padding: 12px 16px; background: var(--paper); }
+  .tl-prompt-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--vermilion); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+  .tl-prompt-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-soft); line-height: 1.55; white-space: pre-wrap; margin-bottom: 10px; }
+
+  /* IMAGES — 像田野笔记的插图 */
+  .tl-figure { margin-top: 14px; margin-bottom: 4px; max-width: 100%; }
+  .tl-figure-frame {
+    border: 1px solid var(--sepia-light);
+    padding: 6px;
+    background: white;
+    cursor: zoom-in;
+    display: inline-block;
+    max-width: 100%;
+    transition: border-color 0.15s;
+  }
+  .tl-figure-frame:hover { border-color: var(--vermilion); }
+  .tl-figure-frame img { display: block; max-width: 100%; height: auto; }
+  .tl-figure-caption {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--sepia);
+    margin-top: 6px;
+    padding-left: 4px;
+  }
+  .tl-figure-caption .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-style: normal;
+    font-size: 11px;
+    color: var(--vermilion);
+    margin-right: 6px;
+  }
+
+  /* 反馈区 */
+  .react-line { font-family: 'Newsreader', serif; font-size: 17px; color: var(--ink); font-style: italic; }
+  .react-action { cursor: pointer; border-bottom: 1px solid var(--sepia-light); color: var(--ink); font-style: normal; padding-bottom: 1px; transition: border-color 0.15s, color 0.15s; margin-right: 8px; display: inline-block; }
+  .react-action:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
+  .react-action.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+  .ref-entry { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); padding: 8px 0; border-bottom: 1px dotted var(--rule); }
+  .ref-entry .arrow { color: var(--vermilion); margin-right: 8px; }
+  .ref-entry .ref-user { font-weight: 600; }
+  .ref-entry .ref-name { font-style: italic; }
+
+  .note-entry { padding: 14px 0; border-bottom: 1px dotted var(--rule); }
+  .note-head { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-bottom: 4px; }
+  .note-head .nu { color: var(--ink); font-weight: 500; }
+  .note-text { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); line-height: 1.5; font-style: italic; }
+
+  /* "去试试" 大 CTA — 让访问者面对作品有清晰行动入口 */
+  .try-cta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-top: 18px;
+    padding: 12px 20px;
+    background: var(--ink);
+    color: var(--bg);
+    font-family: 'Newsreader', serif;
+    font-size: 17px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.15s;
+    border: 1px solid var(--ink);
+    cursor: pointer;
+  }
+  .try-cta:hover { background: var(--vermilion); border-color: var(--vermilion); }
+  .try-cta-arrow { font-style: italic; }
+  .try-cta-url { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: 0.65; font-weight: 400; letter-spacing: 0.02em; }
+
+  /* 搜索 */
+  .search-result-group { margin-bottom: 18px; }
+  .search-result-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+  .search-result-item { padding: 10px 0; border-bottom: 1px dotted var(--rule); cursor: pointer; transition: all 0.15s; }
+  .search-result-item:hover { background: rgba(194, 65, 12, 0.04); margin: 0 -8px; padding: 10px 8px; }
+  .search-result-item:hover .sri-name { color: var(--vermilion); }
+  .sri-name { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); transition: color 0.15s; }
+  .sri-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-left: 8px; }
+  .sri-tagline { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 2px; }
+  .sri-text { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink-soft); line-height: 1.5; margin-top: 4px; }
+  .search-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); text-align: center; padding: 24px 0; }
+  .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); border: 1px solid var(--sepia-light); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
+
+  /* @mention */
+  .mention { color: var(--vermilion); font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .mention:hover { text-decoration: underline; text-decoration-color: var(--vermilion); text-underline-offset: 2px; }
+
+  /* 小动作链接 — 改 / 删 / 改一下 / 编辑 等 owner 视角入口 */
+  .small-action { cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; transition: all 0.15s; display: inline-block; }
+  .small-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+  /* UPDATE 级反馈 — "用了 · 跑通了" */
+  .tl-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .tl-action {
+    cursor: pointer;
+    border-bottom: 1px solid var(--sepia-light);
+    color: var(--ink);
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 14px;
+    padding-bottom: 1px;
+    transition: all 0.15s;
+  }
+  .tl-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .tl-action.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .tl-used-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.02em;
+  }
+  .tl-used-list {
+    margin-top: 8px;
+    font-family: 'Newsreader', serif;
+    font-size: 13px;
+    color: var(--sepia);
+    font-style: italic;
+    line-height: 1.6;
+  }
+  .tl-used-list .nh { color: var(--ink); font-weight: 600; font-style: normal; }
+  .tl-used-list .nh:hover { color: var(--vermilion); cursor: pointer; }
+  .quote-block {
+    border-left: 2px solid var(--rule);
+    padding: 6px 16px;
+    margin-bottom: 18px;
+    margin-top: 4px;
+  }
+  .quote-block-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--sepia);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+  .quote-block-text {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  /* NOTIFICATIONS */
+  #nav-unread-mark { color: var(--vermilion); font-size: 11px; margin-left: 2px; }
+  .notif-entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 22px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
+  .notif-entry:hover { background: rgba(194, 65, 12, 0.025); }
+  .notif-entry.unread .notif-time { color: var(--vermilion); }
+  .notif-time { color: var(--sepia); font-size: 13px; padding-top: 3px; font-family: 'JetBrains Mono', monospace; }
+  .notif-text { font-family: 'Newsreader', serif; font-size: 17px; line-height: 1.55; color: var(--ink); }
+  .notif-text .nh { font-weight: 600; }
+  .notif-text .nh:hover { color: var(--vermilion); }
+  .notif-text .npj { font-style: italic; color: var(--ink-soft); }
+  .notif-extra { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--rule); }
+  .notif-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-top: 6px; }
+
+  /* PICK PROJECT modal */
+  .pick-project-item { padding: 16px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
+  .pick-project-item:hover { background: rgba(194, 65, 12, 0.04); margin: 0 -12px; padding: 16px 12px; }
+  .pick-project-item:hover .pick-project-item-name { color: var(--vermilion); }
+  .pick-project-item-name { font-family: 'Newsreader', serif; font-size: 18px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
+  .pick-project-item-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.04em; }
+  .pick-project-item-meta .stuck { color: var(--vermilion); }
+  .pick-project-item-meta .done { color: var(--indigo-ink); }
+
+  /* NEW PROJECT modal — status pills + tools pills */
+  .status-pill { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); border: 1px dotted var(--sepia-light); padding: 4px 12px; cursor: pointer; transition: all 0.15s; text-transform: lowercase; display: inline-block; }
+  .status-pill:hover { color: var(--ink); border-color: var(--ink); }
+  .status-pill.active { color: var(--vermilion); border-color: var(--vermilion); border-style: solid; }
+  .tools-pill { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); border: 1px dotted var(--sepia-light); padding: 3px 10px; cursor: pointer; transition: all 0.15s; text-transform: lowercase; display: inline-block; }
+  .tools-pill:hover { color: var(--ink); border-color: var(--ink); }
+  .tools-pill.selected { color: var(--vermilion); border-color: var(--vermilion); border-style: solid; }
+  .field-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 13px; color: var(--sepia); margin-top: 4px; }
+  .field-hint.error { color: var(--vermilion); font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  /* INPUT / MODAL */
+  .input-bare { background: transparent; border: none; border-bottom: 1px solid var(--sepia-light); color: var(--ink); font-family: 'Newsreader', serif; font-size: 17px; width: 100%; padding: 8px 0; outline: none; transition: border-color 0.15s; }
+  .input-bare:focus { border-bottom-color: var(--vermilion); }
+  .input-bare::placeholder { color: var(--sepia-light); font-style: italic; }
+  .btn-act { font-family: 'Newsreader', serif; font-size: 16px; background: transparent; border: none; border-bottom: 1.5px solid var(--ink); color: var(--ink); padding: 4px 0; cursor: pointer; transition: all 0.15s; }
+  .btn-act:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
+  .btn-act-primary { background: var(--ink); color: var(--bg); padding: 8px 16px; border: none; font-family: 'Newsreader', serif; font-size: 15px; cursor: pointer; transition: all 0.15s; }
+  .btn-act-primary:hover { background: var(--vermilion); }
+
+  .modal-back { background: rgba(28, 25, 23, 0.4); }
+  .modal-paper { background: var(--bg); border: 1px solid var(--ink); padding: 28px 32px; max-width: 520px; }
+  .modal-title { font-family: 'Newsreader', serif; font-size: 24px; font-weight: 500; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .modal-sub { color: var(--sepia); font-style: italic; font-family: 'Newsreader', serif; font-size: 14px; margin-bottom: 18px; }
+
+  /* 图片上传区 */
+  .upload-area {
+    margin-top: 16px;
+    border-top: 1px solid var(--rule);
+    padding-top: 14px;
+  }
+  .upload-list { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+  .upload-thumb {
+    position: relative;
+    width: 80px; height: 80px;
+    border: 1px solid var(--sepia-light);
+    padding: 4px;
+    background: white;
+  }
+  .upload-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .upload-thumb .remove {
+    position: absolute;
+    top: -8px; right: -8px;
+    width: 20px; height: 20px;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 50%;
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .upload-thumb .remove:hover { background: var(--vermilion); }
+  .upload-trigger {
+    display: inline-block;
+    cursor: pointer;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 14px;
+    color: var(--ink);
+    border-bottom: 1px solid var(--sepia-light);
+    padding-bottom: 1px;
+    transition: all 0.15s;
+  }
+  .upload-trigger:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .upload-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 13px; color: var(--sepia); margin-top: 6px; }
+
+  .toast-paper { background: var(--ink); color: var(--bg); font-family: 'Newsreader', serif; font-size: 15px; padding: 12px 18px; border-radius: 0; }
+
+  /* ZOOM */
+  .zoom-back { background: rgba(28, 25, 23, 0.92); }
+  .zoom-back img { max-width: 92vw; max-height: 88vh; border: 8px solid white; box-shadow: 0 8px 60px rgba(0,0,0,0.4); }
+  .zoom-caption {
+    position: absolute;
+    bottom: 32px;
+    color: var(--bg);
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 14px;
+    text-align: center;
+    width: 100%;
+  }
+
+  /* ONBOARD */
+  .onboard-num { font-family: 'Newsreader', serif; font-style: italic; font-size: 60px; color: var(--vermilion); line-height: 1; }
+  .onboard-h1 { font-family: 'Newsreader', serif; font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); }
+  .starter-card { padding: 28px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 80px 1fr; gap: 24px; }
+  .starter-title { font-family: 'Newsreader', serif; font-size: 22px; margin-bottom: 12px; }
+  .starter-prompt { border-left: 2px solid var(--rule); padding: 4px 16px; margin-bottom: 14px; font-family: 'Newsreader', serif; font-style: italic; color: var(--ink-soft); font-size: 15px; line-height: 1.5; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<header class="masthead">
+  <div class="max-w-3xl mx-auto px-8 py-5 flex items-end justify-between">
+    <div class="flex items-baseline gap-2 cursor-pointer" onclick="showScreen('feed')">
+      <span class="title">Tinker</span>
+      <span class="title-cn">捣鼓</span>
+      <span class="tagline serif" style="margin-left: 4px;">· 在做的现场</span>
+    </div>
+    <nav class="flex items-center gap-5 text-sm">
+      <button onclick="showScreen('feed')">动静</button>
+      <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+      <button onclick="showScreen('workshop', currentUser.handle)">我的工作室</button>
+      <button onclick="openSearch()" title="搜索 (⌘K)">找<span class="kbd">⌘K</span></button>
+      <button onclick="showScreen('about')" class="text-xs" style="color: var(--sepia);">关于</button>
+      <button onclick="openPickProject()" class="serif italic" style="color: var(--vermilion);">+ 记一笔</button>
+    </nav>
+  </div>
+  <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
+    <span>第 1 期 · 试运行</span>
+    <span id="masthead-date">2026 / 06 / 05</span>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-8 py-12">
+
+  <section class="screen active" id="screen-feed">
+    <div class="mb-8">
+      <h1 class="feed-title mb-3">今天有动静</h1>
+      <p class="feed-sub">路过看一眼别人在做什么 — 时间倒序,不是热门排名</p>
+    </div>
+    <div class="filter-row mb-4" id="tool-filters"></div>
+    <div id="feed-list"></div>
+    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
+      — 就这些了。我们刚起步,宁可这里空,也不刷数据 —
+    </div>
+  </section>
+
+  <section class="screen" id="screen-workshop"><div id="workshop-content"></div></section>
+  <section class="screen" id="screen-project"><div id="project-content"></div></section>
+
+  <section class="screen" id="screen-about">
+    <div class="max-w-2xl mx-auto">
+
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">关 于</div>
+
+      <h1 class="serif" style="font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); margin-bottom: 18px;">
+        捣鼓 <span style="color: var(--sepia-light); font-size: 38px;">/</span> Tinker
+      </h1>
+
+      <p class="serif italic" style="font-size: 22px; color: var(--sepia); line-height: 1.4; margin-bottom: 40px;">
+        给"用 AI 创造但不必懂代码"的人的工作室
+      </p>
+
+      <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 48px;">
+        <p>GitHub 是给<strong>写代码的人</strong>的工作室。</p>
+        <p style="margin-top: 12px;">我们是给<strong>捣鼓东西的人</strong>的工作室 — ta 们用 AI · 做出真的能跑的东西 · 但不必是程序员。</p>
+      </div>
+
+      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em; text-transform: uppercase;">我们不做什么</div>
+        <ul class="serif" style="font-size: 16px; line-height: 1.9; color: var(--ink); list-style: none; padding: 0;">
+          <li>· 不做推荐算法 / 热门 / trending</li>
+          <li>· 不做点赞总数 / 粉丝数 / 浏览量 这些"数字游戏"</li>
+          <li>· 不做等级 / 守护者 / verified 这些"身份证书"</li>
+          <li>· 不做 "X 天月入 $Y" 焦虑营销</li>
+        </ul>
+      </div>
+
+      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-6" style="color: var(--sepia); letter-spacing: 0.15em; text-transform: uppercase;">我们做什么</div>
+
+        <div style="margin-bottom: 28px;">
+          <div class="serif" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-style: italic;">— 给"在做但没做完"的人留主舞台</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">卡住、试错、放弃,都是 first-class 内容。不是只有"成功"才能展示。</p>
+        </div>
+
+        <div style="margin-bottom: 28px;">
+          <div class="serif" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-style: italic;">— 真实复用反馈链</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">不是点赞,是「我用了你的方法 · 跑通了」。有人真的把你的东西接走用了,比 1000 个赞重要。</p>
+        </div>
+
+        <div>
+          <div class="serif" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-style: italic;">— 作品必须挂可访问产物</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">截图 + AI 文案 ≠ 作品。陌生人不联系你就能玩到的,才叫作品。这是反「AI 装大佬」的硬边界。</p>
+        </div>
+      </div>
+
+      <div style="border-top: 2px solid var(--ink); padding-top: 32px;">
+        <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.15em; text-transform: uppercase;">关 于 产 品 本 身</div>
+
+        <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 24px;">
+          <p>Tinker 用 Cursor + Claude + Tailwind 做的。</p>
+          <p style="margin-top: 14px;">
+            我们的开发过程本身就<strong>公开在这个产品里</strong> —
+            <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 工作室的「Tinker 主屏」项目能看到每一次 commit、每一次卡住、每一次跑通。
+          </p>
+          <p style="margin-top: 14px; color: var(--sepia); font-style: italic;">
+            这是产品的第一篇内容 · 也是它的第一个广告。
+          </p>
+        </div>
+
+        <div class="flex gap-4 mt-8 items-center flex-wrap">
+          <button onclick="showScreen('workshop','daodao')" class="btn-act-primary">看 @daodao 的工作室 →</button>
+          <span class="react-action serif italic" onclick="showScreen('onboard')" style="color: var(--sepia);">还是先去入场仪式做个小东西</span>
+        </div>
+      </div>
+
+      <div class="mt-16 pt-8 text-center" style="border-top: 1px solid var(--rule);">
+        <p class="serif italic" style="color: var(--sepia); font-size: 14px;">
+          "在这个产品里,做减法比做加法需要更多勇气。"
+        </p>
+        <p class="mono text-xs mt-2" style="color: var(--sepia-light); letter-spacing: 0.1em;">
+          — 给团队新人的一句话总结
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="screen" id="screen-notifications">
+    <div class="mb-8">
+      <h1 class="feed-title mb-3">通知</h1>
+      <p class="feed-sub">谁接走了你的东西 · 谁觉得有意思 · 谁留了便签 — 时间倒序</p>
+    </div>
+    <div id="notif-list"></div>
+    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
+      — 真实反馈一条算一条,不刷红点 —
+    </div>
+  </section>
+
+  <section class="screen" id="screen-onboard">
+    <div class="mb-12">
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.1em;">入 场 仪 式</div>
+      <h1 class="onboard-h1 mb-4">先做一个小东西</h1>
+      <p class="serif italic text-lg" style="color: var(--sepia);">不是看完教程才能进来 — 我们觉得"做出来"比"学会了"更接近 vibe coding 的本质。挑一个,5 分钟。</p>
+    </div>
+    <div id="onboard-starters" class="border-t" style="border-color: var(--rule);"></div>
+    <div class="mt-12 pt-8 border-t-2" style="border-color: var(--ink);">
+      <p class="serif italic mb-4" style="color: var(--sepia);">做完了?</p>
+      <button onclick="openWorkshopSetup()" class="btn-act-primary">挂上我的产物 · 开张工作室</button>
+      <p class="mt-6 text-sm serif italic" style="color: var(--sepia);">
+        已经有作品了? <span class="react-action" onclick="openWorkshopSetup()">直接挂上来</span>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<!-- MODALS -->
+<div id="modal-note" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">留个便签</h3>
+    <p class="modal-sub">独立显示 · 不能盖楼</p>
+    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句..." style="font-size: 17px; resize: vertical;"></textarea>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-note')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitNote()" class="btn-act-primary">留下</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-tinkered" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">挂上你的延伸版</h3>
+    <p class="modal-sub">原作者能看到你真的做了什么 — 不只是点了赞</p>
+    <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的项目名</label>
+      <input id="tinkered-name" class="input-bare" placeholder="中文版求职信生成器">
+    </div>
+    <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">产物链接</label>
+      <input id="tinkered-link" class="input-bare" placeholder="https://...">
+    </div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-tinkered')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitTinkered()" class="btn-act-primary">挂上 · 通知原作者</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPDATE modal · 加了图片上传 -->
+<div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">记一笔</h3>
+    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
+    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
+
+    <div class="upload-area">
+      <div class="upload-list" id="upload-list"></div>
+      <label class="upload-trigger">
+        + 加张图 (可选)
+        <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" style="display: none;">
+      </label>
+      <div class="upload-hint">调 bug 截图 · 运行效果 · 设计稿 — 都可以 · 也可以直接粘贴 (⌘V)</div>
+    </div>
+
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitUpdate()" class="btn-act-primary">记上</button>
+    </div>
+  </div>
+</div>
+
+<!-- ZOOM modal -->
+<div id="modal-zoom" class="hidden fixed inset-0 zoom-back flex items-center justify-center z-50 p-4" onclick="closeModal('modal-zoom')">
+  <img id="zoom-img" alt="">
+  <div id="zoom-caption" class="zoom-caption"></div>
+</div>
+
+<!-- SEARCH modal -->
+<div id="modal-search" class="hidden fixed inset-0 modal-back flex items-start justify-center z-50 p-4" style="padding-top: 80px;">
+  <div class="modal-paper w-full" style="max-width: 560px; max-height: 75vh; overflow-y: auto;">
+    <h3 class="modal-title">搜索</h3>
+    <p class="modal-sub">找工作室 / 项目 / 进展 — 全平台 substring 匹配</p>
+    <input id="search-input" class="input-bare" placeholder="输入关键词..." autocomplete="off">
+    <div id="search-results" class="mt-5"></div>
+  </div>
+</div>
+
+<!-- EDIT WORKSHOP modal — 改工作室 tagline -->
+<div id="modal-edit-workshop" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">编辑工作室</h3>
+    <p class="modal-sub">路过的人会看到 · @handle 不能改 (那是你的地址)</p>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">我在做的事</label>
+      <input id="ew-tagline" class="input-bare" placeholder="一句话说明你的工作室">
+    </div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-edit-workshop')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitEditWorkshop()" class="btn-act-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS PICKER modal — 改项目状态 -->
+<div id="modal-status-picker" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 480px;">
+    <h3 class="modal-title">改一下状态</h3>
+    <p class="modal-sub">「跑通了」进做过的 · 「归档」从 feed 移除</p>
+    <div class="flex gap-2 flex-wrap mb-3" id="msp-status-row">
+      <span class="status-pill" data-status="active">在做</span>
+      <span class="status-pill" data-status="stuck">卡住</span>
+      <span class="status-pill" data-status="done">跑通了</span>
+      <span class="status-pill" data-status="paused">暂停</span>
+      <span class="status-pill" data-status="archive">归档</span>
+    </div>
+    <p class="field-hint" id="msp-hint"></p>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-status-picker')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitStatusChange()" class="btn-act-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- METHOD USED modal — update 级"用了 · 跑通了"反馈 -->
+<div id="modal-method-used" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full">
+    <h3 class="modal-title">用了 · 跑通了</h3>
+    <p class="modal-sub">让作者知道你真的用了 ta 的方法 · 不只是看了</p>
+    <div class="quote-block">
+      <div class="quote-block-label">你在反馈的这条</div>
+      <div class="quote-block-text" id="mu-quote"></div>
+    </div>
+    <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的情况 (可选)</label>
+    <textarea id="mu-note" class="input-bare" rows="3" placeholder="比如: 用类似思路解决了我的 X · 或者接到了 Y 项目" style="font-size: 16px; resize: vertical;"></textarea>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-method-used')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitMethodUsed()" class="btn-act-primary">留下 · 通知作者</button>
+    </div>
+  </div>
+</div>
+
+<!-- PICK PROJECT modal — 全局 + 记一笔 入口 -->
+<div id="modal-pick-project" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 480px; max-height: 80vh; overflow-y: auto;">
+    <h3 class="modal-title">记一笔到哪个项目?</h3>
+    <p class="modal-sub">动静必须挂在具体项目下 — 没有"水帖" · §6.5 真实闭环</p>
+    <div id="pick-project-list"></div>
+    <div class="flex justify-end mt-6">
+      <button onclick="closeModal('modal-pick-project')" class="btn-act" style="border-bottom: none;">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW PROJECT modal -->
+<div id="modal-new-project" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 560px; max-height: 88vh; overflow-y: auto;">
+    <h3 class="modal-title">开一个新项目</h3>
+    <p class="modal-sub">没有可访问产物 = 不算项目 · 反"AI 装大佬"硬边界</p>
+
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">项目名</label>
+      <input id="np-name" class="input-bare" placeholder="比如 求职信生成器">
+    </div>
+
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">一句话描述</label>
+      <input id="np-desc" class="input-bare" placeholder="它是干嘛的">
+    </div>
+
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">可访问产物链接 *</label>
+      <input id="np-link" class="input-bare" placeholder="https://...">
+      <div class="field-hint">v0 / Bolt / Lovable / Replit / GitHub / 自部署都行 — 陌生人不联系你就能玩到 = 合格</div>
+    </div>
+
+    <div class="mb-5">
+      <label class="mono text-xs block mb-2" style="color: var(--sepia);">当前状态</label>
+      <div class="flex gap-2 flex-wrap" id="np-status-row">
+        <span class="status-pill active" data-status="active">在做</span>
+        <span class="status-pill" data-status="stuck">卡住</span>
+        <span class="status-pill" data-status="done">跑通了</span>
+        <span class="status-pill" data-status="paused">暂停</span>
+      </div>
+    </div>
+
+    <div class="mb-5">
+      <label class="mono text-xs block mb-2" style="color: var(--sepia);">用了什么 (可选 · 可多选)</label>
+      <div class="flex gap-2 flex-wrap" id="np-tools-row"></div>
+    </div>
+
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-new-project')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitNewProject()" class="btn-act-primary">挂上 · 开始捣鼓</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
+
+<button onclick="resetState()" class="fixed bottom-4 right-4 text-xs mono px-2 py-1" style="color: var(--sepia); background: var(--bg); border: 1px solid var(--rule);">重置原型数据</button>
+
+<script>
+/* =========================================
+ * MOCK SCREENSHOTS — inline SVG
+ * ========================================= */
+const MOCK_CAT_ERROR = `<svg width="640" height="380" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="380" fill="#1a1a1a"/>
+  <rect x="0" y="0" width="640" height="32" fill="#2a2a2a"/>
+  <circle cx="18" cy="16" r="6" fill="#dc2626"/>
+  <circle cx="38" cy="16" r="6" fill="#ca8a04"/>
+  <circle cx="58" cy="16" r="6" fill="#16a34a"/>
+  <text x="320" y="20" font-family="monospace" font-size="11" fill="#737373" text-anchor="middle">cat-mood — predict.py</text>
+  <text x="24" y="68" font-family="monospace" font-size="13" fill="#a3a3a3">$ python train.py --epoch 10</text>
+  <text x="24" y="92" font-family="monospace" font-size="13" fill="#737373">Loading dataset (320 images)...</text>
+  <text x="24" y="116" font-family="monospace" font-size="13" fill="#737373">Training epoch 1/10... loss=2.43</text>
+  <text x="24" y="140" font-family="monospace" font-size="13" fill="#737373">Training epoch 10/10... loss=0.41</text>
+  <text x="24" y="164" font-family="monospace" font-size="13" fill="#737373">Training complete.</text>
+  <text x="24" y="200" font-family="monospace" font-size="13" fill="#a3a3a3">$ python predict.py test/angry_*.jpg</text>
+  <text x="24" y="224" font-family="monospace" font-size="13" fill="#dc2626">test/angry_01.jpg  ->  happy   (conf 0.71)</text>
+  <text x="24" y="248" font-family="monospace" font-size="13" fill="#dc2626">test/angry_02.jpg  ->  happy   (conf 0.83)</text>
+  <text x="24" y="272" font-family="monospace" font-size="13" fill="#dc2626">test/angry_03.jpg  ->  happy   (conf 0.69)</text>
+  <text x="24" y="296" font-family="monospace" font-size="13" fill="#dc2626">test/angry_04.jpg  ->  curious (conf 0.55)</text>
+  <text x="24" y="334" font-family="monospace" font-size="13" fill="#737373">Accuracy on angry set: 0.06  (??)</text>
+</svg>`;
+
+const MOCK_REDNOTE_COMPARE = `<svg width="640" height="420" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="420" fill="#faf9f6"/>
+  <rect x="20" y="20" width="290" height="380" fill="white" stroke="#e5e5e5"/>
+  <text x="40" y="50" font-family="sans-serif" font-size="12" fill="#737373">AI 草稿</text>
+  <text x="40" y="80" font-family="sans-serif" font-size="14" fill="#1c1917">本店精选护肤产品</text>
+  <text x="40" y="102" font-family="sans-serif" font-size="14" fill="#1c1917">采用日本进口原料</text>
+  <text x="40" y="124" font-family="sans-serif" font-size="14" fill="#1c1917">温和不刺激,适合敏感肌</text>
+  <text x="40" y="146" font-family="sans-serif" font-size="14" fill="#1c1917">现在购买立享 8 折</text>
+  <text x="40" y="168" font-family="sans-serif" font-size="14" fill="#1c1917">仅限本周</text>
+  <text x="40" y="208" font-family="sans-serif" font-size="11" fill="#c2410c" font-style="italic">— "太像广告了" — 我妈</text>
+  <rect x="330" y="20" width="290" height="380" fill="white" stroke="#e5e5e5"/>
+  <text x="350" y="50" font-family="sans-serif" font-size="12" fill="#737373">妈妈想要的口气</text>
+  <text x="350" y="80" font-family="sans-serif" font-size="14" fill="#1c1917">姐妹们 救命了 🥺</text>
+  <text x="350" y="102" font-family="sans-serif" font-size="14" fill="#1c1917">这个真的好用</text>
+  <text x="350" y="124" font-family="sans-serif" font-size="14" fill="#1c1917">我用了两周</text>
+  <text x="350" y="146" font-family="sans-serif" font-size="14" fill="#1c1917">皮肤明显细腻了 ✨</text>
+  <text x="350" y="168" font-family="sans-serif" font-size="14" fill="#1c1917">本来怕踩雷的我</text>
+  <text x="350" y="190" font-family="sans-serif" font-size="14" fill="#1c1917">现在回购第三瓶 🛒</text>
+  <text x="350" y="230" font-family="sans-serif" font-size="11" fill="#15803d" font-style="italic">— "这个才像" — 我妈</text>
+</svg>`;
+
+const MOCK_RED_GRID = `<svg width="640" height="420" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="420" fill="#fafaf7"/>
+  <text x="320" y="32" font-family="serif" font-size="14" font-style="italic" fill="#737373" text-anchor="middle">同一篇文案 · 4 张配图风格各异</text>
+  <rect x="60" y="60" width="240" height="140" fill="#f5f5f4"/>
+  <circle cx="180" cy="130" r="40" fill="#e7e5e4"/>
+  <text x="180" y="220" font-family="serif" font-size="12" font-style="italic" fill="#737373" text-anchor="middle">极简风</text>
+  <rect x="340" y="60" width="240" height="140" fill="#7c2d12"/>
+  <circle cx="460" cy="130" r="40" fill="#fbbf24"/>
+  <text x="460" y="220" font-family="serif" font-size="12" font-style="italic" fill="#737373" text-anchor="middle">油画风</text>
+  <rect x="60" y="240" width="240" height="140" fill="#1e3a8a"/>
+  <rect x="160" y="290" width="40" height="40" fill="#fde047"/>
+  <text x="180" y="400" font-family="serif" font-size="12" font-style="italic" fill="#737373" text-anchor="middle">像素风</text>
+  <rect x="340" y="240" width="240" height="140" fill="#fce7f3"/>
+  <circle cx="460" cy="310" r="40" fill="#f9a8d4" opacity="0.7"/>
+  <text x="460" y="400" font-family="serif" font-size="12" font-style="italic" fill="#737373" text-anchor="middle">水彩风</text>
+</svg>`;
+
+const MOCK_BOOK_RECOG = `<svg width="640" height="320" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="320" fill="#faf8f3"/>
+  <rect x="40" y="40" width="180" height="240" fill="#78716c"/>
+  <text x="130" y="90" font-family="serif" font-size="14" fill="white" text-anchor="middle">线性代数</text>
+  <text x="130" y="112" font-family="serif" font-size="12" fill="#e7e5e4" text-anchor="middle">同济版</text>
+  <text x="130" y="270" font-family="monospace" font-size="10" fill="#a8a29e" text-anchor="middle">[scan photo]</text>
+  <rect x="260" y="40" width="340" height="240" fill="white" stroke="#d6d3d1"/>
+  <text x="280" y="74" font-family="monospace" font-size="11" fill="#737373">识别结果</text>
+  <text x="280" y="104" font-family="serif" font-size="18" fill="#1c1917">《线性代数》</text>
+  <text x="280" y="128" font-family="serif" font-size="13" fill="#44403c" font-style="italic">同济大学数学系 · 第六版</text>
+  <line x1="280" y1="148" x2="580" y2="148" stroke="#d6d3d1"/>
+  <text x="280" y="172" font-family="monospace" font-size="11" fill="#737373">估价 · 9.5 成新</text>
+  <text x="280" y="196" font-family="serif" font-size="22" fill="#c2410c">¥ 8 — 32</text>
+  <text x="280" y="220" font-family="serif" font-size="12" fill="#78716c" font-style="italic">(估价跨度太大 · 数据来源:多抓鱼公开页 + 闲鱼搜索)</text>
+  <text x="280" y="258" font-family="monospace" font-size="11" fill="#c2410c">[ 估价模块还不准 ]</text>
+</svg>`;
+
+function svgUri(svg) {
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+/* =========================================
+ * SEED DATA
+ * ========================================= */
+const SEED_DATA = {
+  users: {
+    'daodao':   { name: '捣鼓自己',  tagline: '在做 Tinker · 这个产品本身' },
+    'zhangsan': { name: '张三',     tagline: '用 AI 帮我妈做小红书' },
+    'liushi':   { name: '柳师',     tagline: '设计师 · 用 AI 折腾产品 demo' },
+    'wangwu':   { name: '王五',     tagline: '前 PM · 现在自己做点东西' },
+    'lisi':     { name: '李四',     tagline: '大三 · 用 AI 做毕设' },
+    'maomao':   { name: '猫猫',     tagline: '内容创作者 · 用 AI 做小工具' },
+  },
+  projects: [
+    { id:'p1', owner:'daodao', name:'Tinker 主屏', slug:'tinker-feed', desc:'"今天有动静的工作室" 这个首页本身', productLink:'https://tinker.so', githubLink:'https://github.com/daodao/tinker', status:'active', tools:['Cursor','Claude','Tailwind'],
+      updates:[
+        { text:'今天加了工具筛选,但是想再观察一下要不要默认隐藏', ago:'15 分钟前' },
+        { text:'"卡片来源是项目事件而不是用户发帖"这个差异要让新人一眼看出', ago:'2 小时前' },
+        { text:'决定不做 onboarding wizard,新人点开主屏直接看真实工作室', ago:'昨天' },
+        { text:'砍掉了"热门推荐",时间倒序到底', ago:'2 天前' },
+      ],
+      reactions:{ interested:['zhangsan','liushi','wangwu'], wantToTry:['lisi'],
+        tinkered:[ { user:'liushi', name:'深色版 Tinker', link:'#' } ] },
+      notes:[ { user:'wangwu', text:'我觉得卡片高度可以再小一点,信息密度再高一些', ago:'1 小时前' } ] },
+
+    { id:'p2', owner:'zhangsan', name:'AI 简历优化器', slug:'resume-ai', desc:'让 AI 改简历但不胡编工作经历', productLink:'https://resume-ai.vercel.app', githubLink:'https://github.com/zhangsan/resume-ai', status:'active', tools:['Cursor','Claude'],
+      updates:[
+        { text:'终于让 GPT 不胡编工作经历了! 试了 4 种 prompt 模板,最后用了 strict mode', ago:'10 分钟前',
+          prompt:'You are a resume editor. STRICT MODE: only rephrase information explicitly provided. Do NOT invent skills, dates, or experiences. If a field is missing, output "[未填写]" instead of guessing.',
+          usedBy:[ { user:'wangwu', note:'接走思路做了求职信生成器,效果立竿见影', ago:'昨天' } ] },
+        { text:'卡了: GPT 总会编造没填的字段. 试了 temperature=0,没用', ago:'昨天' },
+        { text:'跑通了基础版,但优化建议比较套话', ago:'3 天前' },
+      ],
+      reactions:{ interested:['liushi','wangwu','maomao'], wantToTry:['lisi','daodao'],
+        tinkered:[ { user:'wangwu', name:'求职信生成器', link:'#p7' } ] },
+      notes:[
+        { user:'lisi',   text:'你那个 strict mode prompt 第三句可以加 "do not invent fields"', ago:'2 小时前' },
+        { user:'wangwu', text:'我之前做过类似的,卡在了 streaming 输出,后来用 SSE 解决了', ago:'昨天' },
+      ] },
+
+    { id:'p3', owner:'zhangsan', name:'给我妈做小红书', slug:'mom-rednote', desc:'给我妈的护肤品店做小红书图文', productLink:'https://v0.dev/r/momred-x7a', status:'stuck', tools:['v0','Claude'],
+      updates:[
+        { text:'卡了 3 天: 我妈说 AI 写的"太像广告",她想要那种像朋友推荐的口气',
+          images:[ { src: svgUri(MOCK_REDNOTE_COMPARE), caption:'AI 草稿 vs 我妈想要的口气' } ],
+          ago:'昨天' },
+        { text:'试了让 Claude 模仿小红书博主的笔记风格,但读起来还是有点假', ago:'2 天前' },
+        { text:'开始: 想做一个能自动生成小红书图文的小工具给我妈用', ago:'5 天前' },
+      ],
+      reactions:{ interested:['maomao','liushi'], wantToTry:[], tinkered:[] },
+      notes:[ { user:'maomao', text:'小红书的关键不是文案,是 emoji 密度. 你试试让 AI 每 2-3 句加一个 emoji,然后开头用"姐妹们..."', ago:'20 分钟前' } ] },
+
+    { id:'p4', owner:'zhangsan', name:'番茄钟', slug:'pomodoro', desc:'最简单的网页番茄钟', productLink:'https://claude.ai/chat/pomodoro-artifact', status:'done', tools:['Claude'],
+      updates:[
+        { text:'跑通了 · 加了响铃和暂停', ago:'1 周前' },
+        { text:'5 分钟用 Claude Artifact 做的,直接复制粘贴跑起来', ago:'1 周前' },
+      ],
+      reactions:{ interested:['lisi','daodao'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p5', owner:'liushi', name:'猫咪表情识别', slug:'cat-mood', desc:'上传猫咪照片,告诉你它现在什么心情', productLink:'https://v0.dev/r/catmood-k9z', status:'stuck', tools:['v0','Claude','TensorFlow.js'],
+      updates:[
+        { text:'卡住 6 小时: 表情分类总把"生气"识别成"开心". 训练数据集可能有问题. @daodao 你之前提过的"行为识别"思路靠谱吗?',
+          images:[ { src: svgUri(MOCK_CAT_ERROR), caption:'angry 测试集 accuracy 只有 0.06 · 几乎全部预测成 happy' } ],
+          ago:'2 小时前' },
+        { text:'基础识别能跑了,但准确率只有 50%', ago:'昨天' },
+        { text:'开始: 想给我家猫做一个表情识别器', ago:'4 天前' },
+      ],
+      reactions:{ interested:['zhangsan','maomao'], wantToTry:['daodao'], tinkered:[] },
+      notes:[ { user:'daodao', text:'猫的表情可能本来就不适合简单分类,试试做"行为识别"(摇尾巴/竖耳朵)会不会准一点?', ago:'1 小时前' } ] },
+
+    { id:'p6', owner:'liushi', name:'UI 灵感图生成器', slug:'ui-inspo', desc:'描述一下场景,生成一组 UI 概念图', productLink:'https://lovable.dev/projects/ui-inspo-92', status:'active', tools:['Lovable','Cursor'],
+      updates:[
+        { text:'加了"风格"选项: 极简 / 拟物 / 玻璃拟态 / 杂志感', ago:'5 小时前' },
+        { text:'能跑了 · 但是生成的图都长得有点像,要想办法增加多样性', ago:'3 天前' },
+      ],
+      reactions:{ interested:['wangwu','maomao','zhangsan'], wantToTry:['lisi'], tinkered:[] },
+      notes:[] },
+
+    { id:'p7', owner:'wangwu', name:'求职信生成器', slug:'cover-letter', desc:'基于 @zhangsan 简历优化器的思路', productLink:'https://cover-letter-ai.vercel.app', status:'active', tools:['Cursor','Claude'],
+      updates:[
+        { text:'接走了 @zhangsan 的 strict mode prompt,效果立竿见影', ago:'昨天' },
+        { text:'开始: 看到 @zhangsan 的简历优化器,觉得可以延伸做求职信', ago:'2 天前' },
+      ],
+      reactions:{ interested:['zhangsan','lisi'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p8', owner:'wangwu', name:'专注一起', slug:'focus-together', desc:'可以看到朋友也在专注 · 互相打气', productLink:'https://focus-together.vercel.app', status:'done', tools:['Bolt','Supabase'],
+      updates:[
+        { text:'跑通了, 已经用了一个月,确实比一个人专注更不容易划水', ago:'2 周前' },
+        { text:'上线了, 邀请了 5 个朋友一起用', ago:'3 周前' },
+      ],
+      reactions:{ interested:['daodao','maomao','lisi','zhangsan'], wantToTry:[],
+        tinkered:[ { user:'lisi', name:'宿舍版番茄钟', link:'#' } ] },
+      notes:[] },
+
+    { id:'p9', owner:'lisi', name:'毕设: 校园二手书识别', slug:'book-recog', desc:'拍照识别书名 + 估价 · 毕设', productLink:'https://v0.dev/r/bookrecog-3a', status:'active', tools:['v0','Claude'],
+      updates:[
+        { text:'能跑了基础识别,但估价模块还不准 · 数据来源用了多抓鱼公开页',
+          images:[ { src: svgUri(MOCK_BOOK_RECOG), caption:'识别 OK · 估价跨度 ¥8 – ¥32 太大' } ],
+          ago:'昨天' },
+        { text:'开始: 老师让我做一个有"实际应用"的毕设', ago:'1 周前' },
+      ],
+      reactions:{ interested:['liushi'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p10', owner:'lisi', name:'课堂笔记小工具', slug:'class-notes', desc:'录音 + AI 整理 · 生成结构化笔记', productLink:'https://class-notes.replit.app', status:'done', tools:['Replit','Claude'],
+      updates:[
+        { text:'4 个室友都在用 · 实习课已经被点名"做得好"', ago:'3 天前' },
+        { text:'跑通了基础版', ago:'1 周前' },
+      ],
+      reactions:{ interested:['wangwu','maomao'], wantToTry:['daodao'], tinkered:[] },
+      notes:[] },
+
+    { id:'p11', owner:'maomao', name:'小红书配图工具', slug:'rednote-img', desc:'给文案自动配 3-5 张图 · 风格统一', productLink:'https://lovable.dev/projects/rednote-img', status:'active', tools:['Lovable','Claude','Replicate'],
+      updates:[
+        { text:'加了 "风格一致性" 的小技巧: 所有图用同一个 seed', ago:'昨天',
+          usedBy:[ { user:'liushi', note:'借鉴到我的 UI 灵感图生成器 · 终于不再乱跳风格了', ago:'5 小时前' } ] },
+        { text:'能跑了, 但配图风格不统一',
+          images:[ { src: svgUri(MOCK_RED_GRID), caption:'同一篇文案 · v1 输出的 4 张配图风格各异' } ],
+          ago:'4 天前' },
+      ],
+      reactions:{ interested:['zhangsan','liushi'], wantToTry:[], tinkered:[] },
+      notes:[] },
+
+    { id:'p12', owner:'maomao', name:'公众号一键排版', slug:'wechat-formatter', desc:'粘贴文章自动排版 · 几种模板', productLink:'https://wechat-fmt.vercel.app', status:'done', tools:['Cursor','Claude'],
+      updates:[ { text:'跑通了 · 给我朋友的公众号节省了不少时间', ago:'2 周前' } ],
+      reactions:{ interested:['wangwu'], wantToTry:[], tinkered:[] },
+      notes:[] },
+  ],
+  starters: [
+    { title:'用 Claude Artifact 做"今晚不想想"清单',
+      prompt:'做一个网页. 我能列出今晚不想想的事 · 一条一条加 · 每加完它变浅色/划掉 · 给我"已经放下了"的感觉. 不要计数 · 不要鼓励语 · 数据存浏览器.',
+      toolName:'Claude', toolUrl:'https://claude.ai' },
+    { title:'用 v0 做"扔硬币帮我决定"工具',
+      prompt:'做一个简单的决定器. 我输入两个选项 (比如 "出门" vs "在家") · 按一个大按钮 · 它用扔硬币的方式选一个并简单说明为什么. 风格俏皮但不卖萌.',
+      toolName:'v0', toolUrl:'https://v0.dev' },
+    { title:'用 Bolt 做"给明天的自己"留言板',
+      prompt:'做一个网页. 我能写一条给明天自己的话 · 数据存浏览器 · 每天打开第一次自动显示昨天给今天的话. 风格安静 · 不要计数 · 不要打卡感.',
+      toolName:'Bolt', toolUrl:'https://bolt.new' },
+  ],
+  notifications: [
+    { id:'n10', target:'daodao', type:'projectDone', fromUser:'lisi',
+      projectId:'p10', projectName:'课堂笔记小工具',
+      extra:'你之前说过想试试 · 现在能用了',
+      ago:'5 分钟前', read:false },
+    { id:'n1', target:'daodao', type:'tinkered',  fromUser:'liushi',
+      projectId:'p1', projectName:'Tinker 主屏', extra:'深色版 Tinker',
+      ago:'10 分钟前', read:false },
+    { id:'n2', target:'daodao', type:'noted',     fromUser:'wangwu',
+      projectId:'p1', projectName:'Tinker 主屏',
+      extra:'我觉得卡片高度可以再小一点,信息密度再高一些',
+      ago:'1 小时前', read:false },
+    { id:'n8', target:'daodao', type:'mentioned', fromUser:'liushi',
+      projectId:'p5', projectName:'猫咪表情识别',
+      extra:'@daodao 你之前提过的"行为识别"思路靠谱吗?',
+      ago:'2 小时前', read:false },
+    { id:'n7', target:'daodao', type:'methodUsed', fromUser:'wangwu',
+      projectId:'p1', projectName:'Tinker 主屏',
+      extra:'借鉴了"主屏卡片来源是项目事件而不是用户发帖"的设计 · 用在我自己的笔记应用 feed 上',
+      ago:'3 小时前', read:false },
+    { id:'n3', target:'daodao', type:'wantToTry', fromUser:'lisi',
+      projectId:'p1', projectName:'Tinker 主屏',
+      ago:'昨天', read:false },
+  ],
+};
+
+const AVAILABLE_TOOLS = ['Cursor','Claude','v0','Bolt','Lovable','Replit','ChatGPT','Windsurf','Tailwind','Supabase','Vercel'];
+
+const NOTIF_TEMPLATES = {
+  tinkered:    (n) => ({ verb:'接走了你的',     verbColor:'var(--vermilion)' }),
+  methodUsed:  (n) => ({ verb:'用了你的方法 · 跑通了', verbColor:'var(--vermilion)' }),
+  mentioned:   (n) => ({ verb:'提到了你 · 在',  verbColor:'var(--vermilion)' }),
+  projectDone: (n) => ({ verb:'跑通了 · 你之前说过想试试 · 现在能用了', verbColor:'var(--vermilion)' }),
+  wantToTry:   (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
+  noted:       (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
+};
+
+let state;
+const currentUser = { handle: 'daodao' };
+let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
+let currentToolFilter = 'all';
+let pendingImages = [];
+let npStatus = 'active';
+let npTools = new Set();
+
+function loadState() {
+  const raw = localStorage.getItem('tinker_v07_state');
+  if (raw) { try { return JSON.parse(raw); } catch(e){} }
+  return JSON.parse(JSON.stringify(SEED_DATA));
+}
+function saveState() {
+  try { localStorage.setItem('tinker_v07_state', JSON.stringify(state)); }
+  catch(e) { showToast('localStorage 满了 · 图片太多了'); }
+}
+function resetState() {
+  if (!confirm('重置所有原型数据?')) return;
+  localStorage.removeItem('tinker_v07_state');
+  state = JSON.parse(JSON.stringify(SEED_DATA));
+  saveState();
+  showScreen('feed');
+  showToast('数据已重置');
+}
+
+function showScreen(name, ...args) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const t = document.getElementById('screen-' + name);
+  if (t) t.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (name === 'feed') renderFeed();
+  else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
+  else if (name === 'project') renderProject(args[0], args[1]);
+  else if (name === 'onboard') renderOnboard();
+  else if (name === 'notifications') renderNotifications();
+  // about 是静态内容,不需要 render
+}
+
+function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
+function projectById(id){ return state.projects.find(p=>p.id===id); }
+function statusText(s){ return {active:'在做',stuck:'卡住',done:'跑通了',paused:'暂停',archive:'归档'}[s]||s; }
+function escapeHtml(s){ if(!s)return''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// @username 渲染成可点击链接 (要求 user 存在)
+function renderMentions(text) {
+  if (!text) return '';
+  const escaped = escapeHtml(text);
+  return escaped.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
+    if (state.users && state.users[username]) {
+      return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${username}')">@${username}</span>`;
+    }
+    return match;
+  });
+}
+
+function extractMentions(text) {
+  if (!text || !state.users) return [];
+  const out = new Set();
+  const re = /@([A-Za-z0-9_]+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (state.users[m[1]]) out.add(m[1]);
+  }
+  return Array.from(out);
+}
+function parseAgoOrder(a){
+  if(a.includes('刚刚'))return 0;
+  if(a.includes('分钟'))return parseInt(a);
+  if(a.includes('小时'))return 60+parseInt(a);
+  if(a.includes('昨天'))return 60*24;
+  if(a.includes('天'))return 60*24*parseInt(a);
+  if(a.includes('周'))return 60*24*7*parseInt(a);
+  return 9999;
+}
+function shortAgo(a){
+  if(a.includes('刚刚'))return '刚';
+  if(a.includes('分钟'))return parseInt(a)+'m';
+  if(a.includes('小时'))return parseInt(a)+'h';
+  if(a.includes('昨天'))return '昨天';
+  if(a.includes('天'))return parseInt(a)+' 天';
+  if(a.includes('周'))return parseInt(a)+' 周';
+  return a;
+}
+
+/* ============ FEED ============ */
+function getFeedEvents() {
+  const events = [];
+  state.projects.forEach(p => p.updates.forEach((u, idx) => {
+    events.push({
+      owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
+      text:u.text, ago:u.ago, agoOrder:parseAgoOrder(u.ago),
+      tools:p.tools, status:p.status,
+      images: u.images || null,
+    });
+  }));
+  events.sort((a,b) => a.agoOrder - b.agoOrder);
+  return events;
+}
+
+function renderFeed() {
+  const filters = document.getElementById('tool-filters');
+  filters.innerHTML = '';
+  ['全部','Cursor','Claude','v0','Bolt','Lovable','Replit'].forEach(t => {
+    const key = t==='全部'?'all':t;
+    const span = document.createElement('span');
+    span.className = 'filter-pill' + (currentToolFilter===key?' active':'');
+    span.textContent = t.toLowerCase();
+    span.onclick = () => { currentToolFilter = key; renderFeed(); };
+    filters.appendChild(span);
+  });
+
+  let events = getFeedEvents();
+  if (currentToolFilter !== 'all') {
+    events = events.filter(e => e.tools.some(x => x.toLowerCase().includes(currentToolFilter.toLowerCase())));
+  }
+
+  const list = document.getElementById('feed-list');
+  list.innerHTML = '';
+  if (events.length === 0) {
+    list.innerHTML = '<div class="text-center py-16 serif italic" style="color: var(--sepia);">这个工具下今天没动静</div>';
+    return;
+  }
+  events.forEach(e => {
+    const entry = document.createElement('div');
+    entry.className = 'entry';
+    entry.onclick = (ev) => {
+      if (ev.target.classList.contains('entry-handle')) return;
+      showScreen('project', e.owner, e.projectSlug);
+    };
+    const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
+    const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
+    entry.innerHTML = `
+      <div class="entry-time mono">${shortAgo(e.ago)}</div>
+      <div>
+        <div class="entry-headline">
+          <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
+          <span class="entry-slash">/</span>
+          <span class="entry-project">${escapeHtml(e.projectName)}</span>
+          <span class="entry-status ${e.status}">${statusText(e.status)}</span>
+        </div>
+        <div class="entry-text">${renderMentions(e.text)}</div>
+        ${firstImg ? `
+          <div class="feed-figure">
+            <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(firstImg.src).replace(/"/g,'&quot;')}, ${JSON.stringify(firstImg.caption||'').replace(/"/g,'&quot;')})">
+              <img src="${firstImg.src}" alt="${escapeHtml(firstImg.caption||'')}">
+            </div>
+            ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
+          </div>
+        ` : ''}
+        <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};"><span>${e.tools.slice(0,3).join(' · ')}</span></div>
+      </div>
+    `;
+    list.appendChild(entry);
+  });
+}
+
+/* ============ WORKSHOP ============ */
+function renderWorkshop(handle) {
+  const user = state.users[handle];
+  const root = document.getElementById('workshop-content');
+  if (!user) { root.innerHTML = '<p class="serif italic" style="color: var(--sepia);">找不到这间工作室</p>'; return; }
+  const projects = state.projects.filter(p=>p.owner===handle);
+  const recent    = projects.filter(p=>['active','stuck'].includes(p.status));
+  const alsoDoing = projects.filter(p=>p.status==='paused');
+  const done      = projects.filter(p=>['done','archive'].includes(p.status));
+  const recentEvents = [];
+  projects.forEach(p => p.updates.slice(0,2).forEach(u => recentEvents.push({projectName:p.name,projectSlug:p.slug,text:u.text,ago:u.ago,agoOrder:parseAgoOrder(u.ago)})));
+  recentEvents.sort((a,b)=>a.agoOrder-b.agoOrder);
+  const isMe = handle === currentUser.handle;
+
+  // 我在跟进的 — 我反馈过 / 接走过 / 用了方法的别人的项目 (只在自己工作室显示)
+  const trackingProjects = [];
+  if (isMe) {
+    state.projects.forEach(p => {
+      if (p.owner === handle) return;
+      let role = null, roleLabel = '';
+      if (p.reactions.tinkered.find(t => t.user === handle)) { role='tinkered'; roleLabel='我接走了'; }
+      else if (p.updates.some(u => u.usedBy && u.usedBy.find(x => x.user === handle))) { role='methodUsed'; roleLabel='用了方法'; }
+      else if (p.reactions.wantToTry.includes(handle)) { role='wantToTry'; roleLabel='想试试'; }
+      if (role) trackingProjects.push({ p, role, roleLabel });
+    });
+  }
+  const renderPcards = (list) => list.map(p => `
+    <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
+      <div class="pcard-name">${escapeHtml(p.name)}</div>
+      <div class="pcard-desc">${escapeHtml(p.desc)}</div>
+      <div class="pcard-meta"><span class="${p.status}">— ${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
+    </div>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
+      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.1em;">${isMe ? '你 的 工 作 室' : '一 间 工 作 室'}</div>
+      <h1 class="workshop-name mb-3">@${handle}</h1>
+      <p class="workshop-tagline">
+        「${escapeHtml(user.tagline)}」
+        ${isMe ? '<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">编辑</span>' : ''}
+      </p>
+    </div>
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>最近在动 (${recent.length})</span>
+        ${isMe ? `<span class="flex gap-4 items-center">
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0; color: var(--vermilion); border-bottom-color: var(--vermilion);" onclick="openPickProject()">+ 记一笔</span>
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNewProject()">+ 新项目</span>
+        </span>` : ''}
+      </div>
+      ${recent.length === 0 ? '<p class="serif italic py-8 text-center" style="color: var(--sepia);">' + (isMe ? '还没有进行中的项目 — 开一个?' : '最近没有进行中的项目') + '</p>' : renderPcards(recent)}
+    </div>
+    ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
+    ${done.length > 0 ? `<div class="mb-12"><div class="section-label">做过的 (${done.length})</div>${renderPcards(done)}</div>` : ''}
+
+    ${isMe && trackingProjects.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">我在跟进的 (${trackingProjects.length})</div>
+        ${trackingProjects.map(({p, roleLabel}) => `
+          <div class="pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
+            <div class="pcard-name">@${p.owner} / ${escapeHtml(p.name)}</div>
+            <div class="pcard-meta">
+              <span style="color: var(--vermilion);">— ${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    <div class="mt-16">
+      <div class="section-label">最近的动静</div>
+      ${recentEvents.slice(0,5).map(e => `
+        <div class="entry" onclick="showScreen('project','${handle}','${e.projectSlug}')">
+          <div class="entry-time mono">${shortAgo(e.ago)}</div>
+          <div>
+            <div class="mono text-xs mb-1" style="color: var(--sepia);">在「${escapeHtml(e.projectName)}」</div>
+            <div class="entry-text">${renderMentions(e.text)}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+/* ============ PROJECT ============ */
+function renderProject(owner, slug) {
+  const p = projectByOwnerSlug(owner, slug);
+  const root = document.getElementById('project-content');
+  if (!p) { root.innerHTML = '<p class="serif italic" style="color: var(--sepia);">找不到这个项目</p>'; return; }
+  const isMine = owner === currentUser.handle;
+  currentProjectCtx = p.id;
+  const me = currentUser.handle;
+  const myReaction =
+    p.reactions.tinkered.find(t=>t.user===me) ? 'tinkered' :
+    p.reactions.wantToTry.includes(me) ? 'wantToTry' : null;
+
+  // Figure counter for the project — count across all updates with images
+  let figureIdx = 0;
+
+  root.innerHTML = `
+    <div class="mb-6">
+      <a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${owner}')">← @${owner} 的工作室</a>
+    </div>
+    <div class="pheader">
+      <div class="mb-3 flex items-center gap-3 flex-wrap">
+        <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase;">项 目 · ${statusText(p.status)}</span>
+        ${isMine ? `<span class="small-action" onclick="openStatusPicker('${p.id}')">改一下</span>` : ''}
+      </div>
+      <h1 class="pname">${escapeHtml(p.name)}</h1>
+      <p class="pdesc">${escapeHtml(p.desc)}</p>
+      <div class="pmeta-line">
+        ${p.tools.map(t=>`<span>${t}</span>`).join('<span style="color: var(--sepia-light);">·</span>')}
+        ${p.githubLink ? `<span style="color: var(--sepia-light);">·</span><a class="ink-link" href="${p.githubLink}" target="_blank" style="opacity: 0.7;">github</a>` : ''}
+      </div>
+
+      <div>
+        <a href="${p.productLink}" target="_blank" class="try-cta">
+          <span>去试试</span>
+          <span class="try-cta-arrow">→</span>
+          <span class="try-cta-url">${p.productLink}</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>时间线 (${p.updates.length})</span>
+        ${isMine ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openUpdate()">+ 记一笔</span>' : ''}
+      </div>
+      ${p.updates.map((u, uIdx) => {
+        const imagesHtml = (u.images && u.images.length > 0) ? u.images.map((img) => {
+          figureIdx++;
+          const safeSrc = img.src.replace(/'/g, "\\'");
+          const safeCap = (img.caption || '').replace(/'/g, "\\'");
+          return `
+            <figure class="tl-figure">
+              <div class="tl-figure-frame" onclick="zoomImage('${safeSrc}', '${escapeHtml(img.caption||'')}')">
+                <img src="${img.src}" alt="${escapeHtml(img.caption||'')}">
+              </div>
+              <figcaption class="tl-figure-caption"><span class="label">图 ${figureIdx}</span>${escapeHtml(img.caption || '')}</figcaption>
+            </figure>
+          `;
+        }).join('') : '';
+        const usedByList = u.usedBy || [];
+        const meUsed = usedByList.find(x => x.user === currentUser.handle);
+        return `
+          <div class="tl-entry">
+            <div class="tl-time">${shortAgo(u.ago)}</div>
+            <div>
+              <div class="tl-text">${renderMentions(u.text)}</div>
+              ${u.prompt ? `
+                <div class="tl-prompt-box">
+                  <div class="tl-prompt-label">prompt</div>
+                  <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
+                  <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; font-size: 14px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
+                </div>
+              ` : ''}
+              ${imagesHtml}
+              <div class="tl-actions">
+                ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
+                ${isMine ? `
+                  <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">改</span>
+                  <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">删</span>
+                ` : ''}
+                ${usedByList.length > 0 ? `<span class="tl-used-count">${usedByList.length} 人用过这个方法</span>` : ''}
+              </div>
+              ${usedByList.length > 0 ? `
+                <div class="tl-used-list">
+                  ${usedByList.map(used => `
+                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${used.ago}</span></div>
+                  `).join('')}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    ${p.reactions.tinkered.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">有人接走了这个想法 (${p.reactions.tinkered.length})</div>
+        ${p.reactions.tinkered.map(t=>`
+          <div class="ref-entry">
+            <span class="arrow">→</span>
+            <span class="ref-user">@${t.user}</span>
+            <span style="color: var(--sepia);"> 做了 </span>
+            <span class="ref-name">「${escapeHtml(t.name)}」</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${p.reactions.wantToTry.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label">想试试的人 (${p.reactions.wantToTry.length})</div>
+        <div class="ref-entry serif" style="font-size: 15px;">
+          ${p.reactions.wantToTry.map(u=>`<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
+        </div>
+        <p class="mt-2 text-xs serif italic" style="color: var(--sepia);">你跑通了之后 ta 们会收到通知</p>
+      </div>
+    ` : ''}
+
+    ${!isMine ? `
+      <div class="mb-12 py-6" style="border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);">
+        <div class="react-line">
+          你 —
+          <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
+          <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版 →</span>
+        </div>
+        <p class="mt-2 text-xs serif italic" style="color: var(--sepia);">「想试试」= ta 跑通了你会收到通知 · 显示具体是谁,不显示总数</p>
+      </div>
+    ` : ''}
+
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>便签墙 (${p.notes.length})</span>
+        <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNote()">+ 留个便签</span>
+      </div>
+      <p class="mb-4 text-xs serif italic" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
+      ${p.notes.length === 0 ? '<p class="serif italic py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
+      ${p.notes.map((n, nIdx) => `
+        <div class="note-entry">
+          <div class="note-head">
+            <span class="nu">@${n.user}</span> · ${n.ago}
+            ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">撤回</span>` : ''}
+          </div>
+          <div class="note-text">"${renderMentions(n.text)}"</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
+      <div class="serif italic mb-3" style="color: var(--sepia); font-size: 14px;">把这个产物带走 · 离开社区也行,你的东西永远在</div>
+      <div class="flex flex-wrap gap-4 text-base">
+        <span class="react-action serif" onclick="fakeShare('X')">分享到 X</span>
+        <span class="react-action serif" onclick="fakeShare('小红书')">分享到小红书</span>
+        <span class="react-action serif" onclick="fakeShare('微信')">分享到微信</span>
+        <span class="react-action serif" onclick="copyText(this, '${p.productLink}')">复制链接</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ============ ONBOARD ============ */
+function renderOnboard() {
+  const list = document.getElementById('onboard-starters');
+  list.innerHTML = state.starters.map((s, i) => `
+    <div class="starter-card">
+      <div class="onboard-num serif italic">${i+1}</div>
+      <div>
+        <h3 class="starter-title">${escapeHtml(s.title)}</h3>
+        <div class="starter-prompt">"${escapeHtml(s.prompt)}"</div>
+        <div class="flex gap-5 items-center">
+          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
+          <a href="${s.toolUrl}" target="_blank" class="react-action serif" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">打开 ${s.toolName} →</a>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ============ NOTIFICATIONS ============ */
+function renderNotifications() {
+  const root = document.getElementById('notif-list');
+  const me = currentUser.handle;
+  const list = (state.notifications || []).filter(n => n.target === me).sort((a,b) => parseAgoOrder(a.ago) - parseAgoOrder(b.ago));
+
+  if (list.length === 0) {
+    root.innerHTML = '<p class="serif italic py-12 text-center" style="color: var(--sepia);">还没有人反馈你的项目 — 等真实复用发生</p>';
+    return;
+  }
+
+  root.innerHTML = list.map(n => {
+    const tmpl = NOTIF_TEMPLATES[n.type] ? NOTIF_TEMPLATES[n.type](n) : { verb: n.type, verbColor: 'var(--sepia)' };
+    return `
+      <div class="notif-entry ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.id}','${n.projectId}')">
+        <div class="notif-time">${shortAgo(n.ago)}</div>
+        <div>
+          <div class="notif-text">
+            <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${n.fromUser}')">@${n.fromUser}</span>
+            <span style="color: ${tmpl.verbColor};"> ${tmpl.verb} </span>
+            <span class="npj">「${escapeHtml(n.projectName)}」</span>
+          </div>
+          ${n.extra ? `<div class="notif-extra">${n.type === 'tinkered' ? '做了 「' + escapeHtml(n.extra) + '」' : '"' + escapeHtml(n.extra) + '"'}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 自动标记已读 (§6 教育只说一次 · 不需要"标为已读"按钮)
+  list.forEach(n => { n.read = true; });
+  saveState();
+  updateUnreadBadge();
+}
+
+function updateUnreadBadge() {
+  const me = currentUser.handle;
+  const unread = (state.notifications || []).filter(n => n.target === me && !n.read).length;
+  const mark = document.getElementById('nav-unread-mark');
+  if (!mark) return;
+  if (unread > 0) mark.classList.remove('hidden');
+  else mark.classList.add('hidden');
+}
+
+function onNotifClick(notifId, projectId) {
+  const p = projectById(projectId);
+  if (p) showScreen('project', p.owner, p.slug);
+}
+
+function createNotification(target, fromUser, type, projectId, projectName, extra) {
+  if (!state.notifications) state.notifications = [];
+  // 去重: 同一用户对同一项目的同种通知只保留一条最新的
+  state.notifications = state.notifications.filter(n =>
+    !(n.target === target && n.fromUser === fromUser && n.type === type && n.projectId === projectId)
+  );
+  state.notifications.unshift({
+    id: 'n-' + Date.now(),
+    target, fromUser, type, projectId, projectName,
+    extra: extra || null,
+    ago: '刚刚', read: false,
+  });
+  updateUnreadBadge();
+}
+
+/* ============ SEARCH ============ */
+function openSearch() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-results').innerHTML = '<div class="search-hint">输入关键词找东西... 比如 strict mode / @liushi / Cursor / 配图</div>';
+  document.getElementById('modal-search').classList.remove('hidden');
+  setTimeout(() => {
+    const input = document.getElementById('search-input');
+    input.focus();
+    input.oninput = () => doSearch(input.value.trim());
+  }, 50);
+}
+
+function doSearch(q) {
+  const root = document.getElementById('search-results');
+  if (!q) {
+    root.innerHTML = '<div class="search-hint">输入关键词找东西...</div>';
+    return;
+  }
+  const ql = q.toLowerCase();
+
+  // 工作室 (按 handle / tagline)
+  const users = Object.entries(state.users).filter(([h, u]) =>
+    h.toLowerCase().includes(ql) || (u.tagline || '').toLowerCase().includes(ql)
+  );
+
+  // 项目 (按 name / desc / tools)
+  const projects = state.projects.filter(p =>
+    p.name.toLowerCase().includes(ql) ||
+    (p.desc || '').toLowerCase().includes(ql) ||
+    (p.tools || []).some(t => t.toLowerCase().includes(ql))
+  );
+
+  // 进展 (按 text)
+  const updates = [];
+  state.projects.forEach(p => p.updates.forEach((u, idx) => {
+    if (u.text.toLowerCase().includes(ql)) updates.push({ p, u, idx });
+  }));
+
+  let html = '';
+  if (users.length > 0) {
+    html += `<div class="search-result-group">
+      <div class="search-result-label">工作室 (${users.length})</div>
+      ${users.map(([h, u]) => `
+        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('workshop','${h}');">
+          <div><span class="sri-name">@${h}</span></div>
+          <div class="sri-tagline">「${escapeHtml(u.tagline || '')}」</div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  if (projects.length > 0) {
+    html += `<div class="search-result-group">
+      <div class="search-result-label">项目 (${projects.length})</div>
+      ${projects.map(p => `
+        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('project','${p.owner}','${p.slug}');">
+          <div><span class="sri-name">${escapeHtml(p.name)}</span><span class="sri-meta">@${p.owner} · ${statusText(p.status)} · ${(p.tools||[]).slice(0,3).join(' · ')}</span></div>
+          <div class="sri-tagline">「${escapeHtml(p.desc || '')}」</div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  if (updates.length > 0) {
+    const shown = updates.slice(0, 8);
+    html += `<div class="search-result-group">
+      <div class="search-result-label">进展 (${updates.length}${updates.length > 8 ? ' · 显示前 8 条' : ''})</div>
+      ${shown.map(({p, u}) => `
+        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('project','${p.owner}','${p.slug}');">
+          <div><span class="sri-meta">@${p.owner} / ${escapeHtml(p.name)} · ${shortAgo(u.ago)}</span></div>
+          <div class="sri-text">${escapeHtml(u.text.length > 120 ? u.text.slice(0, 120) + '...' : u.text)}</div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  if (!html) {
+    html = '<div class="search-hint">没找到 · 换个词试试</div>';
+  }
+  root.innerHTML = html;
+}
+
+/* ============ METHOD USED — update 级反馈 ============ */
+let currentMethodUsedCtx = null; // { projectId, updateIdx }
+
+function openMethodUsed(projectId, updateIdx) {
+  const p = projectById(projectId);
+  if (!p) return;
+  const u = p.updates[updateIdx];
+  if (!u) return;
+
+  // 不允许给自己反馈
+  if (p.owner === currentUser.handle) {
+    showToast('这是你自己的项目 — 没法给自己反馈');
+    return;
+  }
+
+  // 已经反馈过则视为撤回
+  const existing = (u.usedBy || []).find(x => x.user === currentUser.handle);
+  if (existing) {
+    u.usedBy = u.usedBy.filter(x => x.user !== currentUser.handle);
+    saveState();
+    renderProject(p.owner, p.slug);
+    showToast('撤回了 — 没事');
+    return;
+  }
+
+  currentMethodUsedCtx = { projectId, updateIdx };
+  document.getElementById('mu-quote').textContent = '"' + u.text + '"';
+  document.getElementById('mu-note').value = '';
+  document.getElementById('modal-method-used').classList.remove('hidden');
+  setTimeout(() => document.getElementById('mu-note').focus(), 50);
+}
+
+function submitMethodUsed() {
+  if (!currentMethodUsedCtx) return;
+  const { projectId, updateIdx } = currentMethodUsedCtx;
+  const p = projectById(projectId);
+  if (!p) return;
+  const u = p.updates[updateIdx];
+  if (!u) return;
+
+  const note = document.getElementById('mu-note').value.trim();
+  if (!u.usedBy) u.usedBy = [];
+  u.usedBy.unshift({ user: currentUser.handle, note: note || '', ago: '刚刚' });
+
+  // 通知作者
+  if (p.owner !== currentUser.handle) {
+    const extra = note || ('用了「' + p.name + '」第 ' + (updateIdx + 1) + ' 条的方法');
+    createNotification(p.owner, currentUser.handle, 'methodUsed', p.id, p.name, extra);
+  }
+
+  saveState();
+  closeModal('modal-method-used');
+  currentMethodUsedCtx = null;
+  renderProject(p.owner, p.slug);
+  showToast('留下了 — 作者会收到通知');
+}
+
+/* ============ NEW PROJECT ============ */
+function isValidUrl(s) {
+  if (!s) return false;
+  return /^https?:\/\/\S+\.\S+/i.test(s.trim());
+}
+function makeSlug(name) {
+  return 'p-' + Date.now().toString(36);
+}
+
+function submitNewProject() {
+  const name = document.getElementById('np-name').value.trim();
+  const desc = document.getElementById('np-desc').value.trim();
+  const link = document.getElementById('np-link').value.trim();
+
+  if (!name) { showToast('项目得有个名字'); return; }
+  if (!desc) { showToast('一句话描述能让别人知道这是什么'); return; }
+  if (!isValidUrl(link)) { showToast('需要一个 https:// 的可访问产物链接 — 反 "AI 装大佬"'); return; }
+
+  const newProject = {
+    id: 'p-' + Date.now(),
+    owner: currentUser.handle,
+    name, slug: makeSlug(name),
+    desc, productLink: link,
+    status: npStatus,
+    tools: Array.from(npTools),
+    updates: [],
+    reactions: { interested:[], wantToTry:[], tinkered:[] },
+    notes: [],
+  };
+
+  state.projects.unshift(newProject);
+  saveState();
+  closeModal('modal-new-project');
+  showScreen('project', newProject.owner, newProject.slug);
+  showToast('开始捣鼓 「' + name + '」 · 来记一笔吧');
+
+  // 自动 prompt 第一次记一笔 (§6.5 机制 vs 行为 · 当下情绪驱动让 ta 立刻记第一条)
+  setTimeout(() => openUpdate(), 700);
+}
+
+/* ============ IMAGE UPLOAD ============ */
+function handleImageSelect(ev) {
+  const files = ev.target.files;
+  for (const file of files) addImageFile(file);
+  ev.target.value = '';
+}
+
+function addImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  if (file.size > 800 * 1024) {
+    showToast('图太大了 — 原型阶段限制 800KB');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    pendingImages.push({ src: e.target.result, caption: '' });
+    renderPendingImages();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderPendingImages() {
+  const list = document.getElementById('upload-list');
+  list.innerHTML = pendingImages.map((img, idx) => `
+    <div class="upload-thumb">
+      <img src="${img.src}" alt="">
+      <div class="remove" onclick="removePendingImage(${idx})">×</div>
+    </div>
+  `).join('');
+}
+
+function removePendingImage(idx) {
+  pendingImages.splice(idx, 1);
+  renderPendingImages();
+}
+
+function zoomImage(src, caption) {
+  document.getElementById('zoom-img').src = src;
+  document.getElementById('zoom-caption').textContent = caption || '';
+  document.getElementById('modal-zoom').classList.remove('hidden');
+}
+
+/* ============ ACTIONS ============ */
+function reactToProject(level) {
+  const p = projectById(currentProjectCtx); if (!p) return;
+  const me = currentUser.handle;
+  const wasWantToTry = p.reactions.wantToTry.includes(me);
+
+  // 撤回逻辑
+  if (level === 'wantToTry' && wasWantToTry) {
+    p.reactions.wantToTry = p.reactions.wantToTry.filter(u=>u!==me);
+    saveState(); renderProject(p.owner, p.slug);
+    showToast('撤回了 — 没事');
+    return;
+  }
+
+  if (level === 'wantToTry') {
+    p.reactions.wantToTry.push(me);
+    if (p.owner !== me) createNotification(p.owner, me, 'wantToTry', p.id, p.name);
+    showToast('记下了 — 等 ta 跑通了你会收到通知');
+  }
+  saveState(); renderProject(p.owner, p.slug);
+}
+
+function openNote() { currentNoteCtx = currentProjectCtx; document.getElementById('note-text').value=''; document.getElementById('modal-note').classList.remove('hidden'); }
+function deleteNote(projectId, noteIdx) {
+  const p = projectById(projectId);
+  if (!p || !p.notes[noteIdx]) return;
+  if (p.notes[noteIdx].user !== currentUser.handle) return;
+  if (!confirm('撤回这条便签? · 不可恢复')) return;
+  p.notes.splice(noteIdx, 1);
+  saveState();
+  renderProject(p.owner, p.slug);
+  showToast('撤回了');
+}
+
+function submitNote() {
+  const text = document.getElementById('note-text').value.trim();
+  if (!text) { showToast('便签是空的'); return; }
+  const p = projectById(currentNoteCtx);
+  p.notes.unshift({ user: currentUser.handle, text, ago: '刚刚' });
+  if (p.owner !== currentUser.handle) createNotification(p.owner, currentUser.handle, 'noted', p.id, p.name, text);
+  // @ 提到的人单独通知 (排除作者本人 + 项目 owner 避免重复)
+  extractMentions(text).forEach(u => {
+    if (u !== currentUser.handle && u !== p.owner) {
+      createNotification(u, currentUser.handle, 'mentioned', p.id, p.name, text);
+    }
+  });
+  saveState(); closeModal('modal-note'); renderProject(p.owner, p.slug); showToast('便签留下了');
+}
+
+function openTinkered() { currentTinkeredCtx = currentProjectCtx; document.getElementById('tinkered-name').value=''; document.getElementById('tinkered-link').value=''; document.getElementById('modal-tinkered').classList.remove('hidden'); }
+function submitTinkered() {
+  const name = document.getElementById('tinkered-name').value.trim();
+  const link = document.getElementById('tinkered-link').value.trim();
+  if (!name || !link) { showToast('名字和链接都要填 — 没有产物不算延伸版'); return; }
+  const p = projectById(currentTinkeredCtx);
+  p.reactions.interested = p.reactions.interested.filter(u=>u!==currentUser.handle);
+  p.reactions.wantToTry  = p.reactions.wantToTry.filter(u=>u!==currentUser.handle);
+  p.reactions.tinkered.push({ user: currentUser.handle, name, link });
+  if (p.owner !== currentUser.handle) createNotification(p.owner, currentUser.handle, 'tinkered', p.id, p.name, name);
+  saveState(); closeModal('modal-tinkered'); renderProject(p.owner, p.slug); showToast('挂上了 — 原作者会收到通知');
+}
+
+function openUpdate(projectId) {
+  isEditingUpdate = null;
+  currentUpdateCtx = projectId || currentProjectCtx;
+  pendingImages = [];
+  document.getElementById('update-text').value = '';
+  renderPendingImages();
+  document.getElementById('modal-update').classList.remove('hidden');
+  setTimeout(() => document.getElementById('update-text').focus(), 50);
+}
+
+/* ============ EDIT WORKSHOP / STATUS / UPDATE ============ */
+let isEditingUpdate = null; // { projectId, updateIdx }
+let mspStatus = 'active';
+let mspCtx = null; // projectId
+
+const STATUS_HINTS = {
+  active: '在 feed 主屏被看见 · 在工作室「最近在动」',
+  stuck:  '在 feed 主屏被看见 · 状态显眼 · 别人能来帮',
+  done:   '从 feed 沉下去 · 进工作室「做过的」',
+  paused: '从 feed 沉下去 · 进工作室「也在做」',
+  archive:'完全归档 · 从所有地方移除',
+};
+
+function openEditWorkshop() {
+  const u = state.users[currentUser.handle];
+  if (!u) return;
+  document.getElementById('ew-tagline').value = u.tagline || '';
+  document.getElementById('modal-edit-workshop').classList.remove('hidden');
+  setTimeout(() => document.getElementById('ew-tagline').focus(), 50);
+}
+function submitEditWorkshop() {
+  const tagline = document.getElementById('ew-tagline').value.trim();
+  if (!tagline) { showToast('一句话总不能空着'); return; }
+  state.users[currentUser.handle].tagline = tagline;
+  saveState();
+  closeModal('modal-edit-workshop');
+  renderWorkshop(currentUser.handle);
+  showToast('改好了');
+}
+
+function openStatusPicker(projectId) {
+  const p = projectById(projectId);
+  if (!p) return;
+  if (p.owner !== currentUser.handle) { showToast('改不了别人的状态'); return; }
+  mspStatus = p.status;
+  mspCtx = projectId;
+  document.querySelectorAll('#msp-status-row .status-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.status === mspStatus);
+    el.onclick = () => {
+      mspStatus = el.dataset.status;
+      document.querySelectorAll('#msp-status-row .status-pill').forEach(x =>
+        x.classList.toggle('active', x.dataset.status === mspStatus));
+      document.getElementById('msp-hint').textContent = STATUS_HINTS[mspStatus] || '';
+    };
+  });
+  document.getElementById('msp-hint').textContent = STATUS_HINTS[mspStatus] || '';
+  document.getElementById('modal-status-picker').classList.remove('hidden');
+}
+function submitStatusChange() {
+  if (!mspCtx) return;
+  const p = projectById(mspCtx);
+  if (!p) return;
+  const oldStatus = p.status;
+  p.status = mspStatus;
+
+  // 跑通了 → 自动通知所有"想试试"的人 (核心闭环 · 不可滥用 · 每个项目只一次)
+  if (oldStatus !== 'done' && mspStatus === 'done') {
+    (p.reactions.wantToTry || []).forEach(u => {
+      if (u !== currentUser.handle) {
+        createNotification(u, p.owner, 'projectDone', p.id, p.name, '你之前说过想试试 · 现在能用了');
+      }
+    });
+  }
+
+  saveState();
+  closeModal('modal-status-picker');
+  renderProject(p.owner, p.slug);
+  if (oldStatus !== 'done' && mspStatus === 'done' && (p.reactions.wantToTry || []).length > 0) {
+    showToast('跑通了! 已通知 ' + p.reactions.wantToTry.length + ' 个想试试的人');
+  } else {
+    showToast('状态改成了 ' + statusText(mspStatus));
+  }
+}
+
+function editUpdate(projectId, updateIdx) {
+  const p = projectById(projectId);
+  if (!p || !p.updates[updateIdx]) return;
+  if (p.owner !== currentUser.handle) { showToast('只能编辑自己的'); return; }
+  isEditingUpdate = { projectId, updateIdx };
+  currentUpdateCtx = projectId;
+  const u = p.updates[updateIdx];
+  pendingImages = u.images ? u.images.map(i => ({...i})) : [];
+  document.getElementById('update-text').value = u.text;
+  renderPendingImages();
+  document.getElementById('modal-update').classList.remove('hidden');
+  setTimeout(() => document.getElementById('update-text').focus(), 50);
+}
+
+function deleteUpdate(projectId, updateIdx) {
+  const p = projectById(projectId);
+  if (!p || !p.updates[updateIdx]) return;
+  if (p.owner !== currentUser.handle) return;
+  if (!confirm('删了这条 · 不可恢复 · 别人对这条的"用了"反馈也会消失')) return;
+  p.updates.splice(updateIdx, 1);
+  saveState();
+  renderProject(p.owner, p.slug);
+  showToast('删了');
+}
+
+function openPickProject() {
+  const me = currentUser.handle;
+  const myActive = state.projects.filter(p => p.owner === me && ['active','stuck'].includes(p.status));
+  const myPaused = state.projects.filter(p => p.owner === me && p.status === 'paused');
+
+  const listRoot = document.getElementById('pick-project-list');
+
+  if (myActive.length === 0 && myPaused.length === 0) {
+    // 完全没项目 — 引导开新项目
+    listRoot.innerHTML = `
+      <p class="serif italic mb-4" style="color: var(--sepia); font-size: 15px; line-height: 1.6;">
+        你还没有项目 — 想发动静,得先有项目。<br>
+        没有项目就发不了任何东西 = 反"水帖" / §9 反 AI 装大佬。
+      </p>
+      <div class="flex gap-4 items-center mt-5">
+        <button onclick="closeModal('modal-pick-project'); openNewProject();" class="btn-act-primary">+ 开一个新项目</button>
+        <span class="react-action serif italic" onclick="closeModal('modal-pick-project'); showScreen('onboard');" style="color: var(--sepia); font-size: 14px;">或先去入场仪式做个 5 分钟的</span>
+      </div>
+    `;
+    document.getElementById('modal-pick-project').classList.remove('hidden');
+    return;
+  }
+
+  let html = '';
+  if (myActive.length > 0) {
+    html += myActive.map(p => {
+      const lastUpdate = p.updates.length > 0 ? '上次记 ' + shortAgo(p.updates[0].ago) : '还没记过';
+      return `
+        <div class="pick-project-item" onclick="closeModal('modal-pick-project'); openUpdate('${p.id}');">
+          <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
+          <div class="pick-project-item-meta"><span class="${p.status}">${statusText(p.status)}</span> · ${lastUpdate}</div>
+        </div>
+      `;
+    }).join('');
+  }
+  if (myPaused.length > 0) {
+    html += `<div class="mt-5 mb-3 mono text-xs" style="color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase;">也在做 (暂停)</div>`;
+    html += myPaused.map(p => `
+      <div class="pick-project-item" onclick="closeModal('modal-pick-project'); openUpdate('${p.id}');">
+        <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
+        <div class="pick-project-item-meta">${statusText(p.status)}</div>
+      </div>
+    `).join('');
+  }
+
+  html += `
+    <div class="mt-5 pt-4" style="border-top: 1px solid var(--rule);">
+      <span class="react-action serif italic" onclick="closeModal('modal-pick-project'); openNewProject();" style="color: var(--sepia); font-size: 14px;">+ 或者开一个新项目</span>
+    </div>
+  `;
+
+  listRoot.innerHTML = html;
+  document.getElementById('modal-pick-project').classList.remove('hidden');
+}
+function submitUpdate() {
+  const text = document.getElementById('update-text').value.trim();
+  if (!text) { showToast('写点什么?'); return; }
+
+  if (isEditingUpdate) {
+    // 编辑模式
+    const p = projectById(isEditingUpdate.projectId);
+    const idx = isEditingUpdate.updateIdx;
+    if (p && p.updates[idx]) {
+      p.updates[idx].text = text;
+      if (pendingImages.length > 0) {
+        p.updates[idx].images = pendingImages.map(i => ({ src: i.src, caption: i.caption || '上传的图' }));
+      } else {
+        delete p.updates[idx].images;
+      }
+      isEditingUpdate = null;
+      pendingImages = [];
+      saveState();
+      closeModal('modal-update');
+      renderProject(p.owner, p.slug);
+      showToast('改好了');
+    }
+    return;
+  }
+
+  // 新增模式
+  const p = projectById(currentUpdateCtx);
+  const update = { text, ago: '刚刚' };
+  if (pendingImages.length > 0) {
+    update.images = pendingImages.map(i => ({ src: i.src, caption: i.caption || '上传的图' }));
+  }
+  p.updates.unshift(update);
+  pendingImages = [];
+
+  // @ 提到的人发 mentioned 通知
+  extractMentions(text).forEach(u => {
+    if (u !== currentUser.handle) {
+      createNotification(u, currentUser.handle, 'mentioned', p.id, p.name, text);
+    }
+  });
+
+  // (砍掉了每次 commit 通知"想试试"的人 — 太爆炸 · 等 projectDone 召回就够了)
+
+  saveState(); closeModal('modal-update'); renderProject(p.owner, p.slug);
+  showToast(update.images ? '记上了 · 含 ' + update.images.length + ' 张图' : '记上了');
+}
+
+function openNewProject() {
+  npStatus = 'active';
+  npTools = new Set();
+  document.getElementById('np-name').value = '';
+  document.getElementById('np-desc').value = '';
+  document.getElementById('np-link').value = '';
+
+  // 渲染 status pills
+  document.querySelectorAll('#np-status-row .status-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.status === 'active');
+    el.onclick = () => {
+      npStatus = el.dataset.status;
+      document.querySelectorAll('#np-status-row .status-pill').forEach(x =>
+        x.classList.toggle('active', x.dataset.status === npStatus));
+    };
+  });
+
+  // 渲染 tools pills
+  const toolsRow = document.getElementById('np-tools-row');
+  toolsRow.innerHTML = '';
+  AVAILABLE_TOOLS.forEach(tool => {
+    const pill = document.createElement('span');
+    pill.className = 'tools-pill';
+    pill.textContent = tool.toLowerCase();
+    pill.onclick = () => {
+      if (npTools.has(tool)) { npTools.delete(tool); pill.classList.remove('selected'); }
+      else { npTools.add(tool); pill.classList.add('selected'); }
+    };
+    toolsRow.appendChild(pill);
+  });
+
+  document.getElementById('modal-new-project').classList.remove('hidden');
+  setTimeout(() => document.getElementById('np-name').focus(), 50);
+}
+function openWorkshopSetup() {
+  showToast('原型阶段 — 默认登录为 @daodao,直接去工作室');
+  setTimeout(() => showScreen('workshop', currentUser.handle), 700);
+}
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function fakeShare(channel) {
+  const p = projectById(currentProjectCtx);
+  if (p) navigator.clipboard.writeText(p.productLink).catch(()=>{});
+  showToast('已复制产物链接 — 可以粘贴到' + channel);
+}
+function copyText(el, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = el.textContent;
+    el.textContent = '已复制';
+    setTimeout(() => { el.textContent = orig; }, 1500);
+  }).catch(() => showToast('复制失败,手动复制'));
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.add('hidden'), 2400);
+}
+
+/* ============ PASTE 支持 ============ */
+document.addEventListener('paste', (e) => {
+  if (document.getElementById('modal-update').classList.contains('hidden')) return;
+  const items = e.clipboardData ? e.clipboardData.items : [];
+  for (const item of items) {
+    if (item.type && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        addImageFile(file);
+        e.preventDefault();
+      }
+    }
+  }
+});
+
+/* ============ 键盘快捷键 ============ */
+document.addEventListener('keydown', (e) => {
+  // ESC 关任意 modal
+  if (e.key === 'Escape') {
+    ['modal-note','modal-tinkered','modal-update','modal-zoom','modal-search','modal-method-used','modal-pick-project','modal-new-project','modal-edit-workshop','modal-status-picker'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
+    });
+  }
+  // ⌘K / Ctrl+K 触发搜索
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    openSearch();
+  }
+});
+
+(function() {
+  const d = new Date();
+  document.getElementById('masthead-date').textContent =
+    d.getFullYear() + ' / ' + String(d.getMonth()+1).padStart(2,'0') + ' / ' + String(d.getDate()).padStart(2,'0');
+})();
+
+state = loadState();
+if (!state.notifications) state.notifications = JSON.parse(JSON.stringify(SEED_DATA.notifications));
+updateUnreadBadge();
+showScreen('feed');
+</script>
+</body>
+</html>
