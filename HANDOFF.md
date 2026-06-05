@@ -1,5 +1,11 @@
 # 给你回来时的清单 (autonomous 工作交接)
 
+> **⚠️ 历史快照** · 2026-06-05 下午写的 · 已过期
+> Tinker 现已正式上线: **http://daogu.cc:8788** (阿里云 ECS 自有部署 · 不再走 ngrok)
+> 本文档保留作工作日志，但文内的 URL / 待办都已 stale。当前状态见 [README](README.md) + [CHANGELOG](CHANGELOG.md)。
+
+---
+
 > 你去吃饭期间我做了什么 + 你回来需要亲自操作的 3 件事
 
 ---

@@ -11,8 +11,7 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
 
 **Base URL**:
 - 本地: `http://localhost:8788`
-- alpha (ngrok): `https://herself-awry-blurt.ngrok-free.dev` (变动)
-- 生产: `https://tinkers.ink` (TBD)
+- alpha: `http://daogu.cc:8788` (备案后会切到 `https://daogu.cc`)
 
 **Content-Type**: `application/json`
 

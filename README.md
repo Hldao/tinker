@@ -6,15 +6,14 @@
 
 ## 🟢 Alpha 测试
 
-当前 alpha 在我电脑上跑（ngrok tunnel），公网入口：
+正式上线 · 跑在阿里云 ECS · 公网入口：
 
-**https://herself-awry-blurt.ngrok-free.dev**
+**http://daogu.cc:8788**
 
 ⚠️ Alpha 期注意:
-- 我电脑开着才能访问 · 关机/睡眠会断
-- 重启 ngrok 后 URL 会换 · 以最新通知为准
 - 没有真实认证 · 多人测试约定不同 handle (`@xx`) 避免冲突
-- 第一次访问会弹 ngrok 警告页 · 点 "Visit Site" 进入
+- 数据存在 server 的 JSON 文件 · 有原子写入 + 5 份 backup 旋转 · 但还没接数据库 · 大型并发不推荐
+- 备案完成后切到 80/443 + HTTPS (会换成 `https://daogu.cc`)
 
 ---
 
@@ -76,57 +75,36 @@ LLM 支持: Anthropic Claude (默认) / OpenAI / DeepSeek。
 
 ## 让小伙伴一起测试
 
-### 方案 A · 部署到 Railway (推荐 · 5 分钟)
+直接给 ta 们 **http://daogu.cc:8788** 这个链接：
 
-1. fork 这个仓库到你的 GitHub
-2. 注册 [Railway](https://railway.app/)（GitHub OAuth 登录）
-3. **New Project** → **Deploy from GitHub repo** → 选择 fork 的仓库
-4. Railway 自动识别根目录 — **手动设置 Root Directory: `server/`**
-5. Railway 自动跑 `npm install && node index.js`
-6. 部署完拿到 URL: `https://your-app.up.railway.app`
-7. 小伙伴们:
-   - **网页直接访问** 那个 URL
-   - **装 CLI**: `git clone && cd cli && npm install && npm link && tinker login`（填部署的 URL）
+1. 浏览器打开 · 弹"你是谁?" → 填 handle + 一句 tagline → 进入主屏
+2. 想发动静 → 「+ 记一笔」→ 选项目或开新项目（开新项目必须挂 https:// 产物链接）
+3. 想反馈别人 → 项目页 「想试试」/「做了延伸版」/ 留便签
 
-⚠️ Railway free tier 文件系统是 ephemeral — `server/data.json` 重启会丢。alpha 测试可接受。生产前要换 PostgreSQL（V2）。
+⚠️ **多用户冲突**：当前没有真认证，所有人共用 `handle` 字段空间。alpha 期约定每人用不同 handle (`@xx`) 避免撞。真生产前会加 OAuth。
 
-### 方案 B · ngrok 临时暴露本地
+### 给 CLI 用户（懂代码的小伙伴）
 
 ```bash
-# Terminal 1: 起本地 server
-cd server && node index.js
-
-# Terminal 2: ngrok 暴露
-brew install ngrok
-ngrok http 8788
-# 拿到 https://xxxx.ngrok.io · 分享给小伙伴 (你电脑要开着)
+git clone https://github.com/Hldao/tinker.git
+cd tinker/cli
+npm install && npm link
+tinker login   # server URL 填 http://daogu.cc:8788 · handle 填自己的
+tinker push    # 试着推一条
 ```
 
-### 方案 C · VPS（生产）
+### 自己搭一套（fork 自部署）
 
-DigitalOcean / Hetzner / Vultr 都行。需要:
-- 装 Node.js 18+
-- `git clone` + `cd server && npm install`
-- pm2 / systemd 管理进程
-- nginx 反代到 8788 + HTTPS (Caddy / Certbot)
+```bash
+# 国内服务器 (阿里云/腾讯云等 · 未备案用 8788 高端口)
+wget -O - https://raw.githubusercontent.com/Hldao/tinker/main/deploy/setup-vps-cn.sh | bash
 
----
+# 海外服务器 (DigitalOcean/Hetzner 等 · 80/443 + 自动 HTTPS)
+wget https://raw.githubusercontent.com/Hldao/tinker/main/deploy/setup-vps.sh
+bash setup-vps.sh your-domain.com your@email.com
+```
 
-## 测试者使用流程
-
-如果有人帮你测试，引导 ta 们:
-
-1. **网页版**: 直接访问你部署的 URL
-2. **CLI 版** (对 vibe coder 友好):
-   ```bash
-   git clone https://github.com/你的/tinker.git
-   cd tinker/cli
-   npm install && npm link
-   tinker login   # 填部署的 URL + 自己的 handle
-   tinker push    # 试着推一条
-   ```
-
-⚠️ **多用户冲突**: 当前后端没有真认证，所有人共用 `handle` 字段。alpha 测试可以约定每人用不同 handle (`@xx`)。真生产前要加 OAuth (V2)。
+详见 [`docs/03-deployment.md`](docs/03-deployment.md)。
 
 ---
 
