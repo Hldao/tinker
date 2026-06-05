@@ -1,0 +1,36 @@
+# Tinker server 一键启动
+#
+# 开发: docker compose up
+# 生产: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# 数据 volume 挂载到宿主机 ./data/ · 容器重启不丢
+
+services:
+  tinker:
+    build: .
+    image: tinker:latest
+    container_name: tinker-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8788}:8788"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 8788
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      RATE_LIMIT_ACTION: ${RATE_LIMIT_ACTION:-60}
+      RATE_LIMIT_STATE: ${RATE_LIMIT_STATE:-300}
+      DATA_FILE: /data/data.json
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8788/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,43 @@
+# Caddy 反代配置 — 自动 HTTPS
+#
+# 用法 (Ubuntu / Debian):
+#   1. sudo apt install caddy
+#   2. 把这个文件复制到 /etc/caddy/Caddyfile
+#   3. 替换下面的 tinkers.ink 为你的真实域名
+#   4. sudo systemctl reload caddy
+#
+# Caddy 会自动从 Let's Encrypt 拿 HTTPS 证书 · 0 配置
+
+tinkers.ink {
+    # 反代到 docker compose 暴露的 8788 端口
+    reverse_proxy localhost:8788
+
+    # 给后端传真实 IP (信任 trust proxy)
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+
+    # 安全 headers (helmet 已加,这里再加一层)
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # 图片上传需要大 body
+    request_body {
+        max_size 12MB
+    }
+
+    # 日志 (轮转)
+    log {
+        output file /var/log/caddy/tinker.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+
+# www 别名 → 主域名 (可选)
+# www.tinkers.ink {
+#     redir https://tinkers.ink{uri} permanent
+# }
