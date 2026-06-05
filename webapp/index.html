@@ -274,6 +274,15 @@
     vertical-align: -1px;
   }
   .icon-lg { width: 14px; height: 14px; }
+  /* 品牌 logo · 填充式 · 跟 stroke icon 风格区分但同样吃 currentColor */
+  .icon-brand {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+    fill: currentColor;
+    stroke: none;
+    vertical-align: -2px;
+  }
 
   /* UPDATE 级反馈 — "用了 · 跑通了" */
   .tl-actions {
@@ -992,15 +1001,22 @@ function clearDraft(key) {
 }
 
 // SVG icon 集 — 统一 stroke 12px 风格 · 配 currentColor 适应任意上下文
+// 品牌 icon (X / 微信 / 小红书) 用 icon-brand class 填充式 · 即使商用也是 share button 标准用法
 const ICONS = {
   edit:    '<svg class="icon" viewBox="0 0 16 16"><path d="M2 14V11l9-9 3 3-9 9H2z"/></svg>',
   trash:   '<svg class="icon" viewBox="0 0 16 16"><path d="M3 4.5h10M5.5 4.5V2.5h5V4.5M4 4.5l.5 9h7l.5-9"/></svg>',
   undo:    '<svg class="icon" viewBox="0 0 16 16"><path d="M2 6l3-3M2 6l3 3M2 6h7a4.5 4.5 0 010 9H6"/></svg>',
   copy:    '<svg class="icon" viewBox="0 0 16 16"><rect x="4" y="4" width="9" height="10"/><path d="M2 12V2h8v2"/></svg>',
+  link:    '<svg class="icon" viewBox="0 0 16 16"><path d="M9 5.5h2.5a2.5 2.5 0 010 5H9M7 5.5H4.5a2.5 2.5 0 000 5H7M5.5 8h5"/></svg>',
   gear:    '<svg class="icon" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2"/><path d="M8 1.5v1.7M8 12.8v1.7M1.5 8h1.7M12.8 8h1.7M3.5 3.5l1.2 1.2M11.3 11.3l1.2 1.2M3.5 12.5l1.2-1.2M11.3 4.7l1.2-1.2"/></svg>',
   share:   '<svg class="icon" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.5"/><circle cx="12.5" cy="4" r="1.5"/><circle cx="12.5" cy="12" r="1.5"/><path d="M5 7.3l6-2.6M5 8.7l6 2.6"/></svg>',
   plus:    '<svg class="icon" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>',
   external:'<svg class="icon" viewBox="0 0 16 16"><path d="M6 3H3v10h10V10M9 3h4v4M13 3L7 9"/></svg>',
+  // 品牌 logo (来自 Simple Icons · MIT licensed · share-button 用途是标准 fair use)
+  x:       '<svg class="icon-brand" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+  wechat:  '<svg class="icon-brand" viewBox="0 0 24 24"><path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .55-.012.822-.034-.17-.535-.27-1.095-.27-1.67 0-3.46 3.355-6.272 7.5-6.272.158 0 .315.005.475.014C16.65 4.144 13.05 2.188 8.691 2.188zM5.785 5.991c.642 0 1.162.519 1.162 1.16a1.16 1.16 0 0 1-2.32 0 1.16 1.16 0 0 1 1.158-1.16zm5.813 0c.642 0 1.162.519 1.162 1.16a1.16 1.16 0 0 1-2.32 0 1.16 1.16 0 0 1 1.158-1.16zm5.34 2.867c-3.71 0-6.785 2.367-6.785 5.42 0 1.667.953 3.207 2.605 4.262.227.158.317.42.252.661l-.314 1.198c-.014.052-.034.103-.034.157 0 .118.097.213.215.213a.32.32 0 0 0 .135-.041l1.598-.945a.71.71 0 0 1 .59-.063c.604.176 1.255.272 1.94.272 3.71 0 6.785-2.366 6.785-5.418 0-3.053-3.076-5.42-6.787-5.42zm-2.342 2.236c.484 0 .876.391.876.876a.875.875 0 0 1-1.752 0c0-.485.39-.876.876-.876zm4.6 0c.484 0 .876.391.876.876a.875.875 0 0 1-1.751 0c0-.485.39-.876.875-.876z"/></svg>',
+  // 小红书没有标准 brand mark · 用心形 (其 app icon + 视觉系统的核心符号) · 通用易识
+  xhs:     '<svg class="icon-brand" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
 };
 
 // @username 渲染成可点击链接 (要求 user 存在)
@@ -1401,11 +1417,11 @@ function renderProject(owner, slug) {
     <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
       <div class="serif mb-3" style="color: var(--sepia); font-size: 14px;">把这个项目带走 · 离开社区也行,你的东西永远在</div>
       <div class="flex flex-wrap gap-4 text-base">
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('x')">${ICONS.share}分享到 X</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('xhs')">${ICONS.share}分享到小红书</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('wechat')">${ICONS.share}分享到微信</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('copy')">${ICONS.copy}复制项目链接</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.copy}只复制产物 URL</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('x')">${ICONS.x}分享到 X</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('xhs')">${ICONS.xhs}分享到小红书</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('wechat')">${ICONS.wechat}分享到微信</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('copy')">${ICONS.link}复制项目链接</span>
+        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.external}只复制产物 URL</span>
       </div>
     </div>
   `;
