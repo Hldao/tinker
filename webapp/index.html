@@ -481,7 +481,7 @@
     </nav>
   </div>
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
-    <span>第 1 期 · 试运行</span>
+    <span>第 1 期 · 试运行 · <span id="masthead-handle" style="color: var(--vermilion); cursor: pointer;" onclick="openSetHandle()" title="换个 handle">@-</span></span>
     <span id="masthead-date">2026 / 06 / 05</span>
   </div>
 </header>
@@ -509,6 +509,17 @@
 
   <section class="screen" id="screen-about">
     <div class="max-w-2xl mx-auto">
+
+      <div class="mb-8" style="background: var(--paper); padding: 16px 20px; border-left: 3px solid var(--vermilion);">
+        <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.1em;">ALPHA · 试运行</div>
+        <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.65;">
+          你看到的是非常早期的 alpha · 数据存在维护者的本地 server (通过 ngrok 暴露) · 重启会丢 · 没有真实认证。
+          适合<strong>团队内部互相测试</strong> · 不适合放真实账号 / 重要数据。
+        </p>
+        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px; font-style: italic;">
+          感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
+        </p>
+      </div>
 
       <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">关 于</div>
 
@@ -696,6 +707,25 @@
   </div>
 </div>
 
+<!-- SET HANDLE modal — 第一次访问时 "你是谁" + 之后换 handle -->
+<div id="modal-set-handle" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 480px;">
+    <h3 class="modal-title">你是谁?</h3>
+    <p class="modal-sub">填一个 handle 开张你的工作室 · alpha 期没认证 · 跟小伙伴约定不撞就好</p>
+    <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">@handle (字母 / 数字 / 下划线 / 中文)</label>
+      <input id="sh-handle" class="input-bare" placeholder="比如 zhang3 / wangxiaoming">
+    </div>
+    <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">一句话 — 我在做的事 (可选)</label>
+      <input id="sh-tagline" class="input-bare" placeholder="比如 用 AI 帮我妈做小红书">
+    </div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="submitSetHandle()" class="btn-act-primary">开张 →</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT WORKSHOP modal — 改工作室 tagline -->
 <div id="modal-edit-workshop" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
@@ -849,7 +879,7 @@ const NOTIF_TEMPLATES = {
 };
 
 let state;
-const currentUser = { handle: 'daodao' };
+const currentUser = { handle: localStorage.getItem('tinker_my_handle') || null };
 let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
 let currentToolFilter = 'all';
 let trackingMode = false;
@@ -951,23 +981,35 @@ function extractMentions(text) {
   }
   return Array.from(out);
 }
-function parseAgoOrder(a){
-  if(a.includes('刚刚'))return 0;
-  if(a.includes('分钟'))return parseInt(a);
-  if(a.includes('小时'))return 60+parseInt(a);
-  if(a.includes('昨天'))return 60*24;
-  if(a.includes('天'))return 60*24*parseInt(a);
-  if(a.includes('周'))return 60*24*7*parseInt(a);
-  return 9999;
+// 时间 helpers — 接受 timestamp (Date.now() 格式)
+// parseAgoOrder: 返回"距今多少分钟",越小=越新 (用于排序)
+function parseAgoOrder(at){
+  if (!at) return 9999999;
+  return Math.floor((Date.now() - at) / 60000);
 }
-function shortAgo(a){
-  if(a.includes('刚刚'))return '刚';
-  if(a.includes('分钟'))return parseInt(a)+'m';
-  if(a.includes('小时'))return parseInt(a)+'h';
-  if(a.includes('昨天'))return '昨天';
-  if(a.includes('天'))return parseInt(a)+' 天';
-  if(a.includes('周'))return parseInt(a)+' 周';
-  return a;
+// shortAgo: 紧凑 feed/timeline 显示 ("10m", "3h", "昨天", "3 天")
+function shortAgo(at){
+  if (!at) return '';
+  const diff = Date.now() - at;
+  if (diff < 60*1000) return '刚';
+  if (diff < 60*60*1000) return Math.floor(diff / 60000) + 'm';
+  if (diff < 24*60*60*1000) return Math.floor(diff / 3600000) + 'h';
+  if (diff < 2*24*60*60*1000) return '昨天';
+  if (diff < 7*24*60*60*1000) return Math.floor(diff / 86400000) + ' 天';
+  if (diff < 30*24*60*60*1000) return Math.floor(diff / 604800000) + ' 周';
+  return Math.floor(diff / 2592000000) + ' 月';
+}
+// timeAgo: 长形式说明文 ("10 分钟前" / "昨天" / "3 天前")
+function timeAgo(at){
+  if (!at) return '';
+  const diff = Date.now() - at;
+  if (diff < 60*1000) return '刚刚';
+  if (diff < 60*60*1000) return Math.floor(diff / 60000) + ' 分钟前';
+  if (diff < 24*60*60*1000) return Math.floor(diff / 3600000) + ' 小时前';
+  if (diff < 2*24*60*60*1000) return '昨天';
+  if (diff < 7*24*60*60*1000) return Math.floor(diff / 86400000) + ' 天前';
+  if (diff < 30*24*60*60*1000) return Math.floor(diff / 604800000) + ' 周前';
+  return Math.floor(diff / 2592000000) + ' 个月前';
 }
 
 /* ============ FEED ============ */
@@ -976,7 +1018,7 @@ function getFeedEvents() {
   state.projects.forEach(p => p.updates.forEach((u, idx) => {
     events.push({
       owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
-      text:u.text, ago:u.ago, agoOrder:parseAgoOrder(u.ago),
+      text:u.text, at:u.at, agoOrder:parseAgoOrder(u.at),
       tools:p.tools, status:p.status,
       images: u.images || null,
     });
@@ -1037,7 +1079,7 @@ function renderFeed() {
     const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
     const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
     entry.innerHTML = `
-      <div class="entry-time mono">${shortAgo(e.ago)}</div>
+      <div class="entry-time mono">${shortAgo(e.at)}</div>
       <div>
         <div class="entry-headline">
           <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
@@ -1071,7 +1113,7 @@ function renderWorkshop(handle) {
   const alsoDoing = projects.filter(p=>p.status==='paused');
   const done      = projects.filter(p=>['done','archive'].includes(p.status));
   const recentEvents = [];
-  projects.forEach(p => p.updates.slice(0,2).forEach(u => recentEvents.push({projectName:p.name,projectSlug:p.slug,text:u.text,ago:u.ago,agoOrder:parseAgoOrder(u.ago)})));
+  projects.forEach(p => p.updates.slice(0,2).forEach(u => recentEvents.push({projectName:p.name,projectSlug:p.slug,text:u.text,at:u.at,agoOrder:parseAgoOrder(u.at)})));
   recentEvents.sort((a,b)=>a.agoOrder-b.agoOrder);
   const isMe = handle === currentUser.handle;
 
@@ -1112,7 +1154,16 @@ function renderWorkshop(handle) {
           <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNewProject()">+ 新项目</span>
         </span>` : ''}
       </div>
-      ${recent.length === 0 ? '<p class="serif py-8 text-center" style="color: var(--sepia);">' + (isMe ? '还没有进行中的项目 — 开一个?' : '最近没有进行中的项目') + '</p>' : renderPcards(recent)}
+      ${recent.length === 0 ? (isMe ? `
+        <div class="py-10 text-center" style="background: var(--paper); border: 1px dashed var(--rule); border-radius: 4px;">
+          <p class="serif" style="color: var(--ink); font-size: 17px; margin-bottom: 12px;">你 @${handle} 已经开张了 ✦</p>
+          <p class="serif" style="color: var(--sepia); font-size: 14px; margin-bottom: 18px; line-height: 1.6;">第一步:挂上一个你用 AI 做的东西<br>必须有可访问产物 (v0 / Bolt / Claude Artifact / 自部署 URL 等)</p>
+          <div class="flex justify-center gap-4 items-center flex-wrap">
+            <button onclick="openNewProject()" class="btn-act-primary">挂一个项目 →</button>
+            <span class="react-action serif" style="color: var(--sepia); font-size: 14px;" onclick="showScreen('onboard')">或先去入场仪式做个 5 分钟的</span>
+          </div>
+        </div>
+      ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent)}
     </div>
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
     ${done.length > 0 ? `<div class="mb-12"><div class="section-label">做过的 (${done.length})</div>${renderPcards(done)}</div>` : ''}
@@ -1135,7 +1186,7 @@ function renderWorkshop(handle) {
       <div class="section-label">最近的动静</div>
       ${recentEvents.slice(0,5).map(e => `
         <div class="entry" onclick="showScreen('project','${handle}','${e.projectSlug}')">
-          <div class="entry-time mono">${shortAgo(e.ago)}</div>
+          <div class="entry-time mono">${shortAgo(e.at)}</div>
           <div>
             <div class="mono text-xs mb-1" style="color: var(--sepia);">在「${escapeHtml(e.projectName)}」</div>
             <div class="entry-text">${renderMentions(e.text)}</div>
@@ -1208,7 +1259,7 @@ function renderProject(owner, slug) {
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
         return `
           <div class="tl-entry">
-            <div class="tl-time">${shortAgo(u.ago)}</div>
+            <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
@@ -1230,7 +1281,7 @@ function renderProject(owner, slug) {
               ${usedByList.length > 0 ? `
                 <div class="tl-used-list">
                   ${usedByList.map(used => `
-                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${used.ago}</span></div>
+                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
                   `).join('')}
                 </div>
               ` : ''}
@@ -1286,7 +1337,7 @@ function renderProject(owner, slug) {
       ${p.notes.map((n, nIdx) => `
         <div class="note-entry">
           <div class="note-head">
-            <span class="nu">@${n.user}</span> · ${n.ago}
+            <span class="nu">@${n.user}</span> · ${timeAgo(n.at)}
             ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">${ICONS.undo}撤回</span>` : ''}
           </div>
           <div class="note-text">"${renderMentions(n.text)}"</div>
@@ -1337,7 +1388,7 @@ function renderOnboard() {
 function renderNotifications() {
   const root = document.getElementById('notif-list');
   const me = currentUser.handle;
-  const list = (state.notifications || []).filter(n => n.target === me).sort((a,b) => parseAgoOrder(a.ago) - parseAgoOrder(b.ago));
+  const list = (state.notifications || []).filter(n => n.target === me).sort((a,b) => parseAgoOrder(a.at) - parseAgoOrder(b.at));
 
   if (list.length === 0) {
     root.innerHTML = '<p class="serif py-12 text-center" style="color: var(--sepia);">还没有人反馈你的项目 — 等真实复用发生</p>';
@@ -1348,7 +1399,7 @@ function renderNotifications() {
     const tmpl = NOTIF_TEMPLATES[n.type] ? NOTIF_TEMPLATES[n.type](n) : { verb: n.type, verbColor: 'var(--sepia)' };
     return `
       <div class="notif-entry ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.id}','${n.projectId}')">
-        <div class="notif-time">${shortAgo(n.ago)}</div>
+        <div class="notif-time">${shortAgo(n.at)}</div>
         <div>
           <div class="notif-text">
             <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${n.fromUser}')">@${n.fromUser}</span>
@@ -1463,7 +1514,7 @@ function doSearch(q) {
       <div class="search-result-label">进展 (${updates.length}${updates.length > 8 ? ' · 显示前 8 条' : ''})</div>
       ${shown.map(({p, u}) => `
         <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('project','${p.owner}','${p.slug}');">
-          <div><span class="sri-meta">@${p.owner} / ${escapeHtml(p.name)} · ${shortAgo(u.ago)}</span></div>
+          <div><span class="sri-meta">@${p.owner} / ${escapeHtml(p.name)} · ${shortAgo(u.at)}</span></div>
           <div class="sri-text">${escapeHtml(u.text.length > 120 ? u.text.slice(0, 120) + '...' : u.text)}</div>
         </div>
       `).join('')}
@@ -1818,12 +1869,14 @@ function openPickProject() {
   if (myActive.length === 0 && myPaused.length === 0) {
     // 完全没项目 — 引导开新项目
     listRoot.innerHTML = `
-      <p class="serif mb-4" style="color: var(--sepia); font-size: 15px; line-height: 1.6;">
-        你还没有项目 — 想发动静,得先有项目。<br>
-        没有项目就发不了任何东西 = 反"水帖" / §9 反 AI 装大佬。
+      <p class="serif mb-4" style="color: var(--ink); font-size: 16px; line-height: 1.6;">
+        你还没有项目 · 想记一笔得先有项目。
       </p>
-      <div class="flex gap-4 items-center mt-5">
-        <button onclick="closeModal('modal-pick-project'); openNewProject();" class="btn-act-primary">+ 开一个新项目</button>
+      <p class="serif mb-4" style="color: var(--sepia); font-size: 14px;">
+        在 Tinker 不能"水帖" · 每条动静必须挂到具体项目下 · 这是产品的边界。
+      </p>
+      <div class="flex gap-4 items-center mt-5 flex-wrap">
+        <button onclick="closeModal('modal-pick-project'); openNewProject();" class="btn-act-primary">挂一个项目 →</button>
         <span class="react-action serif" onclick="closeModal('modal-pick-project'); showScreen('onboard');" style="color: var(--sepia); font-size: 14px;">或先去入场仪式做个 5 分钟的</span>
       </div>
     `;
@@ -1834,7 +1887,7 @@ function openPickProject() {
   let html = '';
   if (myActive.length > 0) {
     html += myActive.map(p => {
-      const lastUpdate = p.updates.length > 0 ? '上次记 ' + shortAgo(p.updates[0].ago) : '还没记过';
+      const lastUpdate = p.updates.length > 0 ? '上次记 ' + shortAgo(p.updates[0].at) : '还没记过';
       return `
         <div class="pick-project-item" onclick="closeModal('modal-pick-project'); openUpdate('${p.id}');">
           <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
@@ -2045,16 +2098,62 @@ document.addEventListener('keydown', (e) => {
     d.getFullYear() + ' / ' + String(d.getMonth()+1).padStart(2,'0') + ' / ' + String(d.getDate()).padStart(2,'0');
 })();
 
-// 初始化 — 从 server 拉 state · 然后 render feed
+function refreshMastheadHandle() {
+  const el = document.getElementById('masthead-handle');
+  if (el) el.textContent = currentUser.handle ? '@' + currentUser.handle : '@-';
+}
+
+// 初始化 — 从 server 拉 state · 检查 handle · 然后 render feed
 (async function init() {
   try {
     state = await fetchState();
+    // 第一次来 / 没设过 handle → 弹"你是谁"
+    if (!currentUser.handle) {
+      openSetHandle();
+      return;
+    }
+    // 已经有 handle → 确保 server 知道这个 user (alpha 期容错)
+    if (!state.users[currentUser.handle]) {
+      await apiAction('setUserHandle', { handle: currentUser.handle });
+      state = await fetchState();
+    }
+    refreshMastheadHandle();
     updateUnreadBadge();
     showScreen('feed');
   } catch (e) {
     document.body.innerHTML = '<div style="padding:60px;font-family:Newsreader,serif;color:#1c1917;text-align:center"><h1 style="font-size:32px">连不上 server</h1><p style="color:#78716c">server 跑起来了吗? 在 /Users/dadao/tinker/server 里 <code>node index.js</code> · 默认端口 8788</p></div>';
   }
 })();
+
+function openSetHandle() {
+  document.getElementById('sh-handle').value = currentUser.handle || '';
+  document.getElementById('sh-tagline').value = '';
+  document.getElementById('modal-set-handle').classList.remove('hidden');
+  setTimeout(() => document.getElementById('sh-handle').focus(), 80);
+}
+
+async function submitSetHandle() {
+  const handle = (document.getElementById('sh-handle').value || '').trim();
+  const tagline = (document.getElementById('sh-tagline').value || '').trim();
+  if (!handle) { showToast('handle 不能空'); return; }
+  if (!/^[a-zA-Z0-9_一-龥]+$/.test(handle)) { showToast('handle 只能字母/数字/下划线/中文'); return; }
+  try {
+    await apiAction('setUserHandle', { handle, tagline });
+    localStorage.setItem('tinker_my_handle', handle);
+    currentUser.handle = handle;
+    state = await fetchState();
+    const isNew = !state.users[handle] || (state.users[handle] && !state.projects.some(p => p.owner === handle));
+    closeModal('modal-set-handle');
+    refreshMastheadHandle();
+    updateUnreadBadge();
+    showScreen('feed');
+    if (isNew) {
+      showToast('你好 @' + handle + ' · 看完动静后,去"我的工作室"开张');
+    } else {
+      showToast('欢迎回来 @' + handle);
+    }
+  } catch (e) { showToast(e.message); }
+}
 </script>
 </body>
 </html>

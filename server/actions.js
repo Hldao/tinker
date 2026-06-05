@@ -24,7 +24,7 @@ function addNotification(state, { target, fromUser, type, projectId, projectName
     id: 'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
     target, fromUser, type, projectId, projectName,
     extra: extra || null,
-    ago: '刚刚', read: false,
+    at: Date.now(), read: false,
   });
 }
 
@@ -89,7 +89,7 @@ function addUpdate(state, { projectId, text, images, prompt, currentUser = 'daod
   if (!p) throw new Error('项目不存在');
   if (!text || !text.trim()) throw new Error('记一笔不能空');
   if (p.owner !== currentUser) throw new Error('只能给自己的项目记一笔');
-  const update = { text: text.trim(), ago: '刚刚' };
+  const update = { text: text.trim(), at: Date.now() };
   if (images && images.length > 0) update.images = images;
   if (prompt) update.prompt = prompt;
   p.updates.unshift(update);
@@ -182,7 +182,7 @@ function markMethodUsed(state, { projectId, updateIdx, note, currentUser = 'daod
     return { action: 'undo' };
   }
   if (!u.usedBy) u.usedBy = [];
-  u.usedBy.unshift({ user: currentUser, note: (note || '').trim(), ago: '刚刚' });
+  u.usedBy.unshift({ user: currentUser, note: (note || '').trim(), at: Date.now() });
   const extra = (note && note.trim()) || ('用了「' + p.name + '」第 ' + (updateIdx + 1) + ' 条的方法');
   addNotification(state, {
     target: p.owner, fromUser: currentUser, type: 'methodUsed',
@@ -199,7 +199,7 @@ function addNote(state, { projectId, text, images, currentUser = 'daodao' }) {
   const p = state.projects.find(x => x.id === projectId);
   if (!p) throw new Error('项目不存在');
   if (!text || !text.trim()) throw new Error('便签是空的 — 图片是辅助 · 文字才是核心');
-  const note = { user: currentUser, text: text.trim(), ago: '刚刚' };
+  const note = { user: currentUser, text: text.trim(), at: Date.now() };
   if (images && images.length > 0) note.images = images;
   p.notes.unshift(note);
   // 给项目 owner 发 noted 通知 (排除作者本人)
@@ -253,6 +253,24 @@ function editTagline(state, { tagline, currentUser = 'daodao' }) {
   return state.users[currentUser];
 }
 
+// 新用户开张工作室 / 已存在则更新 tagline
+// alpha 期 trust user · 没有 handle 冲突保护
+function setUserHandle(state, { handle, tagline }) {
+  if (!handle || !/^[a-zA-Z0-9_一-龥]+$/.test(handle)) {
+    throw new Error('handle 只能是字母 / 数字 / 下划线 / 中文');
+  }
+  const trimmedTagline = (tagline || '').trim();
+  if (!state.users[handle]) {
+    state.users[handle] = {
+      name: handle,
+      tagline: trimmedTagline || '刚进来捣鼓...',
+    };
+  } else if (trimmedTagline) {
+    state.users[handle].tagline = trimmedTagline;
+  }
+  return state.users[handle];
+}
+
 module.exports = {
   addProject, changeProjectStatus,
   addUpdate, editUpdate, deleteUpdate,
@@ -260,4 +278,5 @@ module.exports = {
   addNote, deleteNote,
   markAllRead,
   editTagline,
+  setUserHandle,
 };

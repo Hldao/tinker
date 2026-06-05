@@ -106,8 +106,37 @@ const AVAILABLE_TOOLS = [
   'Tailwind', 'Supabase', 'Vercel',
 ];
 
+// 把 SEED 数据里的 ago 字符串转为真实 timestamp (at)
+// alpha 期 SEED 时间基于 server 启动时间偏移
+function ago2at(ago, now) {
+  if (typeof ago !== 'string') return now;
+  if (ago === '刚刚') return now;
+  const min = 60 * 1000, hr = 60 * min, day = 24 * hr, week = 7 * day;
+  if (ago.includes('分钟前')) return now - (parseInt(ago) || 1) * min;
+  if (ago.includes('小时前')) return now - (parseInt(ago) || 1) * hr;
+  if (ago === '昨天') return now - day;
+  if (ago.includes('天前')) return now - (parseInt(ago) || 1) * day;
+  if (ago.includes('周前')) return now - (parseInt(ago) || 1) * week;
+  if (ago.includes('个月前')) return now - (parseInt(ago) || 1) * 30 * day;
+  return now;
+}
+
+function convertAgoToAt(data) {
+  const now = Date.now();
+  (data.projects || []).forEach(p => {
+    (p.updates || []).forEach(u => {
+      if (u.ago) u.at = ago2at(u.ago, now);
+      delete u.ago;
+      if (u.usedBy) u.usedBy.forEach(x => { if (x.ago) x.at = ago2at(x.ago, now); delete x.ago; });
+    });
+    (p.notes || []).forEach(n => { if (n.ago) n.at = ago2at(n.ago, now); delete n.ago; });
+  });
+  (data.notifications || []).forEach(n => { if (n.ago) n.at = ago2at(n.ago, now); delete n.ago; });
+  return data;
+}
+
 function getSeedData() {
-  return {
+  return convertAgoToAt({
     users: {
       'daodao':   { name: '捣鼓自己',  tagline: '在做 Tinker · 这个产品本身' },
       'zhangsan': { name: '张三',     tagline: '用 AI 帮我妈做小红书' },
@@ -270,7 +299,7 @@ function getSeedData() {
         ago:'昨天', read:false },
     ],
     availableTools: AVAILABLE_TOOLS,
-  };
+  });
 }
 
 module.exports = { getSeedData, AVAILABLE_TOOLS };
