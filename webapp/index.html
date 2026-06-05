@@ -1381,11 +1381,7 @@ function renderProject(owner, slug) {
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
       <p class="pdesc">${escapeHtml(p.desc)}</p>
-      <div class="pheader-action-row">
-        <div class="pmeta-line">
-          ${p.tools.map(t=>`<span>${t}</span>`).join('<span style="color: var(--sepia-light);">·</span>')}
-          ${p.githubLink ? `<span style="color: var(--sepia-light);">·</span><a class="ink-link" href="${p.githubLink}" target="_blank" style="opacity: 0.7;">github</a>` : ''}
-        </div>
+      <div class="pheader-action-row" style="justify-content: flex-end;">
         <a href="${p.productLink}" target="_blank" class="try-cta">
           <span>去试试</span>
           <span class="try-cta-arrow">→</span>
@@ -1511,6 +1507,14 @@ function renderProject(owner, slug) {
         </div>
       `).join('')}
     </div>
+
+    ${(p.tools && p.tools.length > 0) || p.githubLink ? `
+      <div class="mt-12" style="color: var(--sepia); font-size: 12px;">
+        ${p.tools && p.tools.length > 0 ? `用 ${p.tools.join(' · ')} 做的` : ''}
+        ${p.tools && p.tools.length > 0 && p.githubLink ? `<span style="color: var(--sepia-light); margin: 0 8px;">·</span>` : ''}
+        ${p.githubLink ? `<a href="${p.githubLink}" target="_blank" style="color: var(--sepia); text-decoration: underline; text-decoration-color: var(--sepia-light); text-underline-offset: 3px;">github</a>` : ''}
+      </div>
+    ` : ''}
 
     <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
       <div class="serif mb-3" style="color: var(--sepia); font-size: 14px;">把这个项目带走 · 离开社区也行,你的东西永远在</div>
