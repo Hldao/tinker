@@ -17,12 +17,14 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const pinoHttp = require('pino-http');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 
 const { logger } = require('./logger');
 const { JsonStorage } = require('./storage');
 const { getSeedData, AVAILABLE_TOOLS, migrateState } = require('./seed');
 const actions = require('./actions');
+const auth = require('./auth');
 
 // ============================================
 // 配置
@@ -95,6 +97,8 @@ if (CORS_ORIGINS.length > 0) {
 }
 
 app.use(express.json({ limit: BODY_LIMIT }));
+app.use(cookieParser());
+app.use(auth.attachSession);  // req.user / req.session 全局可用
 
 // ============================================
 // Rate limiting
@@ -114,6 +118,15 @@ const stateLimiter = rateLimit({
   message: { error: '太快了 · 请稍后再试' },
 });
 
+// 发邮件 · 严格限流 · 防滥用 (1 分钟最多 3 次 / IP)
+const sendLinkLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 3,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: '发太快了 · 等 1 分钟再试' },
+});
+
 // ============================================
 // API
 // ============================================
@@ -131,6 +144,76 @@ app.get('/api/health', (req, res) => {
     env: process.env.NODE_ENV || 'development',
   });
 });
+
+// ============================================
+// AUTH endpoints
+// ============================================
+
+// 发 magic link
+app.post('/api/auth/send-link', sendLinkLimiter, async (req, res, next) => {
+  try {
+    const { email } = req.body || {};
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const r = await auth.sendMagicLink({ email, baseUrl });
+    res.json({ ok: true, sentTo: r.sentTo });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'send-link failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 验证 magic link · 设 cookie · 跳回 webapp
+app.get('/api/auth/verify', (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send('缺 token');
+  try {
+    const { sessionId, isNew } = auth.verifyMagicLink({
+      token,
+      userAgent: req.get('user-agent'),
+    });
+    res.cookie(auth.COOKIE_NAME, sessionId, {
+      httpOnly: true,
+      secure: req.secure,                       // HTTPS 时才安全标记
+      sameSite: 'lax',
+      maxAge: auth.SESSION_TTL_MS,
+      path: '/',
+    });
+    // 跳回主页 · webapp 会读 cookie 判断登录态 · 新用户 ?welcome=1 触发欢迎流程
+    res.redirect(isNew ? '/?welcome=1' : '/');
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'verify failed');
+    // 返回简单 HTML · 用户看得到失败原因
+    res.status(400).send(`<!doctype html><meta charset="utf-8"><body style="font-family:sans-serif;padding:60px;text-align:center;color:#1c1917"><h1 style="font-size:24px">登录失败</h1><p style="color:#78716c">${e.message}</p><p style="margin-top:30px"><a href="/" style="color:#c2410c">回 Tinker 主页 →</a></p></body>`);
+  }
+});
+
+// 当前 session · 给 webapp 用 (开机查一次知道登录态)
+app.get('/api/auth/me', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: '未登录' });
+  res.json({ user: req.user });
+});
+
+// 新用户欢迎流程 · 改 handle + tagline · 标记 welcomed
+app.post('/api/auth/welcome', auth.requireSession, (req, res) => {
+  try {
+    const { handle, tagline } = req.body || {};
+    const updated = auth.completeWelcome({ userId: req.user.id, handle, tagline });
+    res.json({ ok: true, user: updated });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 登出
+app.post('/api/auth/logout', (req, res) => {
+  if (req.session) auth.destroySession(req.session.sessionId);
+  res.clearCookie(auth.COOKIE_NAME, { path: '/' });
+  res.json({ ok: true });
+});
+
+// ============================================
+// 业务 API
+// ============================================
 
 app.get('/api/state', stateLimiter, (req, res) => {
   res.json(state);
