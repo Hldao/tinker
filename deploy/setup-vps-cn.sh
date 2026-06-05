@@ -85,6 +85,23 @@ if ! command -v docker >/dev/null; then
   $SUDO usermod -aG docker $USER 2>/dev/null || true
 fi
 
+# 配 Docker Hub 国内镜像源 (国内服务器 docker pull 卡 docker.io 必备)
+if [ ! -f /etc/docker/daemon.json ] || ! grep -q "registry-mirrors" /etc/docker/daemon.json 2>/dev/null; then
+  log "配 Docker 国内镜像源 (DaoCloud / 1Panel / rat.dev)..."
+  $SUDO mkdir -p /etc/docker
+  $SUDO tee /etc/docker/daemon.json > /dev/null <<'EOF'
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io",
+    "https://docker.1panel.live",
+    "https://hub.rat.dev"
+  ]
+}
+EOF
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl restart docker
+fi
+
 if ! $SUDO docker compose version >/dev/null 2>&1; then
   err "docker compose plugin 不可用 · 装新版 docker"
 fi
