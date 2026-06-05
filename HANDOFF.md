@@ -86,8 +86,8 @@ ls -la /Users/dadao/tinker/server/backups/
 # 健康检查
 curl -s http://localhost:8788/api/health | python3 -m json.tool
 
-# 跑测试
-cd /Users/dadao/tinker/server && node --test test/
+# 跑测试 (注意用 glob 不用目录)
+cd /Users/dadao/tinker/server && node --test test/*.test.js
 ```
 
 ---

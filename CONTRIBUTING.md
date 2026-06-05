@@ -27,7 +27,7 @@ tinker login
 
 ```bash
 cd server
-node --test test/          # 全部测试 (built-in · 无依赖)
+node --test test/*.test.js   # 全部测试 (built-in · 无依赖)
 node --test test/actions.test.js   # 单文件
 ```
 
