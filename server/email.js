@@ -16,6 +16,8 @@ const transporter = SMTP_HOST && SMTP_USER && SMTP_PASSWORD
       port: SMTP_PORT,
       secure: SMTP_PORT === 465,  // 465 = SSL · 587/25 = STARTTLS
       auth: { user: SMTP_USER, pass: SMTP_PASSWORD },
+      authMethod: 'LOGIN',   // 阿里云推荐 LOGIN · 默认 PLAIN 不接受
+      name: SMTP_USER.split('@')[1] || 'tinker.local',  // EHLO 用域名 · 跟发件人匹配
       pool: true,            // 连接池 · 避免每封信都重新握手
       maxConnections: 3,
       maxMessages: 100,
