@@ -184,6 +184,15 @@ DigitalOcean / Hetzner / Vultr 都行。需要:
 
 ---
 
+## 完整文档
+
+- [`docs/01-product-spec.md`](docs/01-product-spec.md) — 产品哲学 + 9 个判断问题 + 不做清单 (必读)
+- [`docs/02-api.md`](docs/02-api.md) — REST API 完整参考
+- [`docs/03-deployment.md`](docs/03-deployment.md) — 部署 runbook (VPS / Docker / Caddy)
+- [`docs/04-roadmap.md`](docs/04-roadmap.md) — 优先级判断备忘
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — 协作指南 (PR / 测试 / 代码风格)
+- [`CHANGELOG.md`](CHANGELOG.md) — 版本变更记录
+
 ## License
 
 MIT (or whatever you decide)
