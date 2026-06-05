@@ -139,6 +139,11 @@ fi
 log "Build docker image..."
 $SUDO docker compose build
 
+# 给 ./data 目录写权限 (容器里非 root 用户写不进 root 创建的目录)
+log "准备 data 目录权限..."
+$SUDO mkdir -p data
+$SUDO chmod 777 data
+
 log "启动 Tinker..."
 $SUDO docker compose up -d
 
