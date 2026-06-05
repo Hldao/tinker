@@ -1445,41 +1445,56 @@ function renderProject(owner, slug) {
       }).join('')}
     </div>
 
-    ${(p.reactions.tinkered.length > 0 || p.reactions.wantToTry.length > 0 || !isMine) ? `
-      <div class="mb-12 psect">
-        <div class="section-label">反馈与社群</div>
-
-        ${p.reactions.tinkered.length > 0 ? `
-          <div class="sub-label">接走过 · ${p.reactions.tinkered.length}</div>
-          ${p.reactions.tinkered.map(t=>`
-            <div class="ref-entry">
-              <span class="arrow">→</span>
-              <span class="ref-user">@${t.user}</span>
-              <span style="color: var(--sepia);"> 做了 </span>
-              <span class="ref-name">「${escapeHtml(t.name)}」</span>
+    ${(() => {
+      const hasReactions = p.reactions.tinkered.length > 0 || p.reactions.wantToTry.length > 0;
+      // 3 种状态:
+      //   1. 自己看自己项目 + 没反馈 → 啥也不显示
+      //   2. 访客看 + 没反馈 → 简单一句邀请 + 按钮 (无大标题)
+      //   3. 任何人看 + 有反馈 → 完整反馈区
+      if (!hasReactions && isMine) return '';
+      if (!hasReactions && !isMine) {
+        // 状态 2: 邀请态
+        return `
+          <div class="mb-12" style="padding-top: 12px;">
+            <p style="color: var(--sepia); font-size: 14px; margin-bottom: 12px;">还没人留反馈 · 你也试试?</p>
+            <div class="react-line" style="padding: 4px 0;">
+              <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
+              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版 →</span>
             </div>
-          `).join('')}
-        ` : ''}
-
-        ${p.reactions.wantToTry.length > 0 ? `
-          <div class="sub-label">想试试 · ${p.reactions.wantToTry.length}</div>
-          <div class="serif" style="font-size: 15px; padding: 4px 0;">
-            ${p.reactions.wantToTry.map(u=>`<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
           </div>
-          <p class="text-xs serif" style="color: var(--sepia); margin-top: 6px;">你跑通了之后 ta 们会收到通知</p>
-        ` : ''}
-
-        ${!isMine ? `
-          <div class="sub-label">你对这个项目</div>
-          <div class="react-line" style="padding: 4px 0;">
-            你 —
-            <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
-            <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版 →</span>
-          </div>
-          <p class="text-xs serif" style="color: var(--sepia); margin-top: 6px;">「想试试」= ta 跑通了你会收到通知 · 显示具体是谁,不显示总数</p>
-        ` : ''}
-      </div>
-    ` : ''}
+        `;
+      }
+      // 状态 3: 完整反馈区
+      return `
+        <div class="mb-12 psect">
+          <div class="section-label">反馈区</div>
+          ${p.reactions.tinkered.length > 0 ? `
+            <div class="sub-label">接走过 · ${p.reactions.tinkered.length} 人</div>
+            ${p.reactions.tinkered.map(t=>`
+              <div class="ref-entry">
+                <span class="arrow">→</span>
+                <span class="ref-user">@${t.user}</span>
+                <span style="color: var(--sepia);"> 做了 </span>
+                <span class="ref-name">「${escapeHtml(t.name)}」</span>
+              </div>
+            `).join('')}
+          ` : ''}
+          ${p.reactions.wantToTry.length > 0 ? `
+            <div class="sub-label">想试试 · ${p.reactions.wantToTry.length} 人</div>
+            <div class="serif" style="font-size: 15px; padding: 4px 0;">
+              ${p.reactions.wantToTry.map(u=>`<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
+            </div>
+          ` : ''}
+          ${!isMine ? `
+            <div class="sub-label" style="margin-top: 20px;">↑ 你也来</div>
+            <div class="react-line" style="padding: 4px 0;">
+              <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
+              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版 →</span>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    })()}
 
     <div class="mb-12 psect">
       <div class="section-label flex items-center justify-between">
