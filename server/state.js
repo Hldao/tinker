@@ -95,7 +95,7 @@ function buildState({ targetUserId } = {}) {
   // 组装 projects · webapp 期望的形状
   const projectsOut = projectsRows.map(p => {
     const projectUpdates = (updatesByProject[p.id] || []).map(u => {
-      const out = { text: u.text, at: u.at };
+      const out = { id: u.id, text: u.text, at: u.at };
       if (u.prompt) out.prompt = u.prompt;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;
@@ -104,7 +104,7 @@ function buildState({ targetUserId } = {}) {
       return out;
     });
     const projectNotes = (notesByProject[p.id] || []).map(n => {
-      const out = { user: idToHandle[n.user_id], text: n.text, at: n.at };
+      const out = { id: n.id, user: idToHandle[n.user_id], text: n.text, at: n.at };
       const imgs = noteImagesMap[n.id];
       if (imgs && imgs.length > 0) out.images = imgs;
       return out;
@@ -139,10 +139,12 @@ function buildState({ targetUserId } = {}) {
   let notificationsOut = [];
   if (targetUserId) {
     const notifRows = db.prepare(`
-      SELECT n.id, n.target_user_id, n.from_user_id, n.type, n.project_id, n.extra, n.at, n.read_at,
-             p.name AS project_name
+      SELECT n.id, n.target_user_id, n.from_user_id, n.type, n.project_id, n.extra, n.anchor,
+             n.at, n.read_at,
+             p.name AS project_name, p.slug AS project_slug, owner_u.handle AS project_owner
       FROM notifications n
       LEFT JOIN projects p ON p.id = n.project_id
+      LEFT JOIN users owner_u ON owner_u.id = p.owner_id
       WHERE n.target_user_id = ?
       ORDER BY n.at DESC
       LIMIT 200
@@ -154,6 +156,9 @@ function buildState({ targetUserId } = {}) {
       type: n.type,
       projectId: n.project_id,
       projectName: n.project_name,
+      projectSlug: n.project_slug,
+      projectOwner: n.project_owner,
+      anchor: n.anchor,
       extra: n.extra,
       at: n.at,
       read: n.read_at !== null,

@@ -354,6 +354,25 @@
   .notif-text .npj { font-style: italic; color: var(--ink-soft); }
   .notif-extra { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--rule); }
   .notif-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-top: 6px; }
+  .notif-bulk-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0 16px; border-bottom: 1px dotted var(--rule); margin-bottom: 4px; }
+
+  /* update modal · 联动反馈闭环的两个可选项 */
+  .update-extras { margin-top: 14px; padding-top: 12px; border-top: 1px dotted var(--rule); display: flex; flex-direction: column; gap: 8px; }
+  .update-extra-row { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; padding: 6px 0; }
+  .update-extra-row:hover .extra-title { color: var(--vermilion); }
+  .update-extra-row input { margin-top: 4px; accent-color: var(--vermilion); cursor: pointer; }
+  .update-extras .extra-title { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink); display: block; transition: color 0.15s; }
+  .update-extras .extra-sub { font-family: 'Newsreader', serif; font-style: italic; font-size: 12px; color: var(--sepia); display: block; margin-top: 1px; }
+  .update-extras .disabled-row { opacity: 0.4; cursor: not-allowed; }
+  .update-extras .disabled-row input { pointer-events: none; }
+
+  /* anchor flash — 通知点开后跳到具体 update / note / tinkered 行 · 高亮 1.6s 提示位置 */
+  @keyframes anchorFlash {
+    0%   { background: rgba(194, 65, 12, 0.18); box-shadow: 0 0 0 8px rgba(194, 65, 12, 0.10); }
+    60%  { background: rgba(194, 65, 12, 0.06); box-shadow: 0 0 0 8px rgba(194, 65, 12, 0.0); }
+    100% { background: transparent; box-shadow: none; }
+  }
+  .flash-anchor { animation: anchorFlash 1.6s ease-out 1; border-radius: 4px; scroll-margin-top: 80px; }
 
   /* PICK PROJECT modal */
   .pick-project-item { padding: 16px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
@@ -693,6 +712,18 @@
       <div class="upload-hint">调 bug 截图 · 运行效果 · 设计稿 — 都可以 · 也可以直接粘贴 (⌘V)</div>
     </div>
 
+    <!-- v0.4: 跟反馈闭环联动的可选项 · 默认都不勾 · 不轰炸接走的人 -->
+    <div id="update-extras" class="update-extras">
+      <label class="update-extra-row">
+        <input type="checkbox" id="update-alsostuck">
+        <span><span class="extra-title">同时把状态改成「卡住」</span><span class="extra-sub">接走 / 想试试 你的人会被通知 · ta 们也许能搭把手</span></span>
+      </label>
+      <label class="update-extra-row" id="update-notify-row">
+        <input type="checkbox" id="update-notify">
+        <span><span class="extra-title">通知「接走 / 想试试」你的人</span><span class="extra-sub">跑通了大版本 / 重要更新 时勾 · 默认不发</span></span>
+      </label>
+    </div>
+
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">取消</button>
       <button onclick="submitUpdate()" class="btn-act-primary">记上</button>
@@ -974,6 +1005,8 @@ const NOTIF_TEMPLATES = {
   projectDone:  (n) => ({ verb:'跑通了 · 你之前说过想试试 · 现在能用了', verbColor:'var(--moss)' }),
   projectStuck: (n) => ({ verb:'卡住了 · 也许你能搭把手', verbColor:'var(--vermilion)' }),
   projectUnstuck:(n)=> ({ verb:'又动起来了 · 之前卡住的那个', verbColor:'var(--moss)' }),
+  projectMoved: (n) => ({ verb:'换了产物链接 ·',  verbColor:'var(--vermilion)' }),
+  ownerUpdate:  (n) => ({ verb:'记了一笔新进展 ·', verbColor:'var(--moss)' }),
   wantToTry:    (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
   noted:        (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
 };
@@ -1412,7 +1445,7 @@ function renderProject(owner, slug) {
         const usedByList = u.usedBy || [];
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
         return `
-          <div class="tl-entry">
+          <div class="tl-entry" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
               <div class="tl-text">${renderMentions(u.text)}</div>
@@ -1471,11 +1504,12 @@ function renderProject(owner, slug) {
           ${p.reactions.tinkered.length > 0 ? `
             <div class="sub-label">接走过 · ${p.reactions.tinkered.length} 人</div>
             ${p.reactions.tinkered.map(t=>`
-              <div class="ref-entry">
+              <div class="ref-entry" id="tinkered-${t.user}">
                 <span class="arrow">→</span>
-                <span class="ref-user">@${t.user}</span>
+                <span class="ref-user" onclick="showScreen('workshop','${t.user}')" style="cursor: pointer;">@${t.user}</span>
                 <span style="color: var(--sepia);"> 做了 </span>
-                <span class="ref-name">「${escapeHtml(t.name)}」</span>
+                ${t.link ? `<a href="${t.link}" target="_blank" class="ref-name">「${escapeHtml(t.name)}」</a>` : `<span class="ref-name">「${escapeHtml(t.name)}」</span>`}
+                ${t.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteTinkered('${p.id}')">${ICONS.undo}撤回</span>` : ''}
               </div>
             `).join('')}
           ` : ''}
@@ -1504,7 +1538,7 @@ function renderProject(owner, slug) {
       <p class="mb-4 text-xs serif" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
       ${p.notes.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
       ${p.notes.map((n, nIdx) => `
-        <div class="note-entry">
+        <div class="note-entry" id="note-${n.id}">
           <div class="note-head">
             <span class="nu">@${n.user}</span> · ${timeAgo(n.at)}
             ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">${ICONS.undo}撤回</span>` : ''}
@@ -1582,25 +1616,43 @@ function renderNotifications() {
     return;
   }
 
-  root.innerHTML = list.map(n => {
+  const unreadCount = list.filter(n => !n.read).length;
+  const header = unreadCount > 0 ? `
+    <div class="notif-bulk-row">
+      <span style="color: var(--sepia); font-family: 'JetBrains Mono', monospace; font-size: 11px;">
+        ${unreadCount} 条未读 · 点开任意一条会自动标已读
+      </span>
+      <span class="react-action serif italic" style="color: var(--sepia); font-size: 13px;" onclick="markAllNotifsRead()">全部标已读</span>
+    </div>
+  ` : '';
+
+  root.innerHTML = header + list.map(n => {
     const tmpl = NOTIF_TEMPLATES[n.type] ? NOTIF_TEMPLATES[n.type](n) : { verb: n.type, verbColor: 'var(--sepia)' };
+    const argAnchor = n.anchor ? n.anchor.replace(/'/g, "\\'") : '';
+    const argOwner = (n.projectOwner || '').replace(/'/g, "\\'");
+    const argSlug = (n.projectSlug || '').replace(/'/g, "\\'");
     return `
-      <div class="notif-entry ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.id}','${n.projectId}')">
+      <div class="notif-entry ${n.read ? '' : 'unread'}" onclick="onNotifClick('${n.id}','${argOwner}','${argSlug}','${argAnchor}')">
         <div class="notif-time">${shortAgo(n.at)}</div>
         <div>
           <div class="notif-text">
             <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${n.fromUser}')">@${n.fromUser}</span>
             <span style="color: ${tmpl.verbColor};"> ${tmpl.verb} </span>
-            <span class="npj">「${escapeHtml(n.projectName)}」</span>
+            <span class="npj">「${escapeHtml(n.projectName || '(项目已删除)')}」</span>
           </div>
-          ${n.extra ? `<div class="notif-extra">${n.type === 'tinkered' ? '做了 「' + escapeHtml(n.extra) + '」' : '"' + escapeHtml(n.extra) + '"'}</div>` : ''}
+          ${n.extra ? `<div class="notif-extra">${n.type === 'tinkered' ? '做了 「' + escapeHtml(n.extra) + '」' : (n.type === 'projectMoved' ? '新链接 ' + escapeHtml(n.extra) : '"' + escapeHtml(n.extra) + '"')}</div>` : ''}
         </div>
       </div>
     `;
   }).join('');
+}
 
-  // 自动标记已读 (§6 教育只说一次 · 不需要"标为已读"按钮)
-  apiAction('markAllRead', {}).then(() => updateUnreadBadge()).catch(()=>{});
+async function markAllNotifsRead() {
+  try {
+    await apiAction('markAllRead', {});
+    renderNotifications();
+    updateUnreadBadge();
+  } catch (e) { showToast(e.message); }
 }
 
 function updateUnreadBadge() {
@@ -1612,24 +1664,29 @@ function updateUnreadBadge() {
   else mark.classList.add('hidden');
 }
 
-function onNotifClick(notifId, projectId) {
-  const p = projectById(projectId);
-  if (p) showScreen('project', p.owner, p.slug);
+// 点开通知 · 1) 标已读 (后端单条) 2) 跳到项目页 3) 滚到 anchor + flash
+function onNotifClick(notifId, projectOwner, projectSlug, anchor) {
+  if (!projectOwner || !projectSlug) {
+    showToast('这个项目已经被删了');
+    return;
+  }
+  // optimistic mark as read · 失败也不阻塞跳转
+  apiAction('markNotifRead', { notifId }).then(() => updateUnreadBadge()).catch(()=>{});
+  showScreen('project', projectOwner, projectSlug);
+  if (anchor) {
+    // renderProject 已同步执行 · DOM 应该已经 ready
+    setTimeout(() => flashAnchor(anchor), 50);
+  }
 }
 
-function createNotification(target, fromUser, type, projectId, projectName, extra) {
-  if (!state.notifications) state.notifications = [];
-  // 去重: 同一用户对同一项目的同种通知只保留一条最新的
-  state.notifications = state.notifications.filter(n =>
-    !(n.target === target && n.fromUser === fromUser && n.type === type && n.projectId === projectId)
-  );
-  state.notifications.unshift({
-    id: 'n-' + Date.now(),
-    target, fromUser, type, projectId, projectName,
-    extra: extra || null,
-    ago: '刚刚', read: false,
-  });
-  updateUnreadBadge();
+// scroll 到 DOM id · 加 .flash-anchor 类闪烁 1.6s 提示
+function flashAnchor(anchor) {
+  const el = document.getElementById(anchor);
+  if (!el) return; // 锚点不存在 (内容被删 / 老通知) · 静默
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.remove('flash-anchor'); // 重置动画
+  void el.offsetWidth;
+  el.classList.add('flash-anchor');
 }
 
 /* ============ SEARCH ============ */
@@ -1922,6 +1979,19 @@ function openNote() {
   textEl.oninput = () => saveDraft(draftKey, { text: textEl.value });
   setTimeout(() => textEl.focus(), 50);
 }
+async function deleteTinkered(projectId) {
+  const p = projectById(projectId);
+  if (!p) return;
+  const mine = (p.reactions.tinkered || []).find(t => t.user === currentUser.handle);
+  if (!mine) return;
+  if (!confirm('撤回你的延伸版「' + mine.name + '」? · 原作者收到的通知也会一起清掉')) return;
+  try {
+    await apiAction('deleteTinkered', { projectId });
+    renderProject(p.owner, p.slug);
+    showToast('撤回了 — 没事');
+  } catch (e) { showToast(e.message); }
+}
+
 async function deleteNote(projectId, noteIdx) {
   const p = projectById(projectId);
   if (!p || !p.notes[noteIdx]) return;
@@ -1988,6 +2058,7 @@ function openUpdate(projectId) {
   document.getElementById('update-text').value = (draft && draft.text) || '';
 
   renderPendingImages();
+  resetUpdateExtras(currentUpdateCtx, /* isEdit */ false);
   document.getElementById('modal-update').classList.remove('hidden');
 
   // 输入时存草稿
@@ -1995,6 +2066,39 @@ function openUpdate(projectId) {
   textEl.oninput = () => saveDraft(draftKey, { text: textEl.value });
 
   setTimeout(() => textEl.focus(), 50);
+}
+
+// 整理 update modal 底部两个 checkbox 的可见性 + 默认值
+//   编辑模式: 整个 extras 区藏起来 (老进展不补发通知 · 状态切换走顶部"改状态")
+//   新建模式: alsoStuck 永远可勾;
+//             notifyTinkered 只有当项目有"想试试 / 接走" 人时才显示 · 否则没意义
+function resetUpdateExtras(projectId, isEdit) {
+  const wrap = document.getElementById('update-extras');
+  if (!wrap) return;
+  const cb1 = document.getElementById('update-alsostuck');
+  const cb2 = document.getElementById('update-notify');
+  cb1.checked = false;
+  cb2.checked = false;
+  if (isEdit) { wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  const p = projectById(projectId);
+  const hasAudience = p && (
+    (p.reactions.tinkered || []).length > 0 ||
+    (p.reactions.wantToTry || []).filter(u => u !== currentUser.handle).length > 0
+  );
+  const notifyRow = document.getElementById('update-notify-row');
+  if (hasAudience) {
+    notifyRow.classList.remove('disabled-row');
+  } else {
+    notifyRow.classList.add('disabled-row');
+  }
+  // 项目本来就在 stuck · alsoStuck 没意义
+  const alsoStuckRow = cb1.parentElement;
+  if (p && p.status === 'stuck') {
+    alsoStuckRow.classList.add('disabled-row');
+  } else {
+    alsoStuckRow.classList.remove('disabled-row');
+  }
 }
 
 /* ============ EDIT WORKSHOP / STATUS / UPDATE ============ */
@@ -2074,6 +2178,7 @@ function editUpdate(projectId, updateIdx) {
   pendingImages = u.images ? u.images.map(i => ({...i})) : [];
   document.getElementById('update-text').value = u.text;
   renderPendingImages();
+  resetUpdateExtras(projectId, /* isEdit */ true);
   document.getElementById('modal-update').classList.remove('hidden');
   setTimeout(() => document.getElementById('update-text').focus(), 50);
 }
@@ -2170,12 +2275,31 @@ async function submitUpdate() {
       showToast('改好了');
     } else {
       const p = projectById(currentUpdateCtx);
-      await apiAction('addUpdate', { projectId: p.id, text, images });
+      const alsoStuckEl = document.getElementById('update-alsostuck');
+      const notifyEl = document.getElementById('update-notify');
+      const alsoStuckRow = alsoStuckEl.parentElement;
+      const notifyRow = document.getElementById('update-notify-row');
+      const alsoStuck = alsoStuckEl.checked && !alsoStuckRow.classList.contains('disabled-row');
+      const notifyTinkered = notifyEl.checked && !notifyRow.classList.contains('disabled-row');
+      const audience =
+        (p.reactions.tinkered || []).length +
+        (p.reactions.wantToTry || []).filter(u => u !== currentUser.handle).length;
+      const r = await apiAction('addUpdate', {
+        projectId: p.id, text, images, alsoStuck, notifyTinkered,
+      });
       pendingImages = [];
       clearDraft('update-' + p.id);
       closeModal('modal-update');
       renderProject(p.owner, p.slug);
-      showToast(images ? '记上了 · 含 ' + images.length + ' 张图' : '记上了');
+      if (r && r.statusChanged) {
+        showToast(audience > 0
+          ? '记上了 · 状态改成卡住 · 已通知 ' + audience + ' 个关心你的人'
+          : '记上了 · 状态改成卡住');
+      } else if (notifyTinkered && audience > 0) {
+        showToast('记上了 · 已通知 ' + audience + ' 个关心你的人');
+      } else {
+        showToast(images ? '记上了 · 含 ' + images.length + ' 张图' : '记上了');
+      }
     }
   } catch (e) { showToast(e.message); }
 }

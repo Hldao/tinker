@@ -29,7 +29,8 @@ function extractMentions(text, excludeUserId) {
 }
 
 // 发通知 · 去重 (同 target+fromUser+type+project 只留最新)
-function notify({ targetUserId, fromUserId, type, projectId, extra }) {
+// anchor: 'update-<id>' / 'note-<id>' / 'tinkered-<handle>' · webapp 跳转后定位 + flash
+function notify({ targetUserId, fromUserId, type, projectId, extra, anchor }) {
   if (!targetUserId || targetUserId === fromUserId) return;
   db.prepare(`
     DELETE FROM notifications
@@ -38,12 +39,22 @@ function notify({ targetUserId, fromUserId, type, projectId, extra }) {
   `).run(targetUserId, fromUserId, type, projectId || null, projectId || null);
 
   db.prepare(`
-    INSERT INTO notifications (id, target_user_id, from_user_id, type, project_id, extra, at, read_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+    INSERT INTO notifications (id, target_user_id, from_user_id, type, project_id, extra, anchor, at, read_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
   `).run(
     'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-    targetUserId, fromUserId, type, projectId || null, extra || null, Date.now()
+    targetUserId, fromUserId, type, projectId || null, extra || null, anchor || null, Date.now()
   );
+}
+
+// 显式清掉一条通知 (升级承诺时用 · 比如 wantToTry → tinkered)
+function clearNotif({ targetUserId, fromUserId, type, projectId }) {
+  if (!targetUserId) return;
+  db.prepare(`
+    DELETE FROM notifications
+    WHERE target_user_id = ? AND from_user_id = ? AND type = ?
+      AND ((project_id IS NULL AND ? IS NULL) OR project_id = ?)
+  `).run(targetUserId, fromUserId, type, projectId || null, projectId || null);
 }
 
 function makeSlug() {
@@ -110,9 +121,11 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
   if (!isValidUrl(productLink)) throw new Error('需要 https:// 的可访问产物链接');
 
-  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  const p = db.prepare('SELECT owner_id, product_link FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
   if (p.owner_id !== currentUserId) throw new Error('只能改自己的项目');
+
+  const linkChanged = p.product_link !== productLink.trim();
 
   const txn = db.transaction(() => {
     db.prepare(`
@@ -129,6 +142,27 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
     }
   });
   txn();
+
+  // 产物链接换了 · 给"想试试 + 接走方"发通知 · ta 们引用的可能是旧链接
+  if (linkChanged) {
+    const wantToTryRows = db.prepare(
+      `SELECT user_id FROM reactions WHERE project_id = ? AND type = 'wantToTry'`
+    ).all(projectId);
+    const tinkeredRows = db.prepare(
+      `SELECT user_id FROM tinkered WHERE parent_project_id = ?`
+    ).all(projectId);
+    const targets = new Set([
+      ...wantToTryRows.map(r => r.user_id),
+      ...tinkeredRows.map(r => r.user_id),
+    ]);
+    targets.delete(currentUserId);
+    for (const uid of targets) {
+      notify({
+        targetUserId: uid, fromUserId: currentUserId, type: 'projectMoved',
+        projectId, extra: productLink.trim(),
+      });
+    }
+  }
 
   return getProjectFlat(projectId);
 }
@@ -198,14 +232,17 @@ function getProjectFlat(projectId) {
 // UPDATES
 // ============================================
 
-function addUpdate({ projectId, text, images, prompt }, { currentUserId }) {
+// notifyTinkered: 作者主动通知"接走我 + 想试试"的人 (默认 false · 避免轰炸)
+// alsoStuck: 同时把项目改为 stuck (spec §5.3 "卡了" 进展 → 召回过往关心者)
+function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('记一笔不能空');
-  const p = db.prepare('SELECT owner_id, name FROM projects WHERE id = ?').get(projectId);
+  const p = db.prepare('SELECT owner_id, name, status FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
   if (p.owner_id !== currentUserId) throw new Error('只能给自己的项目记一笔');
 
   const updateId = 'u-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
+  const willStuck = alsoStuck && p.status !== 'stuck';
   const txn = db.transaction(() => {
     db.prepare(`
       INSERT INTO updates (id, project_id, text, prompt, at) VALUES (?, ?, ?, ?, ?)
@@ -221,19 +258,49 @@ function addUpdate({ projectId, text, images, prompt }, { currentUserId }) {
         insLink.run(updateId, imgId, idx);
       });
     }
-    db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectId);
+    if (willStuck) {
+      db.prepare('UPDATE projects SET status = ?, updated_at = ? WHERE id = ?').run('stuck', now, projectId);
+    } else {
+      db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectId);
+    }
   });
   txn();
+
+  const anchor = 'update-' + updateId;
 
   // @ mention 通知
   for (const uid of extractMentions(text, currentUserId)) {
     notify({
       targetUserId: uid, fromUserId: currentUserId, type: 'mentioned',
-      projectId, extra: text.trim().slice(0, 200),
+      projectId, extra: text.trim().slice(0, 200), anchor,
     });
   }
 
-  return { id: updateId, text: text.trim(), at: now, prompt: prompt || undefined };
+  // 主动 broadcast 给关心者 (作者勾选 "通知接走过的人" 才发 · 不默认)
+  // alsoStuck 时也广播 (= 卡住召回 · 跟 changeProjectStatus 行为一致 · 但用 stuckUpdate 区分)
+  if (notifyTinkered || willStuck) {
+    const wantToTryRows = db.prepare(
+      `SELECT user_id FROM reactions WHERE project_id = ? AND type = 'wantToTry'`
+    ).all(projectId);
+    const tinkeredRows = db.prepare(
+      `SELECT user_id FROM tinkered WHERE parent_project_id = ?`
+    ).all(projectId);
+    const targets = new Set([
+      ...wantToTryRows.map(r => r.user_id),
+      ...tinkeredRows.map(r => r.user_id),
+    ]);
+    targets.delete(currentUserId);
+    const notifType = willStuck ? 'projectStuck' : 'ownerUpdate';
+    const extra = willStuck ? '卡住了 · 也许你能搭把手' : text.trim().slice(0, 200);
+    for (const uid of targets) {
+      notify({
+        targetUserId: uid, fromUserId: currentUserId, type: notifType,
+        projectId, extra, anchor,
+      });
+    }
+  }
+
+  return { id: updateId, text: text.trim(), at: now, prompt: prompt || undefined, statusChanged: willStuck };
 }
 
 function editUpdate({ projectId, updateIdx, text, images }, { currentUserId }) {
@@ -326,10 +393,30 @@ function submitTinkered({ projectId, name, link }, { currentUserId }) {
   });
   txn();
 
+  // 升级承诺 · 清掉之前给 owner 的 wantToTry 通知 · 否则 owner 同时看到 "想试试" + "接走了"
+  clearNotif({ targetUserId: p.owner_id, fromUserId: currentUserId, type: 'wantToTry', projectId });
+
+  const handle = db.prepare('SELECT handle FROM users WHERE id = ?').get(currentUserId)?.handle;
   notify({
     targetUserId: p.owner_id, fromUserId: currentUserId, type: 'tinkered',
-    projectId, extra: name.trim(),
+    projectId, extra: name.trim(), anchor: handle ? 'tinkered-' + handle : null,
   });
+  return { ok: true };
+}
+
+// 接走方撤回自己的延伸版 (项目下线 / 误操作)
+function deleteTinkered({ projectId }, { currentUserId }) {
+  const row = db.prepare(
+    'SELECT 1 FROM tinkered WHERE parent_project_id = ? AND user_id = ?'
+  ).get(projectId, currentUserId);
+  if (!row) throw new Error('你没有接走过这个项目');
+  db.prepare('DELETE FROM tinkered WHERE parent_project_id = ? AND user_id = ?')
+    .run(projectId, currentUserId);
+  // 同时清掉之前发给 owner 的 tinkered 通知 · 避免 owner 点开后找不到延伸版
+  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  if (p) {
+    clearNotif({ targetUserId: p.owner_id, fromUserId: currentUserId, type: 'tinkered', projectId });
+  }
   return { ok: true };
 }
 
@@ -355,7 +442,7 @@ function markMethodUsed({ projectId, updateIdx, note }, { currentUserId }) {
   const extra = (note && note.trim()) || ('用了「' + p.name + '」第 ' + (updateIdx + 1) + ' 条的方法');
   notify({
     targetUserId: p.owner_id, fromUserId: currentUserId, type: 'methodUsed',
-    projectId, extra,
+    projectId, extra, anchor: 'update-' + u.id,
   });
   return { ok: true };
 }
@@ -390,10 +477,12 @@ function addNote({ projectId, text, images }, { currentUserId }) {
   });
   txn();
 
+  const anchor = 'note-' + noteId;
+
   // 通知 owner (自己留自己项目不通知)
   notify({
     targetUserId: p.owner_id, fromUserId: currentUserId, type: 'noted',
-    projectId, extra: text.trim().slice(0, 200),
+    projectId, extra: text.trim().slice(0, 200), anchor,
   });
 
   // @ mention · 排除 owner 避免重复
@@ -401,7 +490,7 @@ function addNote({ projectId, text, images }, { currentUserId }) {
     if (uid === p.owner_id) continue;
     notify({
       targetUserId: uid, fromUserId: currentUserId, type: 'mentioned',
-      projectId, extra: text.trim().slice(0, 200),
+      projectId, extra: text.trim().slice(0, 200), anchor,
     });
   }
 
@@ -427,6 +516,16 @@ function markAllRead(_payload, { currentUserId }) {
   return { ok: true };
 }
 
+// 标记单条通知已读 (webapp 在点开后逐条标 · 不再一进通知页就全标)
+function markNotifRead({ notifId }, { currentUserId }) {
+  if (!notifId) throw new Error('notifId required');
+  db.prepare(`
+    UPDATE notifications SET read_at = ?
+    WHERE id = ? AND target_user_id = ? AND read_at IS NULL
+  `).run(Date.now(), notifId, currentUserId);
+  return { ok: true };
+}
+
 module.exports = {
   // users
   editTagline, renameHandle,
@@ -435,9 +534,9 @@ module.exports = {
   // updates
   addUpdate, editUpdate, deleteUpdate,
   // reactions
-  reactToProject, submitTinkered, markMethodUsed,
+  reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes
   addNote, deleteNote,
   // notifications
-  markAllRead,
+  markAllRead, markNotifRead,
 };

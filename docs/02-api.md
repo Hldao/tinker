@@ -1,4 +1,4 @@
-# Tinker API · v0.2.0
+# Tinker API · v0.4.0
 
 Tinker server 暴露的 HTTP API。**单一可变面设计**:
 
@@ -59,15 +59,14 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
       "status": "active|stuck|done|paused|archive",
       "tools": ["Cursor", "Claude"],
       "updates": [
-        { "text": "...", "at": 1780655822028, "images": [...], "prompt": "...", "usedBy": [...] }
+        { "id": "u-xxx", "text": "...", "at": 1780655822028, "images": [...], "prompt": "...", "usedBy": [...] }
       ],
       "reactions": {
-        "interested": ["@u1"],
         "wantToTry": ["@u2"],
         "tinkered": [{ "user": "@u3", "name": "延伸版", "link": "https://..." }]
       },
       "notes": [
-        { "user": "@u", "text": "...", "at": 1780655822028, "images": [...] }
+        { "id": "n-xxx", "user": "@u", "text": "...", "at": 1780655822028, "images": [...] }
       ]
     }
   ],
@@ -76,9 +75,12 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
       "id": "n-xxx",
       "target": "@daodao",
       "fromUser": "@u",
-      "type": "tinkered|methodUsed|mentioned|projectDone|wantToTry|noted",
+      "type": "tinkered|methodUsed|mentioned|projectDone|projectStuck|projectUnstuck|projectMoved|ownerUpdate|wantToTry|noted",
       "projectId": "p1",
       "projectName": "...",
+      "projectSlug": "...",
+      "projectOwner": "alice",
+      "anchor": "update-u-xxx | note-n-xxx | tinkered-handle | null",
       "extra": "...",
       "at": 1780655822028,
       "read": false
@@ -119,7 +121,7 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
 { "type": "actionName", "payload": { ... } }
 ```
 
-### actionName 列表 (12 个)
+### actionName 列表 (15 个)
 
 #### 用户
 
@@ -174,13 +176,22 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
     "text": "...",
     "images": [{ "src": "data:image/...", "caption": "" }],
     "prompt": "...",
-    "currentUser": "alice"
+    "alsoStuck": false,
+    "notifyTinkered": false
   }
 }
 ```
 自动:
 - 加 `at: Date.now()`
-- 扫文本里的 `@xxx` · 给 mention 的人发 `mentioned` 通知
+- 扫文本里的 `@xxx` · 给 mention 的人发 `mentioned` 通知 · `anchor = update-<id>`
+- `alsoStuck: true` 且当前状态非 stuck → 同时 `status → stuck`，给"接走 / 想试试"的人发 `projectStuck` 通知（spec §5.3 "卡了"召回）
+- `notifyTinkered: true` 且没勾 alsoStuck → 给"接走 / 想试试"的人发 `ownerUpdate` 通知（用于"跑通了大版本"）
+- 不勾 → 不发广播通知 · 默认行为不轰炸
+
+返回:
+```json
+{ "id": "u-xxx", "text": "...", "at": 0, "prompt": "...", "statusChanged": false }
+```
 
 ##### editUpdate
 ```json
@@ -220,6 +231,19 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
   }
 }
 ```
+副作用:
+- 自动清掉 `reactions.wantToTry` 里自己的记录（升级承诺）
+- 自动清掉 owner 之前收到的 `wantToTry` 通知（避免双重通知）
+- 给 owner 发 `tinkered` 通知 · `anchor = tinkered-<currentUserHandle>`
+
+##### deleteTinkered
+撤回自己的延伸版（项目下线 / 误操作）。
+```json
+{ "type": "deleteTinkered", "payload": { "projectId": "p1" } }
+```
+副作用:
+- 删 tinkered 表里自己的行
+- 清掉 owner 之前收到的 `tinkered` 通知（owner 点开找不到延伸版会迷惑）
 
 ##### markMethodUsed
 "我用了你的方法 · 跑通了" · 项目 owner 不能给自己点。
@@ -269,7 +293,13 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
 ```json
 { "type": "markAllRead", "payload": { "currentUser": "alice" } }
 ```
-把 `target === currentUser` 的所有 unread 标为 read。
+把 `target === currentUser` 的所有 unread 标为 read。webapp 在通知页顶部 "全部标已读" 按钮触发。
+
+##### markNotifRead
+```json
+{ "type": "markNotifRead", "payload": { "notifId": "n-xxx" } }
+```
+单条标已读。webapp 点开任意一条通知后自动触发 · 避免一进通知页就全标已读丢失信号。
 
 ---
 
@@ -284,14 +314,23 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
 
 ## 通知类型 (NotificationType)
 
-| type | 触发 | 文案模板 |
-|---|---|---|
-| `tinkered` | `submitTinkered` | "接走了你的「项目名」 · 做了「延伸名」" |
-| `methodUsed` | `markMethodUsed` | "用了你的方法 · 跑通了「项目名」" |
-| `mentioned` | update/note 里 @ 提到 | "提到了你 · 在「项目名」" |
-| `projectDone` | `changeProjectStatus` → done | "跑通了 · 你之前说过想试试 · 现在能用了「项目名」" |
-| `wantToTry` | `reactToProject(wantToTry)` | "想试试「项目名」" |
-| `noted` | `addNote` 给别人 | "在你的「项目名」留了便签" |
+| type | 触发 | anchor | 文案模板 |
+|---|---|---|---|
+| `tinkered` | `submitTinkered` | `tinkered-<from-handle>` | "接走了你的「项目名」 · 做了「延伸名」" |
+| `methodUsed` | `markMethodUsed` | `update-<id>` | "用了你的方法 · 跑通了「项目名」" |
+| `mentioned` | update/note 里 @ 提到 | `update-<id>` / `note-<id>` | "提到了你 · 在「项目名」" |
+| `projectDone` | `changeProjectStatus` → done | null | "跑通了 · 你之前说过想试试 · 现在能用了「项目名」" |
+| `projectStuck` | `changeProjectStatus` → stuck 或 `addUpdate(alsoStuck:true)` | null / `update-<id>` | "卡住了 · 也许你能搭把手「项目名」" |
+| `projectUnstuck` | `changeProjectStatus` stuck → active | null | "又动起来了 · 之前卡住的那个「项目名」" |
+| `projectMoved` | `editProject` 改了 productLink | null | "换了产物链接 ·「项目名」 → \<新链接\>" |
+| `ownerUpdate` | `addUpdate(notifyTinkered:true)` | `update-<id>` | "记了一笔新进展 · 「项目名」" |
+| `wantToTry` | `reactToProject(wantToTry)` | null | "想试试「项目名」" |
+| `noted` | `addNote` 给别人 | `note-<id>` | "在你的「项目名」留了便签" |
+
+**anchor 用途**：webapp 点开通知 → 跳到项目页 → scroll 到 anchor DOM id + 闪烁 1.6s。
+锚点不存在（内容被删 / 老通知 anchor=null）时静默退到项目页顶部。
+
+**去重**：同一 `(target, fromUser, type, project)` 只保留最新一条。`submitTinkered` 会显式清掉之前的 `wantToTry` 通知（不同 type 不会被默认去重逻辑覆盖）。
 
 ---
 

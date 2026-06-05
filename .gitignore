@@ -6,6 +6,12 @@ package-lock.json.bak
 # runtime data (会从 seed.js 自动生成)
 server/data.json
 
+# SQLite v0.3 数据 (生产在 docker volume 里)
+server/tinker.db
+server/tinker.db-*
+server/data/tinker.db
+server/data/tinker.db-*
+
 # config & secrets
 .env
 .env.local
