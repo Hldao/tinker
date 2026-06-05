@@ -30,6 +30,8 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
     volumes:
       - ./data:/data
+      # 网页文件挂到外面 · 改完只要 restart 不要 rebuild · 10 秒上线
+      - ./webapp:/app/webapp:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8788/api/health"]
       interval: 30s
