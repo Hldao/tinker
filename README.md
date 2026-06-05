@@ -8,12 +8,13 @@
 
 正式上线 · 跑在阿里云 ECS · 公网入口：
 
-**http://daogu.cc:8788**
+**http://120.26.46.217:8788**
 
 ⚠️ Alpha 期注意:
+- 暂时用 IP 访问 · 域名 daogu.cc 已买但未备案 (阿里云对未备案域名做了拦截 · 所有端口都拦)
 - 没有真实认证 · 多人测试约定不同 handle (`@xx`) 避免冲突
-- 数据存在 server 的 JSON 文件 · 有原子写入 + 5 份 backup 旋转 · 但还没接数据库 · 大型并发不推荐
-- 备案完成后切到 80/443 + HTTPS (会换成 `https://daogu.cc`)
+- 数据存在 server 的 JSON 文件 · 有原子写入 + 5 份 backup 旋转 · 但还没接数据库
+- 备案完成后切到 `https://daogu.cc` (7-30 天流程进行中)
 
 ---
 
@@ -75,7 +76,7 @@ LLM 支持: Anthropic Claude (默认) / OpenAI / DeepSeek。
 
 ## 让小伙伴一起测试
 
-直接给 ta 们 **http://daogu.cc:8788** 这个链接：
+直接给 ta 们 **http://120.26.46.217:8788** 这个链接：
 
 1. 浏览器打开 · 弹"你是谁?" → 填 handle + 一句 tagline → 进入主屏
 2. 想发动静 → 「+ 记一笔」→ 选项目或开新项目（开新项目必须挂 https:// 产物链接）
@@ -89,7 +90,7 @@ LLM 支持: Anthropic Claude (默认) / OpenAI / DeepSeek。
 git clone https://github.com/Hldao/tinker.git
 cd tinker/cli
 npm install && npm link
-tinker login   # server URL 填 http://daogu.cc:8788 · handle 填自己的
+tinker login   # server URL 填 http://120.26.46.217:8788 · handle 填自己的
 tinker push    # 试着推一条
 ```
 

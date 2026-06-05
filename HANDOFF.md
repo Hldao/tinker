@@ -1,7 +1,7 @@
 # 给你回来时的清单 (autonomous 工作交接)
 
 > **⚠️ 历史快照** · 2026-06-05 下午写的 · 已过期
-> Tinker 现已正式上线: **http://daogu.cc:8788** (阿里云 ECS 自有部署 · 不再走 ngrok)
+> Tinker 现已正式上线: **http://120.26.46.217:8788** (阿里云 ECS 自有部署 · 不再走 ngrok · daogu.cc 备案中)
 > 本文档保留作工作日志，但文内的 URL / 待办都已 stale。当前状态见 [README](README.md) + [CHANGELOG](CHANGELOG.md)。
 
 ---

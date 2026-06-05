@@ -220,7 +220,7 @@ async function cmdLogin() {
   log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
   const serverUrl = await input({
     message: 'server URL',
-    default: 'http://daogu.cc:8788',
+    default: 'http://120.26.46.217:8788',
   });
   const handle = await input({
     message: '你的 handle (工作室名)',

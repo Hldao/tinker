@@ -11,7 +11,7 @@ Tinker server 暴露的 HTTP API。**单一可变面设计**:
 
 **Base URL**:
 - 本地: `http://localhost:8788`
-- alpha: `http://daogu.cc:8788` (备案后会切到 `https://daogu.cc`)
+- alpha: `http://120.26.46.217:8788` (daogu.cc 备案中 · 备案后切到 `https://daogu.cc`)
 
 **Content-Type**: `application/json`
 
