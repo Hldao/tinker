@@ -1,0 +1,100 @@
+name: Deploy to ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # 允许手动触发 (在 GitHub Actions 页面点按钮)
+
+jobs:
+  deploy:
+    name: 部署到生产服务器
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码 (仅用于看改了什么)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 判断是否只改了 webapp (决定要不要重新打包)
+        id: check
+        run: |
+          CHANGED=$(git diff --name-only HEAD^ HEAD)
+          echo "改动的文件:"
+          echo "$CHANGED"
+          NEEDS_REBUILD=false
+          for f in $CHANGED; do
+            case "$f" in
+              webapp/*) ;;
+              docs/*) ;;
+              README.md|*.md) ;;
+              *) NEEDS_REBUILD=true ;;
+            esac
+          done
+          echo "needs_rebuild=$NEEDS_REBUILD" >> $GITHUB_OUTPUT
+          if [ "$NEEDS_REBUILD" = "true" ]; then
+            echo "::notice::改动涉及服务器代码 · 需要重新打包 (1-3 分钟)"
+          else
+            echo "::notice::只改了网页/文档 · 只重启容器 (10-30 秒)"
+          fi
+
+      - name: 配置 SSH 钥匙
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 部署
+        run: |
+          ssh -i ~/.ssh/deploy_key root@${{ secrets.SSH_HOST }} bash -s << 'DEPLOYSCRIPT'
+            set -e
+            cd ~/tinker
+            echo "--- 1. 拉新代码 ---"
+            for i in 1 2 3 4 5; do
+              echo "  [尝试 $i/5]"
+              if git pull; then
+                echo "  ✓ 成功"
+                break
+              fi
+              if [ $i -eq 5 ]; then
+                echo "  ✗ 5 次都失败 · 退出"
+                exit 1
+              fi
+              sleep 5
+            done
+
+            echo "--- 2. 修文件权限 (容器要能读) ---"
+            chmod -R a+rX webapp server
+
+            if [ "${{ steps.check.outputs.needs_rebuild }}" = "true" ]; then
+              echo "--- 3. 重新打包 docker 镜像 ---"
+              docker compose build
+              echo "--- 4. 启动新容器 ---"
+              docker compose up -d
+            else
+              echo "--- 3. 只重启容器 (webapp 走 volume 挂载) ---"
+              docker compose restart tinker
+            fi
+
+            echo "--- 5. 等服务起来 ---"
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -sf http://localhost:8788/api/health >/dev/null 2>&1; then
+                echo "✓ 服务健康"
+                curl -s http://localhost:8788/api/health
+                echo ""
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "✗ 20 秒内服务没起来 · 看日志:"
+            docker compose logs --tail=30 tinker
+            exit 1
+          DEPLOYSCRIPT
+
+      - name: 部署成功通知
+        if: success()
+        run: echo "::notice::✓ 部署成功 · 已上线"
+
+      - name: 部署失败通知
+        if: failure()
+        run: echo "::error::✗ 部署失败 · 查看上面的日志"
