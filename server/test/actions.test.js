@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { getSeedData } = require('../seed');
+const { getTestSeedData } = require('./fixtures');
 const actions = require('../actions');
 
-function freshState() { return getSeedData(); }
+function freshState() { return getTestSeedData(); }
 
 // ============================================
 // setUserHandle
