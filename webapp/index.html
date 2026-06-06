@@ -4482,6 +4482,17 @@
     object-fit: cover;
     display: block;
   }
+  /* —— 竖屏适配 (手机小程序 / 移动应用截图) ——
+     JS 在 img onload 时探测自然比例 · w/h < 0.85 加 .is-portrait
+     封面框换 4:5 · 图换 contain · 两边纸色留白 · 完整呈现 · 不切边 */
+  .showcase-card-figure.is-portrait {
+    aspect-ratio: 4 / 5;
+  }
+  .showcase-card-figure.is-portrait img {
+    object-fit: contain;
+    padding: 14px;
+    box-sizing: border-box;
+  }
 
   /* —— 描述 —— */
   .showcase-card .showcase-card-desc {
@@ -6763,10 +6774,27 @@ function renderShowcase(focusId) {
     `;
   }).join('');
 
+  // 封面图按自然比例自动适配 · w/h < 0.85 走竖屏 (4:5 + contain · 给手机截图)
+  // 默认 16:9 cover (给 PC / 网页截图) · 在 img load 后检测并加 class
+  list.querySelectorAll('.showcase-card-figure img').forEach(adjustCoverAspect);
+
   // 如果有 focusId,滚动到那张卡 + flash 高亮 (跟通知点开锚点一致体验)
   if (focusId) {
     setTimeout(() => flashAnchor('showcase-' + focusId), 80);
   }
+}
+
+// 探测图自然比例 · 给容器加 is-portrait class · CSS 接管展示
+function adjustCoverAspect(img) {
+  const apply = () => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return;
+    const aspect = w / h;
+    const fig = img.parentElement;
+    if (fig && aspect < 0.85) fig.classList.add('is-portrait');
+  };
+  if (img.complete) apply();
+  else img.addEventListener('load', apply, { once: true });
 }
 
 /* ============ NOTIFICATIONS ============ */
