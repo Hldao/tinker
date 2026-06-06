@@ -46,6 +46,43 @@
   .tracking-toggle { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; transition: all 0.15s; white-space: nowrap; letter-spacing: 0.04em; }
   .tracking-toggle:hover { color: var(--ink); border-bottom-color: var(--ink); }
   .tracking-toggle.active { color: var(--vermilion); border-bottom: 1px solid var(--vermilion); }
+  /* feed entry 的"求反馈"印章 + ask + 试用 CTA */
+  .entry-seeking-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--vermilion);
+    background: var(--paper);
+    border: 1px solid var(--vermilion);
+    padding: 1px 6px;
+    border-radius: 2px;
+    letter-spacing: 0.16em;
+    margin-left: 6px;
+    text-transform: lowercase;
+    white-space: nowrap;
+  }
+  .entry-feedback-ask {
+    margin-top: 6px;
+    font-family: 'Newsreader', serif;
+    font-size: 14px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    background: var(--paper);
+    border-left: 2px solid var(--vermilion);
+    padding: 6px 12px;
+    border-radius: 2px;
+  }
+  .entry-feedback-ask .ask-prefix { color: var(--vermilion); font-weight: 500; }
+  .entry-seeking-cta {
+    margin-left: auto;
+    font-family: 'Newsreader', serif;
+    font-size: 13px;
+    color: var(--vermilion);
+    border-bottom: 1px solid var(--vermilion);
+    padding-bottom: 1px;
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+  .entry-seeking-cta:hover { opacity: 0.7; }
   .feed-cta-line { font-family: 'Newsreader', serif; font-size: 14px; color: var(--vermilion); cursor: pointer; border-bottom: 1px solid var(--vermilion); padding-bottom: 1px; transition: all 0.15s; display: inline-block; }
   .feed-cta-line:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
@@ -160,6 +197,11 @@
   .tl-prompt-box { margin-top: 12px; border-left: 2px solid var(--vermilion); padding: 12px 16px; background: var(--paper); }
   .tl-prompt-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--vermilion); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
   .tl-prompt-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-soft); line-height: 1.55; white-space: pre-wrap; margin-bottom: 10px; }
+  /* 求反馈 印章 + 想知道 文本 · 比 prompt-box 更显眼 · 让访客一眼看到"作者在求反馈" */
+  .tl-feedback-ask-block { margin-bottom: 14px; padding: 10px 14px 11px; background: var(--paper); border: 1px solid var(--vermilion); border-left-width: 3px; border-radius: 2px; }
+  .tl-feedback-ask-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.22em; font-weight: 500; }
+  .tl-feedback-ask-text { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; margin-top: 6px; }
+  .tl-feedback-ask-text .ask-prefix { color: var(--vermilion); font-weight: 500; }
 
   /* IMAGES — 像田野笔记的插图 */
   .tl-figure { margin-top: 14px; margin-bottom: 4px; max-width: 100%; }
@@ -3626,6 +3668,58 @@
   /* ===============================================================
      END UI BUILD BADGE
      =============================================================== */
+
+
+  /* ===============================================================
+     v0.45 冷静米白 · 日系配色
+     ▍ 反馈: "更冷静克制 · 少粉 · 米黄米白 · 日系"
+     ▍ 1. main bg #faf8f3 → #f7f5ef (R=G 接近 · 不偏粉)
+     ▍ 2. masthead 用 #efeae1 (同色系深一档 · 替代偏粉 paper)
+     ▍ 3. body 光晕降一档 · 让纸面更纯净
+     ▍ 4. 装饰性大日期 vermilion 改深一档 · 更克制
+     ▍ 参考: 无印良品 · 日系印刷物
+     =============================================================== */
+
+  body {
+    background-color: #f7f5ef !important;
+    background-image:
+      radial-gradient(at 18% 24%, rgba(194, 65, 12, 0.018) 0px, transparent 50%),
+      radial-gradient(at 82% 76%, rgba(120, 113, 108, 0.025) 0px, transparent 50%) !important;
+  }
+  body::before {
+    opacity: 0.025 !important;
+  }
+  .masthead {
+    background: #efeae1 !important;
+  }
+  .tl-prompt-box,
+  .quote-block {
+    background: #f0ece2 !important;
+  }
+  #workshop-content .py-10.text-center[style*="dashed"] {
+    background: #f7f5ef !important;
+    border-color: #d8d3c4 !important;
+  }
+  .filter-row,
+  .pheader {
+    border-color: #d8d3c4 !important;
+  }
+  div.day-label > .day-num,
+  #masthead-date .md-num,
+  #masthead-date .md-weekday {
+    color: #a83a0e !important;
+  }
+  .ui-build-badge {
+    background: rgba(247, 245, 239, 0.88) !important;
+    border-color: #d8d3c4 !important;
+  }
+  .ui-build-badge .bb-ver {
+    color: #a83a0e !important;
+  }
+
+  /* ===============================================================
+     END v0.45 冷静米白
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -3860,6 +3954,14 @@
         <input type="checkbox" id="update-notify">
         <span><span class="extra-title">通知「接走 / 想试试」你的人</span><span class="extra-sub">跑通了大版本 / 重要更新 时勾 · 默认不发</span></span>
       </label>
+      <label class="update-extra-row">
+        <input type="checkbox" id="update-seeking-feedback" onchange="document.getElementById('update-feedback-ask-wrap').classList.toggle('hidden', !this.checked)">
+        <span><span class="extra-title">求看看 · 想拿反馈</span><span class="extra-sub">这条进展会被标"求 反 馈" · 进 feed 的求反馈频道 · 试用 CTA 加强</span></span>
+      </label>
+      <div id="update-feedback-ask-wrap" class="hidden" style="padding-left: 32px;">
+        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.04em;">想 知 道 (可选)</label>
+        <textarea id="update-feedback-ask" class="input-bare" rows="2" placeholder="比如:用户能不能 5 秒内看懂这是干嘛的 / 这个交互流程顺不顺 / 文案哪里别扭" style="font-size: 14px; resize: vertical;"></textarea>
+      </div>
     </div>
 
     <div class="flex justify-end gap-4 mt-6">
@@ -4071,10 +4173,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.44 · 18 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.45 · 19 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.44</span>
+  <span class="bb-ver">v0.45</span>
 </div>
 
 <script>
@@ -4160,11 +4262,16 @@ const currentUser = { id: null, handle: null, email: null };
 let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
 let currentStatusFilter = 'all';
 let trackingMode = false;
+let seekingFeedbackOnly = false;
 let pendingImages = [];
 let notePendingImages = [];
 
 function toggleTrackingMode() {
   trackingMode = !trackingMode;
+  renderFeed();
+}
+function toggleSeekingFeedbackOnly() {
+  seekingFeedbackOnly = !seekingFeedbackOnly;
   renderFeed();
 }
 let npStatus = 'active';
@@ -4338,6 +4445,8 @@ function getFeedEvents() {
         text:u.text, at:u.at, agoOrder:parseAgoOrder(u.at),
         tools:p.tools, status:p.status,
         images: u.images || null,
+        feedbackAsk: u.feedbackAsk,
+        productLink: p.productLink,
       });
     });
   });
@@ -4363,19 +4472,23 @@ function renderFeed() {
     filters.appendChild(span);
   });
 
-  // 我跟进的 切换 · 匿名时藏起来 (没"我"的概念)
+  // 切换:我跟进的 + 只看求反馈 · "求反馈"对所有人(包括匿名)可见
   const toggleWrap = document.getElementById('tracking-toggle-wrap');
   if (toggleWrap) {
+    const parts = [];
+    parts.push(`<span class="tracking-toggle${seekingFeedbackOnly ? ' active' : ''}" onclick="toggleSeekingFeedbackOnly()">${seekingFeedbackOnly ? '✓ 只看求反馈' : '只看求反馈'}</span>`);
     if (currentUser.handle) {
-      toggleWrap.innerHTML = `<span class="tracking-toggle${trackingMode ? ' active' : ''}" onclick="toggleTrackingMode()">${trackingMode ? '✓ 只看我跟进的' : '只看我跟进的'}</span>`;
-    } else {
-      toggleWrap.innerHTML = '';
+      parts.push(`<span class="tracking-toggle${trackingMode ? ' active' : ''}" onclick="toggleTrackingMode()">${trackingMode ? '✓ 只看我跟进的' : '只看我跟进的'}</span>`);
     }
+    toggleWrap.innerHTML = parts.join('<span style="color: var(--sepia-light); margin: 0 10px;">·</span>');
   }
 
   let events = getFeedEvents();
   if (currentStatusFilter !== 'all') {
     events = events.filter(e => e.status === currentStatusFilter);
+  }
+  if (seekingFeedbackOnly) {
+    events = events.filter(e => e.feedbackAsk !== undefined);
   }
   if (trackingMode) {
     const me = currentUser.handle;
@@ -4395,8 +4508,13 @@ function renderFeed() {
   list.innerHTML = '';
   if (events.length === 0) {
     // 文案随当前筛选 · 让空状态有解释
-    const labels = { all: '今天还没什么动静', active: '现在没人在做的项目', stuck: '没人卡住 · 好事', done: '还没有跑通的项目', paused: '没暂停的项目' };
-    const msg = labels[currentStatusFilter] || '没东西';
+    let msg;
+    if (seekingFeedbackOnly) {
+      msg = '现在没人在求反馈 · 等你做完一个 · 回来勾一下"求看看"';
+    } else {
+      const labels = { all: '今天还没什么动静', active: '现在没人在做的项目', stuck: '没人卡住 · 好事', done: '还没有跑通的项目', paused: '没暂停的项目' };
+      msg = labels[currentStatusFilter] || '没东西';
+    }
     list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">${msg}</div>`;
     return;
   }
@@ -4468,6 +4586,7 @@ function makeEntryEl(e) {
   };
   const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
   const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
+  const seeking = e.feedbackAsk !== undefined;
   entry.innerHTML = `
     <div class="entry-time mono">${shortAgo(e.at)}</div>
     <div>
@@ -4475,8 +4594,10 @@ function makeEntryEl(e) {
         <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
         <span class="entry-slash">/</span>
         <span class="entry-project">${escapeHtml(e.projectName)}</span>
+        ${seeking ? `<span class="entry-seeking-badge">求 反 馈</span>` : ''}
         <span class="entry-status ${e.status}">${statusText(e.status)}</span>
       </div>
+      ${seeking && e.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(e.feedbackAsk)}</div>` : ''}
       <div class="entry-text">${renderMentions(e.text)}</div>
       ${firstImg ? `
         <div class="feed-figure">
@@ -4486,7 +4607,10 @@ function makeEntryEl(e) {
           ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
         </div>
       ` : ''}
-      <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};"><span>${e.tools.slice(0,3).join(' · ')}</span></div>
+      <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};">
+        <span>${e.tools.slice(0,3).join(' · ')}</span>
+        ${seeking && e.productLink ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+      </div>
     </div>
   `;
   return entry;
@@ -4667,6 +4791,12 @@ function renderProject(owner, slug) {
           <div class="tl-entry" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
+              ${u.feedbackAsk !== undefined ? `
+                <div class="tl-feedback-ask-block">
+                  <div class="tl-feedback-ask-label">求 反 馈</div>
+                  ${u.feedbackAsk ? `<div class="tl-feedback-ask-text"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
+                </div>
+              ` : ''}
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
                 <div class="tl-prompt-box">
@@ -5286,32 +5416,42 @@ function openUpdate(projectId) {
   setTimeout(() => textEl.focus(), 50);
 }
 
-// 整理 update modal 底部两个 checkbox 的可见性 + 默认值
-//   编辑模式: 整个 extras 区藏起来 (老进展不补发通知 · 状态切换走顶部"改状态")
+// 整理 update modal 底部 checkbox 的可见性 + 默认值
+//   编辑模式: alsoStuck/notify 藏起来(老进展不补发通知) · 但"求反馈"保留(作者可调)
 //   新建模式: alsoStuck 永远可勾;
-//             notifyTinkered 只有当项目有"想试试 / 接走" 人时才显示 · 否则没意义
-function resetUpdateExtras(projectId, isEdit) {
+//             notifyTinkered 只有当项目有"想试试 / 接走" 人时才显示
+//             求反馈 永远可勾
+function resetUpdateExtras(projectId, isEdit, prefillFeedback) {
   const wrap = document.getElementById('update-extras');
   if (!wrap) return;
   const cb1 = document.getElementById('update-alsostuck');
   const cb2 = document.getElementById('update-notify');
+  const cb3 = document.getElementById('update-seeking-feedback');
+  const askWrap = document.getElementById('update-feedback-ask-wrap');
+  const askEl = document.getElementById('update-feedback-ask');
   cb1.checked = false;
   cb2.checked = false;
-  if (isEdit) { wrap.classList.add('hidden'); return; }
+  if (cb3) cb3.checked = !!prefillFeedback;
+  if (askEl) askEl.value = (prefillFeedback && typeof prefillFeedback === 'string') ? prefillFeedback : '';
+  if (askWrap) askWrap.classList.toggle('hidden', !(cb3 && cb3.checked));
   wrap.classList.remove('hidden');
+  // 编辑模式藏掉通知联动行 · 求反馈行保留
+  const alsoStuckRow = cb1.parentElement;
+  const notifyRow = document.getElementById('update-notify-row');
+  alsoStuckRow.style.display = isEdit ? 'none' : '';
+  notifyRow.style.display = isEdit ? 'none' : '';
+  if (isEdit) return;
   const p = projectById(projectId);
   const hasAudience = p && (
     (p.reactions.tinkered || []).length > 0 ||
     (p.reactions.wantToTry || []).filter(u => u !== currentUser.handle).length > 0
   );
-  const notifyRow = document.getElementById('update-notify-row');
   if (hasAudience) {
     notifyRow.classList.remove('disabled-row');
   } else {
     notifyRow.classList.add('disabled-row');
   }
   // 项目本来就在 stuck · alsoStuck 没意义
-  const alsoStuckRow = cb1.parentElement;
   if (p && p.status === 'stuck') {
     alsoStuckRow.classList.add('disabled-row');
   } else {
@@ -5396,7 +5536,9 @@ function editUpdate(projectId, updateIdx) {
   pendingImages = u.images ? u.images.map(i => ({...i})) : [];
   document.getElementById('update-text').value = u.text;
   renderPendingImages();
-  resetUpdateExtras(projectId, /* isEdit */ true);
+  // 编辑模式 · feedbackAsk 已存在的话预填回去(undefined = 没勾过)
+  const existingAsk = (u.feedbackAsk !== undefined && u.feedbackAsk !== null) ? (u.feedbackAsk || true) : false;
+  resetUpdateExtras(projectId, /* isEdit */ true, existingAsk);
   document.getElementById('modal-update').classList.remove('hidden');
   setTimeout(() => document.getElementById('update-text').focus(), 50);
 }
@@ -5480,11 +5622,15 @@ async function submitUpdate() {
   const images = pendingImages.length > 0
     ? pendingImages.map(i => ({ src: i.src, caption: i.caption || '上传的图' }))
     : undefined;
+  const seekingFeedbackEl = document.getElementById('update-seeking-feedback');
+  const feedbackAskEl = document.getElementById('update-feedback-ask');
+  const seekingFeedback = seekingFeedbackEl ? seekingFeedbackEl.checked : false;
+  const feedbackAsk = (seekingFeedback && feedbackAskEl) ? feedbackAskEl.value.trim() : '';
 
   try {
     if (isEditingUpdate) {
       const { projectId, updateIdx } = isEditingUpdate;
-      await apiAction('editUpdate', { projectId, updateIdx, text, images });
+      await apiAction('editUpdate', { projectId, updateIdx, text, images, seekingFeedback, feedbackAsk });
       const p = projectById(projectId);
       isEditingUpdate = null;
       pendingImages = [];
@@ -5503,7 +5649,7 @@ async function submitUpdate() {
         (p.reactions.tinkered || []).length +
         (p.reactions.wantToTry || []).filter(u => u !== currentUser.handle).length;
       const r = await apiAction('addUpdate', {
-        projectId: p.id, text, images, alsoStuck, notifyTinkered,
+        projectId: p.id, text, images, alsoStuck, notifyTinkered, seekingFeedback, feedbackAsk,
       });
       pendingImages = [];
       clearDraft('update-' + p.id);
@@ -5513,6 +5659,8 @@ async function submitUpdate() {
         showToast(audience > 0
           ? '记上了 · 状态改成卡住 · 已通知 ' + audience + ' 个关心你的人'
           : '记上了 · 状态改成卡住');
+      } else if (seekingFeedback) {
+        showToast('记上了 · 标了求反馈 · 进了 feed 的求反馈频道');
       } else if (notifyTinkered && audience > 0) {
         showToast('记上了 · 已通知 ' + audience + ' 个关心你的人');
       } else {

@@ -97,6 +97,7 @@ function buildState({ targetUserId } = {}) {
     const projectUpdates = (updatesByProject[p.id] || []).map(u => {
       const out = { id: u.id, text: u.text, at: u.at };
       if (u.prompt) out.prompt = u.prompt;
+      if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;
       const usedBy = usedByMap[u.id];
