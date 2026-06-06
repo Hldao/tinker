@@ -5248,6 +5248,314 @@
   /* ===============================================================
      END v0.62 exhibit ceremony modal 可读性增强
      =============================================================== */
+
+  /* ================================================================
+   *  v0.63 · exhibit modal 整体重构
+   *  --------------------------------------------------------------
+   *  用户反馈:
+   *    ① kind 切换时 modal 高度跳 (title/sub 长度不同)
+   *    ② textarea placeholder 颜色仍难分辨
+   *    ③ 整页可以从布局/配色/按钮全重构
+   *
+   *  解决方案:
+   *    · markup title/sub 写死 fixed copy "放进陈列馆"
+   *    · JS updateExhibitKindUI 不再覆盖 title/sub
+   *    · reship 模式靠 eyebrow 后缀 "· 改一下" 提示 (不动 title)
+   *    · CTA 文案短化 "[glyph] 进陈列馆" / "[glyph] 更新陈列馆"
+   *    · modal-paper data-kind 属性 · CSS 主题色跟着变 (eyebrow/CTA/pill)
+   *    · placeholder ink-soft + opacity 1 · 改默认浏览器灰
+   *    · textarea 从 input-bare 升级 · 边框 + paper bg
+   *    · kind pill 用 grid 等宽 · min-height 锁定 · active 加 box-shadow 1px + lift
+   *    · upload 区视觉独立 · button 化
+   *    · CTA 用 kind 色 + transform 微动
+   *  ================================================================ */
+
+  /* —— eyebrow · 颜色由 data-kind 决定 —— */
+  .exhibit-modal[data-kind="ship"] #exhibit-kind-label {
+    color: var(--vermilion) !important;
+  }
+  .exhibit-modal[data-kind="prototype"] #exhibit-kind-label {
+    color: #b8860b !important;
+  }
+  .exhibit-modal[data-kind="design"] #exhibit-kind-label {
+    color: var(--moss) !important;
+  }
+  .exhibit-modal #exhibit-kind-label {
+    font-size: 11.5px !important;
+    letter-spacing: 0.28em !important;
+    margin-bottom: 10px !important;
+    transition: color 0.22s ease;
+  }
+
+  /* —— title 升级 Fraunces 大字 (跟其他 modal 区分) —— */
+  .exhibit-modal .modal-title {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    font-variation-settings: 'opsz' 144 !important;
+    font-weight: 500 !important;
+    font-size: 26px !important;
+    letter-spacing: -0.015em !important;
+    color: var(--ink) !important;
+    margin-bottom: 6px !important;
+    line-height: 1.2;
+  }
+  .exhibit-modal .modal-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 14.5px !important;
+    line-height: 1.55 !important;
+    margin-bottom: 22px !important;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— KIND PICKER · grid + 锁高度 + active 升级 —— */
+  .exhibit-modal .exhibit-kind-row {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 10px !important;
+    margin: 4px 0 4px !important;
+  }
+  .exhibit-modal .exhibit-kind-pill {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--sepia-light) !important;
+    border-radius: 4px !important;
+    padding: 16px 8px 12px !important;
+    background: rgba(245, 241, 232, 0.4) !important;
+    cursor: pointer;
+    text-align: center;
+    position: relative;
+    transition: border-color 0.18s, background 0.18s, transform 0.18s, box-shadow 0.18s !important;
+    min-height: 102px;
+  }
+  .exhibit-modal .exhibit-kind-pill:hover {
+    border-color: var(--ink-soft) !important;
+    background: rgba(245, 241, 232, 0.7) !important;
+    transform: translateY(-1px);
+  }
+  .exhibit-modal .exhibit-kind-pill.active {
+    border-color: var(--vermilion) !important;
+    background: rgba(194, 65, 12, 0.05) !important;
+    box-shadow: 0 0 0 1px var(--vermilion), 0 3px 10px rgba(194, 65, 12, 0.08);
+  }
+  .exhibit-modal .exhibit-kind-pill[data-kind="prototype"].active {
+    border-color: #b8860b !important;
+    background: rgba(184, 134, 11, 0.06) !important;
+    box-shadow: 0 0 0 1px #b8860b, 0 3px 10px rgba(184, 134, 11, 0.08);
+  }
+  .exhibit-modal .exhibit-kind-pill[data-kind="design"].active {
+    border-color: var(--moss) !important;
+    background: rgba(77, 124, 15, 0.05) !important;
+    box-shadow: 0 0 0 1px var(--moss), 0 3px 10px rgba(77, 124, 15, 0.08);
+  }
+  .exhibit-modal .exhibit-kind-pill .ekind-glyph {
+    font-family: 'Fraunces', serif !important;
+    font-size: 30px !important;
+    line-height: 1 !important;
+    color: var(--ink-soft) !important;
+    margin-bottom: 8px !important;
+    transition: color 0.18s, transform 0.18s !important;
+  }
+  .exhibit-modal .exhibit-kind-pill.active .ekind-glyph {
+    transform: scale(1.08);
+  }
+  .exhibit-modal .exhibit-kind-pill[data-kind="ship"].active .ekind-glyph {
+    color: var(--vermilion) !important;
+  }
+  .exhibit-modal .exhibit-kind-pill[data-kind="prototype"].active .ekind-glyph {
+    color: #b8860b !important;
+  }
+  .exhibit-modal .exhibit-kind-pill[data-kind="design"].active .ekind-glyph {
+    color: var(--moss) !important;
+  }
+  .exhibit-modal .exhibit-kind-pill .ekind-name {
+    font-family: 'Newsreader', 'Songti SC', serif !important;
+    font-size: 15px !important;
+    font-weight: 500 !important;
+    color: var(--ink) !important;
+    letter-spacing: 0.005em !important;
+    margin-bottom: 4px !important;
+  }
+  .exhibit-modal .exhibit-kind-pill .ekind-sub {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 10.5px !important;
+    color: var(--ink-soft) !important;
+    letter-spacing: 0.06em !important;
+    line-height: 1.4 !important;
+    opacity: 0.85 !important;
+  }
+
+  /* —— TEXTAREA · 替代 input-bare 视觉 · placeholder 加深 —— */
+  .exhibit-modal .input-bare {
+    width: 100%;
+    border: 1px solid var(--sepia-light) !important;
+    border-radius: 3px !important;
+    background: rgba(245, 241, 232, 0.32) !important;
+    padding: 11px 13px !important;
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    color: var(--ink) !important;
+    line-height: 1.6 !important;
+    letter-spacing: 0.005em !important;
+    transition: border-color 0.18s, background 0.18s !important;
+  }
+  .exhibit-modal .input-bare:focus {
+    border-color: var(--vermilion) !important;
+    background: var(--bg) !important;
+    outline: none !important;
+  }
+  .exhibit-modal[data-kind="prototype"] .input-bare:focus {
+    border-color: #b8860b !important;
+  }
+  .exhibit-modal[data-kind="design"] .input-bare:focus {
+    border-color: var(--moss) !important;
+  }
+  .exhibit-modal .input-bare::placeholder {
+    color: var(--ink-soft) !important;
+    opacity: 0.55 !important;
+    font-style: normal !important;
+  }
+
+  /* —— UPLOAD AREA · 独立卡片 —— */
+  .exhibit-modal .upload-area {
+    border: 1px dashed var(--sepia-light) !important;
+    background: rgba(245, 241, 232, 0.35) !important;
+    border-radius: 4px !important;
+    padding: 14px 16px !important;
+    margin-top: 18px !important;
+  }
+  .exhibit-modal .upload-trigger {
+    display: block !important;
+    text-align: center;
+    padding: 11px 14px !important;
+    border: 1px solid var(--sepia-light) !important;
+    border-radius: 3px;
+    background: var(--bg) !important;
+    color: var(--ink-soft) !important;
+    font-family: 'Newsreader', 'Songti SC', serif !important;
+    font-size: 14.5px !important;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, color 0.2s !important;
+    font-style: normal !important;
+    letter-spacing: 0.005em;
+  }
+  .exhibit-modal .upload-trigger:hover {
+    border-color: var(--vermilion) !important;
+    background: rgba(194, 65, 12, 0.04) !important;
+    color: var(--vermilion) !important;
+  }
+  .exhibit-modal .upload-hint {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    margin-top: 8px !important;
+    letter-spacing: 0.005em !important;
+    line-height: 1.5;
+  }
+
+  /* —— EXTRAS · 求反馈 toggle —— */
+  .exhibit-modal .update-extras {
+    padding-top: 16px !important;
+    margin-top: 16px !important;
+    border-top: 1px dotted var(--rule) !important;
+  }
+  .exhibit-modal .update-extras .extra-title {
+    color: var(--ink) !important;
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+  }
+  .exhibit-modal .update-extras .extra-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    letter-spacing: 0.005em !important;
+    line-height: 1.5;
+  }
+
+  /* —— small label (statement-label / 想知道) —— */
+  .exhibit-modal #exhibit-statement-label,
+  .exhibit-modal label.mono.text-xs {
+    color: var(--ink-soft) !important;
+    letter-spacing: 0.22em !important;
+    font-weight: 500 !important;
+    font-size: 11px !important;
+  }
+
+  /* —— CTA primary · 跟 data-kind 同色 + 微 transform —— */
+  .exhibit-modal .btn-act-primary {
+    background: rgba(194, 65, 12, 0.05) !important;
+    border: 1px solid var(--vermilion) !important;
+    color: var(--vermilion) !important;
+    padding: 8px 22px !important;
+    border-radius: 3px !important;
+    font-family: 'Newsreader', serif !important;
+    font-size: 14.5px !important;
+    letter-spacing: 0.01em !important;
+    transition: background 0.22s, transform 0.22s, color 0.22s, border-color 0.22s !important;
+    cursor: pointer;
+  }
+  .exhibit-modal .btn-act-primary:hover {
+    background: rgba(194, 65, 12, 0.1) !important;
+    transform: translateY(-1px);
+  }
+  .exhibit-modal[data-kind="prototype"] .btn-act-primary {
+    background: rgba(184, 134, 11, 0.06) !important;
+    border-color: #b8860b !important;
+    color: #b8860b !important;
+  }
+  .exhibit-modal[data-kind="prototype"] .btn-act-primary:hover {
+    background: rgba(184, 134, 11, 0.12) !important;
+  }
+  .exhibit-modal[data-kind="design"] .btn-act-primary {
+    background: rgba(77, 124, 15, 0.05) !important;
+    border-color: var(--moss) !important;
+    color: var(--moss) !important;
+  }
+  .exhibit-modal[data-kind="design"] .btn-act-primary:hover {
+    background: rgba(77, 124, 15, 0.12) !important;
+  }
+
+  /* —— cancel btn 简化 —— */
+  .exhibit-modal .btn-act {
+    color: var(--sepia) !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 8px 18px !important;
+    cursor: pointer;
+    transition: color 0.18s !important;
+    font-family: 'Newsreader', serif !important;
+    font-size: 14.5px !important;
+  }
+  .exhibit-modal .btn-act:hover {
+    color: var(--ink) !important;
+  }
+
+  /* —— 小屏适配 —— */
+  @media (max-width: 540px) {
+    .exhibit-modal .exhibit-kind-row {
+      gap: 6px !important;
+    }
+    .exhibit-modal .exhibit-kind-pill {
+      padding: 12px 4px 10px !important;
+      min-height: 88px;
+    }
+    .exhibit-modal .exhibit-kind-pill .ekind-glyph {
+      font-size: 24px !important;
+    }
+    .exhibit-modal .exhibit-kind-pill .ekind-name {
+      font-size: 13px !important;
+    }
+    .exhibit-modal .exhibit-kind-pill .ekind-sub {
+      font-size: 9.5px !important;
+    }
+    .exhibit-modal .modal-title {
+      font-size: 22px !important;
+    }
+  }
+
+  /* ===============================================================
+     END v0.63 exhibit modal 整体重构
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5756,10 +6064,10 @@
 
 <!-- SHIP CEREMONY modal — 完工 · 写一句感想 · 走 shipProject action -->
 <div id="modal-ship-ceremony" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
-  <div class="modal-paper w-full" style="max-width: 580px;">
-    <div class="mono text-xs mb-2" id="exhibit-kind-label" style="color: var(--vermilion); letter-spacing: 0.22em;">陈 列</div>
+  <div class="modal-paper exhibit-modal w-full" data-kind="ship" style="max-width: 580px;">
+    <div class="mono text-xs mb-2" id="exhibit-kind-label" style="letter-spacing: 0.28em;">✦ 完工</div>
     <h3 class="modal-title">放进陈列馆</h3>
-    <p class="modal-sub">陈列馆收三类作品。先选这件是哪类。</p>
+    <p class="modal-sub">陈列馆收三类作品。先选这件是哪类、写一句、加张图（可选）。</p>
 
     <div class="exhibit-kind-row" id="exhibit-kind-row">
       <label class="exhibit-kind-pill" data-kind="ship">
@@ -5902,10 +6210,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.62 · 38 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.63 · 39 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.62</span>
+  <span class="bb-ver">v0.63</span>
 </div>
 
 <script>
@@ -8191,17 +8499,21 @@ function openShipCeremony(projectId) {
 function updateExhibitKindUI(kind, isReship) {
   const cfg = EXHIBIT_KIND_COPY[kind];
   if (!cfg) return;
-  // 顶部 kind label
+  // v0.63: modal-paper data-kind 属性 · 让 CSS 主题色跟着切换 (eyebrow / CTA / pill)
+  const paperEl = document.querySelector('#modal-ship-ceremony .exhibit-modal');
+  if (paperEl) paperEl.setAttribute('data-kind', kind);
+  // eyebrow · 短文案 · reship 时加 "· 改一下" 后缀
   const labelEl = document.getElementById('exhibit-kind-label');
   if (labelEl) {
-    labelEl.textContent = cfg.glyph + ' ' + cfg.name;
-    labelEl.style.color = cfg.badgeColor;
+    labelEl.textContent = isReship
+      ? cfg.glyph + ' ' + cfg.name + ' · 改一下'
+      : cfg.glyph + ' ' + cfg.name;
+    // 颜色由 CSS data-kind 接管 · 不再 inline 设
+    labelEl.style.color = '';
   }
-  // 标题 / sub
-  const titleEl = document.querySelector('#modal-ship-ceremony .modal-title');
-  const subEl = document.querySelector('#modal-ship-ceremony .modal-sub');
-  if (titleEl) titleEl.textContent = isReship ? cfg.titleReship : cfg.title;
-  if (subEl) subEl.textContent = isReship ? cfg.subReship : cfg.sub;
+  // v0.63: 不再覆盖 title / sub · markup 写死 fixed copy · 防 kind 切换时尺寸跳
+  // (reship 模式靠 eyebrow 后缀提示，不靠改 title)
+
   // statement label / placeholder
   const stmtLabelEl = document.getElementById('exhibit-statement-label');
   if (stmtLabelEl) stmtLabelEl.textContent = cfg.statementLabel;
@@ -8210,9 +8522,13 @@ function updateExhibitKindUI(kind, isReship) {
   // feedback placeholder
   const askEl = document.getElementById('ship-feedback-ask');
   if (askEl && !askEl.value) askEl.placeholder = cfg.feedbackPlaceholder;
-  // CTA
+  // CTA · v0.63 短文案 · "[glyph] 进陈列馆" / "[glyph] 更新陈列馆"
   const ctaEl = document.getElementById('exhibit-submit-btn');
-  if (ctaEl) ctaEl.textContent = isReship ? cfg.ctaReship : cfg.cta;
+  if (ctaEl) {
+    ctaEl.textContent = isReship
+      ? cfg.glyph + ' 更新陈列馆'
+      : cfg.glyph + ' 进陈列馆';
+  }
   // pill 视觉激活
   document.querySelectorAll('.exhibit-kind-pill').forEach(pill => {
     pill.classList.toggle('active', pill.getAttribute('data-kind') === kind);
