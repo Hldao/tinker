@@ -307,6 +307,34 @@ function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk, imag
   }, ctx);
 }
 
+// 把某条 update pin 为陈列馆 reflection 代表 · updateId=null 解除 pin
+function pinUpdateForShowcase({ projectId, updateId }, { currentUserId }) {
+  if (!projectId) throw new Error('projectId required');
+  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner_id !== currentUserId) throw new Error('只能 pin 自己项目的 update');
+  // 校验 updateId (如果给了)
+  if (updateId) {
+    const u = db.prepare('SELECT id FROM updates WHERE id = ? AND project_id = ?').get(updateId, projectId);
+    if (!u) throw new Error('找不到这条 update');
+  }
+  db.prepare('UPDATE projects SET pinned_update_id = ?, updated_at = ? WHERE id = ?')
+    .run(updateId || null, Date.now(), projectId);
+  return { ok: true, pinnedUpdateId: updateId || null };
+}
+
+// 暂时不在陈列馆出现 (作者自己藏作品) · hidden=true 隐藏, false 重新公开
+function toggleShowcaseVisibility({ projectId, hidden }, { currentUserId }) {
+  if (!projectId) throw new Error('projectId required');
+  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner_id !== currentUserId) throw new Error('只能改自己项目的可见性');
+  const v = hidden ? 1 : 0;
+  db.prepare('UPDATE projects SET hidden_from_showcase = ?, updated_at = ? WHERE id = ?')
+    .run(v, Date.now(), projectId);
+  return { ok: true, hiddenFromShowcase: !!hidden };
+}
+
 // helper: 取项目的扁平表示 (action 返回值用)
 function getProjectFlat(projectId) {
   const p = db.prepare(`
@@ -639,6 +667,7 @@ module.exports = {
   editTagline, renameHandle,
   // projects
   addProject, editProject, changeProjectStatus, shipProject, exhibitProject,
+  pinUpdateForShowcase, toggleShowcaseVisibility,
   // updates
   addUpdate, editUpdate, deleteUpdate,
   // reactions

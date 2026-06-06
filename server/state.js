@@ -24,7 +24,8 @@ function buildState({ targetUserId } = {}) {
 
   // 抓所有项目 (包括 archive) · feed 由 webapp getFeedEvents 过滤 · workshop 的"做过的"区要显示 archive
   const projectsRows = db.prepare(`
-    SELECT id, owner_id, slug, name, desc, product_link, status, shipped_at, github_link, created_at, updated_at
+    SELECT id, owner_id, slug, name, desc, product_link, status, shipped_at, github_link,
+           pinned_update_id, hidden_from_showcase, created_at, updated_at
     FROM projects
     ORDER BY updated_at DESC
   `).all();
@@ -132,6 +133,8 @@ function buildState({ targetUserId } = {}) {
       productLink: p.product_link,
       status: p.status,
       shippedAt: p.shipped_at || undefined,
+      pinnedUpdateId: p.pinned_update_id || undefined,
+      hiddenFromShowcase: !!p.hidden_from_showcase,
       githubLink: p.github_link || undefined,
       tools: (tools[p.id] || []).map(t => t.tool),
       updates: projectUpdates,

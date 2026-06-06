@@ -6462,8 +6462,11 @@ function renderProject(owner, slug) {
               const cfg = EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship;
               return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: ${cfg.badgeColor};">${cfg.glyph} 改陈列 / 换 kind</span>`;
             }
-            return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 放进陈列馆</span>`;
+            return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 办仪式 (可选)</span>`;
           })()}
+          ${p.hiddenFromShowcase
+            ? `<span class="small-action" onclick="toggleHidden('${p.id}', false)" style="color: var(--sepia);">已隐藏 → 重新入馆</span>`
+            : `<span class="small-action" onclick="toggleHidden('${p.id}', true)" style="color: var(--sepia);">暂不入馆</span>`}
         ` : ''}
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
@@ -6689,23 +6692,42 @@ function daysSinceShip(ts) {
 }
 
 function renderShowcase(focusId) {
-  // 收集所有"陈列中"的项目 · 取决于是否有 kind in ['ship','prototype','design'] 的 update
-  // exhibit update 选最新一条 · 它的 kind / text / images 决定卡片视觉
+  // v0.59 根本路: 入馆资格 = 非归档 + 有 update + 没被作者隐藏
+  // 仪式 (ship/prototype/design) 不再是门票 · 只决定 badge kind 和 reflection 优先级
+  // representativeUpdate 选取顺序: 作者 pin > kind 仪式 update > 最新 update
   const items = [];
   state.projects.forEach(p => {
-    if (p.status === 'archive') return; // 归档项目不出现
-    const exhibitUpdate = findExhibitUpdate(p);
-    if (!exhibitUpdate) return;
-    const reflection = exhibitUpdate.text || '';
-    const shipAt = p.shippedAt || exhibitUpdate.at || 0;
+    if (p.status === 'archive') return;       // 归档不出现
+    if (p.hiddenFromShowcase) return;          // 作者主动隐藏
+    if (!p.updates || p.updates.length === 0) return; // 完全没动过的不进馆 (避免空壳)
+
+    const rep = findRepresentativeUpdate(p);
+    if (!rep) return;
+    const exhibitUpdate = findExhibitUpdate(p);  // 仪式 update (任何 kind ∈ EXHIBIT_KINDS)
+
+    // 反思文本 · 取代表 update 的 text
+    const reflection = rep.text || '';
+
+    // kind 决定 badge · 优先用仪式 kind · 否则:
+    //   project.status === 'done' → ship (虽然没办仪式 · 但项目状态是 done · 给"完工" badge)
+    //   其他 → progress (在做)
+    let kind;
+    if (exhibitUpdate) kind = exhibitUpdate.kind;
+    else if (p.status === 'done') kind = 'ship';
+    else kind = 'progress';
+
+    // 上馆 / 近动 时间
+    const shipAt = p.shippedAt || (exhibitUpdate && exhibitUpdate.at) || rep.at || 0;
+
+    // 封面图: 代表 update 的图 > 项目任何 update 的图
     let coverImage = null;
-    if (exhibitUpdate.images && exhibitUpdate.images.length > 0) {
-      coverImage = exhibitUpdate.images[0];
+    if (rep.images && rep.images.length > 0) {
+      coverImage = rep.images[0];
     } else {
       const upWithImg = (p.updates || []).find(u => u.images && u.images.length > 0);
       if (upWithImg) coverImage = upWithImg.images[0];
     }
-    items.push({ p, reflection, shipAt, shipUpdateId: exhibitUpdate.id, kind: exhibitUpdate.kind, coverImage });
+    items.push({ p, reflection, shipAt, shipUpdateId: rep.id, kind, coverImage });
   });
   items.sort((a, b) => b.shipAt - a.shipAt);
 
@@ -6802,8 +6824,8 @@ function renderShowcase(focusId) {
           ${stamps.length > 0 ? `<div class="showcase-stamps-row">${stamps.join('')}</div>` : '<div></div>'}
           <div class="showcase-card-actions">
             ${currentUser.handle === p.owner ? `
-              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改 / 补图</span>
-              <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">让它出馆</span>
+              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">${kind === 'progress' ? '✦ 升格 · 办仪式' : '改 / 补图'}</span>
+              <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">暂不入馆</span>
             ` : ''}
             <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工作室 →</a>
             ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : ''}
@@ -7755,21 +7777,35 @@ function openShipPick() {
   document.getElementById('modal-ship-pick').classList.remove('hidden');
 }
 
-// v0.54: 陈列馆"让它出馆"撤展 · 把项目从 done 改回 paused
+// 项目页 owner 入口 · 项目可见性单向 toggle (true=隐藏, false=入馆)
+async function toggleHidden(projectId, hidden) {
+  const p = projectById(projectId);
+  if (!p) return;
+  try {
+    await apiAction('toggleShowcaseVisibility', { projectId, hidden });
+    state = await fetchState();
+    renderProject(p.owner, p.slug);
+    showToast(hidden ? '已暂不入馆 · 工作室里还在' : '已重新放回陈列馆');
+  } catch (e) { showToast(e.message); }
+}
+
+// v0.59 根本路: 撤展不再改 status · 只改 hiddenFromShowcase
+// 项目状态保留 (active 还是 active, done 还是 done) · 时间线进展继续 · 只是不在陈列馆出现
 async function confirmWithdraw(ev, projectId) {
   ev.stopPropagation();
   const p = projectById(projectId);
   if (!p) return;
   const sure = confirm(
     '让「' + p.name + '」暂时撤出陈列馆？\n\n' +
-    '项目会改回「暂停」状态，留在你的工作室里。\n' +
-    '随时可以再让它入馆 — 历史感想和图都还在。'
+    '项目状态不变 · 工作室里还在 · 时间线进展继续 · 只是不在陈列馆出现。\n' +
+    '随时可以再让它入馆 — 历史一切都还在。'
   );
   if (!sure) return;
   try {
-    await apiAction('changeProjectStatus', { projectId, newStatus: 'paused' });
+    await apiAction('toggleShowcaseVisibility', { projectId, hidden: true });
+    state = await fetchState();   // 同步 hiddenFromShowcase 字段
     renderShowcase();
-    showToast('「' + p.name + '」已撤出陈列馆，回到工作室');
+    showToast('「' + p.name + '」已撤出陈列馆');
   } catch (e) { showToast(e.message); }
 }
 
@@ -7829,6 +7865,17 @@ const EXHIBIT_KIND_COPY = {
     showcaseVerb: '概念',
     tryCtaText: '去看看 →',
   },
+  // v0.59 根本路: "进行中" 默认 kind · 没做仪式的项目自动入馆时用这个铭牌
+  // 不在 EXHIBIT_KINDS 数组里 (filter pills 不显示这个 kind 选项) · 走"全部"才看到
+  progress: {
+    glyph: '·',
+    name: '在做',
+    badgeColor: 'var(--sepia)',
+    statementLabel: '近 一 笔',
+    quoteLabel: '近 一 笔',
+    showcaseVerb: '更新于',
+    tryCtaText: '去试试 →',
+  },
 };
 
 const EXHIBIT_KINDS = ['ship', 'prototype', 'design'];
@@ -7836,6 +7883,22 @@ const EXHIBIT_KINDS = ['ship', 'prototype', 'design'];
 function findExhibitUpdate(p) {
   if (!p || !p.updates) return null;
   return p.updates.find(u => EXHIBIT_KINDS.includes(u.kind)) || null;
+}
+
+// v0.59 根本路: 陈列馆解耦 ceremony 仪式跟入馆资格 · 任何有 update 的非归档
+// 项目自动入馆 · kind 仪式只决定徽章。 这个函数挑出"代表 update":
+//   1. 作者 pin 的那一条
+//   2. 否则最近一条 kind 仪式 update (ship/prototype/design)
+//   3. 否则最新一条 update (p.updates[0])
+function findRepresentativeUpdate(p) {
+  if (!p || !p.updates || p.updates.length === 0) return null;
+  if (p.pinnedUpdateId) {
+    const pinned = p.updates.find(u => u.id === p.pinnedUpdateId);
+    if (pinned) return pinned;
+  }
+  const exhibit = findExhibitUpdate(p);
+  if (exhibit) return exhibit;
+  return p.updates[0];
 }
 
 function openShipCeremony(projectId) {
