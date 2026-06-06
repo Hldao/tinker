@@ -5841,6 +5841,189 @@
   /* ===============================================================
      END v0.66 关于页大重写
      =============================================================== */
+
+  /* ================================================================
+   *  v0.67 · 记一笔 modal 视觉系统对齐 + 文案 AI 味清理
+   *  --------------------------------------------------------------
+   *  跟 exhibit modal v0.63 节奏对齐 · 让两个发布 modal 一脉
+   *
+   *  改动:
+   *    · markup 加 .update-modal class · max-width 580px
+   *    · 加 mono eyebrow "记 进 展" · 跟 exhibit 同款气质
+   *    · title "记一笔" → "今天动了什么" (更直接 · 不再单字)
+   *    · CTA "记上" → "✎ 记上" (加 glyph 跟 exhibit ✦ 同款)
+   *    · cancel "取消" → "先不记" (动作明确化)
+   *    · placeholder 简化 "今天... (短句就好 · **粗体** 和 `代码` 会渲染)"
+   *      → "今天..." (markdown 提示 alpha 期不教 · 探索式)
+   *    · 三个 extras 文案去 staccato · 去 "ta 们"
+   *
+   *  CSS 复用 exhibit v0.63 模式:
+   *    · textarea input-bare 边框化 · placeholder 加深
+   *    · upload-area dashed border + paper bg
+   *    · upload-trigger 按钮化 · hover vermilion
+   *    · upload-hint / extra-sub / modal-sub 弱文字 ink-soft 正体
+   *    · title Fraunces 大字
+   *    · CTA primary 边框 + 微 lift
+   *  ================================================================ */
+
+  /* —— 容器 —— */
+  .update-modal {
+    width: 100%;
+    max-width: 580px !important;
+  }
+
+  /* —— eyebrow —— */
+  .update-modal > .mono.text-xs:first-of-type {
+    font-size: 11.5px !important;
+    letter-spacing: 0.28em !important;
+    margin-bottom: 10px !important;
+    color: var(--vermilion) !important;
+  }
+
+  /* —— title Fraunces 大字 —— */
+  .update-modal .modal-title {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    font-variation-settings: 'opsz' 144 !important;
+    font-weight: 500 !important;
+    font-size: 26px !important;
+    letter-spacing: -0.015em !important;
+    color: var(--ink) !important;
+    margin-bottom: 6px !important;
+    line-height: 1.2;
+  }
+  .update-modal .modal-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 14.5px !important;
+    line-height: 1.55 !important;
+    margin-bottom: 22px !important;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— textarea 边框化 + placeholder 加深 —— */
+  .update-modal .input-bare {
+    width: 100%;
+    border: 1px solid var(--sepia-light) !important;
+    border-radius: 3px !important;
+    background: rgba(245, 241, 232, 0.32) !important;
+    padding: 11px 13px !important;
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    color: var(--ink) !important;
+    line-height: 1.6 !important;
+    letter-spacing: 0.005em !important;
+    transition: border-color 0.18s, background 0.18s !important;
+  }
+  .update-modal .input-bare:focus {
+    border-color: var(--vermilion) !important;
+    background: var(--bg) !important;
+    outline: none !important;
+  }
+  .update-modal .input-bare::placeholder {
+    color: var(--ink-soft) !important;
+    opacity: 0.55 !important;
+    font-style: normal !important;
+  }
+
+  /* —— upload-area 独立卡片 —— */
+  .update-modal .upload-area {
+    border: 1px dashed var(--sepia-light) !important;
+    background: rgba(245, 241, 232, 0.35) !important;
+    border-radius: 4px !important;
+    padding: 14px 16px !important;
+    margin-top: 18px !important;
+  }
+  .update-modal .upload-trigger {
+    display: block !important;
+    text-align: center;
+    padding: 11px 14px !important;
+    border: 1px solid var(--sepia-light) !important;
+    border-radius: 3px;
+    background: var(--bg) !important;
+    color: var(--ink-soft) !important;
+    font-family: 'Newsreader', 'Songti SC', serif !important;
+    font-size: 14.5px !important;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, color 0.2s !important;
+    font-style: normal !important;
+    letter-spacing: 0.005em;
+  }
+  .update-modal .upload-trigger:hover {
+    border-color: var(--vermilion) !important;
+    background: rgba(194, 65, 12, 0.04) !important;
+    color: var(--vermilion) !important;
+  }
+  .update-modal .upload-hint {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    margin-top: 8px !important;
+    letter-spacing: 0.005em !important;
+    line-height: 1.5;
+  }
+
+  /* —— EXTRAS · 三个 checkbox —— */
+  .update-modal .update-extras {
+    padding-top: 16px !important;
+    margin-top: 16px !important;
+    border-top: 1px dotted var(--rule) !important;
+  }
+  .update-modal .update-extras .extra-title {
+    color: var(--ink) !important;
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+  }
+  .update-modal .update-extras .extra-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    letter-spacing: 0.005em !important;
+    line-height: 1.5;
+  }
+
+  /* —— mono small label "想知道" —— */
+  .update-modal label.mono.text-xs {
+    color: var(--ink-soft) !important;
+    letter-spacing: 0.22em !important;
+    font-weight: 500 !important;
+    font-size: 11px !important;
+  }
+
+  /* —— CTA primary —— */
+  .update-modal .btn-act-primary {
+    background: rgba(194, 65, 12, 0.05) !important;
+    border: 1px solid var(--vermilion) !important;
+    color: var(--vermilion) !important;
+    padding: 8px 22px !important;
+    border-radius: 3px !important;
+    font-family: 'Newsreader', serif !important;
+    font-size: 14.5px !important;
+    letter-spacing: 0.01em !important;
+    transition: background 0.22s, transform 0.22s !important;
+    cursor: pointer;
+  }
+  .update-modal .btn-act-primary:hover {
+    background: rgba(194, 65, 12, 0.1) !important;
+    transform: translateY(-1px);
+  }
+
+  /* —— cancel btn 简化 —— */
+  .update-modal .btn-act {
+    color: var(--sepia) !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 8px 18px !important;
+    cursor: pointer;
+    transition: color 0.18s !important;
+    font-family: 'Newsreader', serif !important;
+    font-size: 14.5px !important;
+  }
+  .update-modal .btn-act:hover {
+    color: var(--ink) !important;
+  }
+
+  /* ===============================================================
+     END v0.67 记一笔 modal 视觉对齐 + AI 味清理
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -6108,43 +6291,45 @@
 
 <!-- UPDATE modal · 加了图片上传 -->
 <div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
-  <div class="modal-paper w-full">
-    <h3 class="modal-title">记一笔</h3>
-    <p class="modal-sub">跑通了 X、卡在 Y、试了 Z 失败 — 写啥都行</p>
-    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天... (短句就好 · **粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
+  <div class="modal-paper update-modal w-full" style="max-width: 580px;">
+    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.28em;">记 进 展</div>
+    <h3 class="modal-title">今天动了什么</h3>
+    <p class="modal-sub">跑通了什么、卡在哪儿、试错了什么，都行。短句就好。</p>
+
+    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="upload-list"></div>
       <label class="upload-trigger">
-        + 加张图 (可选)
+        + 加张图（可选）
         <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" style="display: none;">
       </label>
-      <div class="upload-hint">调 bug 截图、运行效果、设计稿 — 都可以；也可以直接粘贴（⌘V）</div>
+      <div class="upload-hint">调 bug 截图、运行效果、设计稿，随手粘屏（⌘V）也行。</div>
     </div>
 
     <!-- v0.4: 跟反馈闭环联动的可选项 · 默认都不勾 · 不轰炸接走的人 -->
     <div id="update-extras" class="update-extras">
       <label class="update-extra-row">
         <input type="checkbox" id="update-alsostuck">
-        <span><span class="extra-title">同时把状态改成「卡住」</span><span class="extra-sub">接走 / 想试试 你的人会被通知 · ta 们也许能搭把手</span></span>
+        <span><span class="extra-title">同时把项目状态改成「卡住」</span><span class="extra-sub">之前接走过、或说过想试试你的人会收到通知，也许能搭把手。</span></span>
       </label>
       <label class="update-extra-row" id="update-notify-row">
         <input type="checkbox" id="update-notify">
-        <span><span class="extra-title">通知「接走 / 想试试」你的人</span><span class="extra-sub">跑通了大版本 / 重要更新 时勾 · 默认不发</span></span>
+        <span><span class="extra-title">通知接走过、想试试的人</span><span class="extra-sub">跑通了大版本、或重要更新时再勾。默认不发，不打扰别人。</span></span>
       </label>
       <label class="update-extra-row">
         <input type="checkbox" id="update-seeking-feedback" onchange="document.getElementById('update-feedback-ask-wrap').classList.toggle('hidden', !this.checked)">
-        <span><span class="extra-title">求看看，想拿反馈</span><span class="extra-sub">这条进展会被标为「求反馈」，进 feed 的求反馈频道，试用 CTA 自动加强</span></span>
+        <span><span class="extra-title">求看看，想拿反馈</span><span class="extra-sub">这条会被标成「求反馈」，进 feed 的求反馈频道。</span></span>
       </label>
       <div id="update-feedback-ask-wrap" class="hidden" style="padding-left: 32px;">
-        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.2em;">想知道（可选）</label>
-        <textarea id="update-feedback-ask" class="input-bare" rows="2" placeholder="比如:用户能不能 5 秒内看懂这是干嘛的 / 这个交互流程顺不顺 / 文案哪里别扭" style="font-size: 14px; resize: vertical;"></textarea>
+        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.22em;">想知道（可选）</label>
+        <textarea id="update-feedback-ask" class="input-bare" rows="2" placeholder="5 秒内看得懂这是干嘛的吗，哪个流程不顺，文案哪里别扭" style="font-size: 14px; resize: vertical;"></textarea>
       </div>
     </div>
 
     <div class="flex justify-end gap-4 mt-6">
-      <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitUpdate()" class="btn-act-primary">记上</button>
+      <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">先不记</button>
+      <button onclick="submitUpdate()" class="btn-act-primary">✎ 记上</button>
     </div>
   </div>
 </div>
@@ -6475,10 +6660,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.66.1 · 43 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.67 · 44 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.66.1</span>
+  <span class="bb-ver">v0.67</span>
 </div>
 
 <script>
