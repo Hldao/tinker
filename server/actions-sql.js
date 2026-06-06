@@ -228,8 +228,8 @@ function changeProjectStatus({ projectId, newStatus }, { currentUserId }) {
 // 原子操作:status → done · 记 shipped_at · 创建 kind='ship' 的 update · 通知 wantToTry
 // 跟普通 changeProjectStatus + addUpdate 的区别:这一刻是仪式 · 必须写感想
 // 感想会进时间线 · 同时显示在陈列馆作为该项目的代表内容
-function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk }, { currentUserId }) {
-  if (!reflection || !reflection.trim()) throw new Error('完工感想不能空 — 说一句也行');
+function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk, images }, { currentUserId }) {
+  if (!reflection || !reflection.trim()) throw new Error('完工感想不能空,说一句也行');
   const p = db.prepare('SELECT owner_id, name, status, shipped_at FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
   if (p.owner_id !== currentUserId) throw new Error('只能给自己的项目完工');
@@ -240,8 +240,8 @@ function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk }, { 
   const wasDone = p.status === 'done';
 
   const txn = db.transaction(() => {
-    // 第一次完工:status 改 done + 记 shipped_at
-    // 已经 done 状态下再次"完工"(比如想换个感想):允许 · 只创建新 ship update · 不动 shipped_at
+    // 第一次完工时改 status 并记 shipped_at
+    // 已经 done 时再次"完工"(比如换感想 / 补图)允许,只创建新 ship update,不动 shipped_at
     if (!wasDone) {
       db.prepare('UPDATE projects SET status = ?, shipped_at = ?, updated_at = ? WHERE id = ?')
         .run('done', p.shipped_at || now, now, projectId);
@@ -252,6 +252,18 @@ function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk }, { 
     db.prepare(`
       INSERT INTO updates (id, project_id, text, at, feedback_ask, kind) VALUES (?, ?, ?, ?, ?, ?)
     `).run(updateId, projectId, reflection.trim(), now, feedbackVal, 'ship');
+
+    // 图片 (跟 addUpdate 一致的存储方式,第一张作为陈列馆封面)
+    if (Array.isArray(images)) {
+      const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
+      const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
+      images.forEach((img, idx) => {
+        if (!img || !img.src) return;
+        const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
+        insImg.run(imgId, img.src, img.caption || null, now);
+        insLink.run(updateId, imgId, idx);
+      });
+    }
   });
   txn();
 

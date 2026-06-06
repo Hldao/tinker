@@ -4731,7 +4731,7 @@
     <div class="mb-6">
       <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">陈列馆</div>
       <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">完工了、还能玩到的小作品。时间倒序，<strong>不投票，不排行 — 看到喜欢的，去试用一下</strong>。</p>
+      <p class="feed-sub">完工了、还能玩到的小作品。时间倒序，<strong>不投票，不排行，看到喜欢的就去试用一下</strong>。</p>
       <div id="showcase-stats" class="showcase-stats"></div>
     </div>
     <div class="filter-row mb-4">
@@ -5043,8 +5043,17 @@
   <div class="modal-paper w-full" style="max-width: 560px;">
     <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.22em;">✦ 完工</div>
     <h3 class="modal-title">写一句完工感想</h3>
-    <p class="modal-sub">这条感想会进时间线 · 也进陈列馆作为这件作品的代表内容 · 别凑数 · 你最想说的那句</p>
-    <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="比如:卡了三周的 cron 终于把状态对上了 · 我想知道是不是有更简单的写法" style="font-size: 16px; resize: vertical;"></textarea>
+    <p class="modal-sub">这条感想会进时间线,也进陈列馆作为这件作品的代表内容,别凑数,写你最想说的那句</p>
+    <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="比如,卡了三周的 cron 终于把状态对上了,我想知道是不是有更简单的写法" style="font-size: 16px; resize: vertical;"></textarea>
+
+    <div class="upload-area">
+      <div class="upload-list" id="ship-upload-list"></div>
+      <label class="upload-trigger">
+        + 加截图 (作为陈列馆封面)
+        <input type="file" accept="image/*" multiple onchange="handleShipImageSelect(event)" style="display: none;">
+      </label>
+      <div class="upload-hint">第一张图会成为陈列馆里这件作品的封面,16:9 比例最理想,也可以直接粘贴 (⌘V)</div>
+    </div>
 
     <div class="update-extras" style="margin-top: 14px;">
       <label class="update-extra-row">
@@ -5264,6 +5273,7 @@ let trackingMode = false;
 let seekingFeedbackOnly = false;
 let pendingImages = [];
 let notePendingImages = [];
+let shipPendingImages = [];
 
 function toggleTrackingMode() {
   trackingMode = !trackingMode;
@@ -6092,13 +6102,12 @@ function renderShowcase() {
       <article class="showcase-card">
         <div class="showcase-index">${idxStr}</div>
         <div class="showcase-dateline">
-          <span class="dl-left">入馆 · ${formatShipDate(shipAt)}</span>
-          <span class="dl-right"><span class="ship-mark">✦</span>完工已 ${daysSinceShip(shipAt)} 天</span>
+          <span class="dl-left"><span class="ship-mark">✦</span>入馆 ${formatShipDate(shipAt)}</span>
         </div>
         <h2 class="showcase-card-name" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</h2>
         <div class="showcase-card-plaque">
           <span class="plaque-by">— <span class="plaque-handle" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">@${p.owner}</span></span>
-          ${(p.tools || []).length > 0 ? `<span class="plaque-sep">·</span><span class="plaque-tools">${(p.tools || []).slice(0, 4).join(' · ')}</span>` : ''}
+          ${(p.tools || []).length > 0 ? `<span class="plaque-sep">·</span><span class="plaque-tools">${(p.tools || []).slice(0, 4).join('、')}</span>` : ''}
         </div>
         ${coverImage ? `
         <div class="showcase-card-figure" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(coverImage.src).replace(/"/g,'&quot;')}, ${JSON.stringify(coverImage.caption||'').replace(/"/g,'&quot;')})">
@@ -6459,6 +6468,37 @@ function renderNotePendingImages() {
 function removeNotePendingImage(idx) {
   notePendingImages.splice(idx, 1);
   renderNotePendingImages();
+}
+
+/* ============ SHIP IMAGE UPLOAD ============ */
+function handleShipImageSelect(ev) {
+  const files = ev.target.files;
+  for (const file of files) addShipImageFile(file);
+  ev.target.value = '';
+}
+function addShipImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  if (file.size > 800 * 1024) { showToast('图太大了,原型阶段限制 800KB'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    shipPendingImages.push({ src: e.target.result, caption: '' });
+    renderShipPendingImages();
+  };
+  reader.readAsDataURL(file);
+}
+function renderShipPendingImages() {
+  const list = document.getElementById('ship-upload-list');
+  if (!list) return;
+  list.innerHTML = shipPendingImages.map((img, idx) => `
+    <div class="upload-thumb">
+      <img src="${img.src}" alt="">
+      <div class="remove" onclick="removeShipPendingImage(${idx})">×</div>
+    </div>
+  `).join('');
+}
+function removeShipPendingImage(idx) {
+  shipPendingImages.splice(idx, 1);
+  renderShipPendingImages();
 }
 
 function zoomImage(src, caption) {
@@ -6924,6 +6964,8 @@ async function submitStatusChange() {
 let shipCtx = null;
 function openShipCeremony(projectId) {
   shipCtx = projectId;
+  shipPendingImages = [];
+  renderShipPendingImages();
   document.getElementById('ship-reflection').value = '';
   document.getElementById('ship-seeking-feedback').checked = true;
   document.getElementById('ship-feedback-ask').value = '';
@@ -6934,19 +6976,23 @@ function openShipCeremony(projectId) {
 async function submitShipCeremony() {
   if (!shipCtx) return;
   const reflection = document.getElementById('ship-reflection').value.trim();
-  if (!reflection) { showToast('完工感想不能空 — 说一句也行'); return; }
+  if (!reflection) { showToast('完工感想不能空,说一句也行'); return; }
   const seeking = document.getElementById('ship-seeking-feedback').checked;
   const ask = seeking ? document.getElementById('ship-feedback-ask').value.trim() : '';
+  const images = shipPendingImages.length > 0
+    ? shipPendingImages.map(i => ({ src: i.src, caption: i.caption || '' }))
+    : undefined;
   const p = projectById(shipCtx);
   const wantToTryCount = (p && p.reactions ? (p.reactions.wantToTry || []) : []).filter(u => u !== currentUser.handle).length;
   try {
-    await apiAction('shipProject', { projectId: shipCtx, reflection, seekingFeedback: seeking, feedbackAsk: ask });
+    await apiAction('shipProject', { projectId: shipCtx, reflection, seekingFeedback: seeking, feedbackAsk: ask, images });
     closeModal('modal-ship-ceremony');
+    shipPendingImages = [];
     if (p) renderProject(p.owner, p.slug);
     if (wantToTryCount > 0) {
-      showToast('✦ 完工 · 已通知 ' + wantToTryCount + ' 个想试试的人 · 也进了陈列馆');
+      showToast('✦ 完工,已通知 ' + wantToTryCount + ' 个想试试的人,也进了陈列馆');
     } else {
-      showToast('✦ 完工 · 进了陈列馆');
+      showToast('✦ 完工,进了陈列馆');
     }
     shipCtx = null;
   } catch (e) { showToast(e.message); }
@@ -7320,13 +7366,15 @@ document.addEventListener('paste', (e) => {
   const items = e.clipboardData ? e.clipboardData.items : [];
   const updateOpen = !document.getElementById('modal-update').classList.contains('hidden');
   const noteOpen = !document.getElementById('modal-note').classList.contains('hidden');
-  if (!updateOpen && !noteOpen) return;
+  const shipOpen = !document.getElementById('modal-ship-ceremony').classList.contains('hidden');
+  if (!updateOpen && !noteOpen && !shipOpen) return;
   for (const item of items) {
     if (item.type && item.type.startsWith('image/')) {
       const file = item.getAsFile();
       if (file) {
         if (updateOpen) addImageFile(file);
         else if (noteOpen) addNoteImageFile(file);
+        else if (shipOpen) addShipImageFile(file);
         e.preventDefault();
       }
     }
@@ -7337,7 +7385,7 @@ document.addEventListener('paste', (e) => {
 document.addEventListener('keydown', (e) => {
   // ESC 关任意 modal
   if (e.key === 'Escape') {
-    ['modal-note','modal-tinkered','modal-update','modal-zoom','modal-search','modal-method-used','modal-pick-project','modal-new-project','modal-edit-workshop','modal-status-picker'].forEach(id => {
+    ['modal-note','modal-tinkered','modal-update','modal-zoom','modal-search','modal-method-used','modal-pick-project','modal-new-project','modal-edit-workshop','modal-status-picker','modal-ship-ceremony'].forEach(id => {
       const el = document.getElementById(id);
       if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
     });
