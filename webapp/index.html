@@ -36,6 +36,18 @@
   body { background: var(--bg); color: var(--ink); font-family: 'Inter', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
   .serif { font-family: 'Newsreader', 'Source Serif Pro', Georgia, serif; }
   .mono  { font-family: 'JetBrains Mono', ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
+  /* 极简 inline markdown · 进展/便签里 **粗体** + `代码` · 不喧宾夺主 */
+  strong { font-weight: 600; }
+  .inline-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: var(--paper);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--vermilion);
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
   /* Fraunces — 大字号 hero 专用 · variable opsz 144 让大字渲染最优雅 */
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
 
@@ -2592,7 +2604,7 @@
   <div class="modal-paper w-full">
     <h3 class="modal-title">留个便签</h3>
     <p class="modal-sub">独立显示 · 不能盖楼 · 可以加截图说明</p>
-    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句..." style="font-size: 17px; resize: vertical;"></textarea>
+    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句... (**粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="note-upload-list"></div>
@@ -2633,8 +2645,8 @@
 <div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
     <h3 class="modal-title">记一笔</h3>
-    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
-    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
+    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 一两句话就行 · 这是工作现场 · 不用排版</p>
+    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天... (短句就好 · **粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="upload-list"></div>
@@ -3070,16 +3082,24 @@ const ICONS = {
   xhs:     '<svg class="icon-brand" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
 };
 
-// @username 渲染成可点击链接 (要求 user 存在)
+// 渲染富文本 — 仅支持极简 inline markdown · 不支持 headers / lists / 块级元素
+// 设计哲学:这是"工作现场"·不是"博客"。**粗体** 和 `代码` 够用了。
+// (旧名 renderMentions 保留兼容性 · 现在做 @ + bold + inline code 三件事)
 function renderMentions(text) {
   if (!text) return '';
-  const escaped = escapeHtml(text);
-  return escaped.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
+  let s = escapeHtml(text);
+  // **粗体** · 不跨行 · 不贪心
+  s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  // `内联代码` · 不跨行
+  s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
+  // @username · 用户存在才变可点击
+  s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
     if (state.users && state.users[username]) {
       return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${username}')">@${username}</span>`;
     }
     return match;
   });
+  return s;
 }
 
 function extractMentions(text) {
@@ -3334,11 +3354,11 @@ function renderWorkshop(handle) {
               在「${escapeHtml(project.name)}」 · ${update.usedBy.length} 人用过 · ${timeAgo(Math.max(...update.usedBy.map(x => x.at)))}
             </div>
             <div class="serif" style="font-size: 15px; color: var(--ink); line-height: 1.55; margin-bottom: 8px;">
-              ${escapeHtml(update.text.length > 140 ? update.text.slice(0, 140) + '…' : update.text)}
+              ${renderMentions(update.text.length > 140 ? update.text.slice(0, 140) + '…' : update.text)}
             </div>
             <div class="tl-used-list" style="margin-top: 4px;">
               ${update.usedBy.map(used => `
-                <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + escapeHtml(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+                <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
               `).join('')}
             </div>
           </div>
@@ -3459,7 +3479,7 @@ function renderProject(owner, slug) {
                   <div class="tl-used-header">被 用 过 · ${usedByList.length}</div>
                   <div class="tl-used-list">
                     ${usedByList.map(used => `
-                      <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + escapeHtml(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+                      <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
                     `).join('')}
                   </div>
                 </div>
