@@ -215,6 +215,30 @@
   .tl-ship-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); letter-spacing: 0.28em; margin-bottom: 10px; font-weight: 500; }
   .tl-entry-ship .tl-time { color: var(--vermilion); }
   .tl-entry-ship .tl-text { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 96; font-size: 18px; line-height: 1.55; }
+
+  /* 工作室"做过的"区:pcard 升级 · 展示完工感想引语 */
+  .pcard-done .pcard-name { color: var(--ink); }
+  .pcard-done:hover .pcard-name { color: var(--vermilion); }
+  .pcard-ship-quote { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink-soft); line-height: 1.6; border-left: 2px solid var(--vermilion); padding: 2px 0 2px 14px; margin: 8px 0 10px 0; background: transparent; }
+
+  /* 陈列馆 card · 报纸编辑稿气质 · 每张卡片是一件完工的小作品 */
+  .showcase-card { padding: 28px 0; border-bottom: 1px solid var(--rule); position: relative; }
+  .showcase-card:last-child { border-bottom: none; }
+  .showcase-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
+  .showcase-card-name { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-weight: 500; font-size: 32px; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); cursor: pointer; transition: color 0.15s; margin-bottom: 4px; }
+  .showcase-card-name:hover { color: var(--vermilion); }
+  .showcase-card-by { font-family: 'Newsreader', serif; font-size: 15px; color: var(--sepia); margin-bottom: 8px; }
+  .showcase-card-desc { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink-soft); line-height: 1.55; margin-bottom: 14px; }
+  .showcase-card-reflection { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); line-height: 1.65; border-left: 3px solid var(--vermilion); padding: 4px 0 4px 18px; margin: 0 0 16px 0; background: transparent; }
+  .showcase-card-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; }
+  .showcase-card-cta { font-family: 'Newsreader', serif; font-size: 14px; color: var(--vermilion); border-bottom: 1px solid var(--vermilion); padding-bottom: 1px; text-decoration: none; transition: opacity 0.15s; }
+  .showcase-card-cta:hover { opacity: 0.7; }
+
+  /* 小屏适配 */
+  @media (max-width: 480px) {
+    .showcase-card-name { font-size: 26px; }
+    .showcase-card { padding: 22px 0; }
+  }
   .tl-feedback-ask-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.22em; font-weight: 500; }
   .tl-feedback-ask-text { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; margin-top: 6px; }
   .tl-feedback-ask-text .ask-prefix { color: var(--vermilion); font-weight: 500; }
@@ -4251,6 +4275,7 @@
     <div class="masthead-actions">
       <nav class="masthead-nav-primary">
         <button onclick="showScreen('feed')">动静</button>
+        <button onclick="showScreen('showcase')">陈列馆</button>
         <button onclick="navMyWorkshop()">我的工作室</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
@@ -4946,6 +4971,7 @@ function showScreen(name, ...args) {
   else if (name === 'project') renderProject(args[0], args[1]);
   else if (name === 'onboard') renderOnboard();
   else if (name === 'notifications') renderNotifications();
+  else if (name === 'showcase') renderShowcase();
   // about 是静态内容,不需要 render
   // 更新 hash · 让 URL 可分享 + back/forward 工作
   const newHash = buildHash(name, args);
@@ -4961,6 +4987,7 @@ function buildHash(name, args) {
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
+  if (name === 'showcase') return '#/showcase';
   return '#/';
 }
 
@@ -4973,6 +5000,7 @@ function navigateFromHash() {
   if (parts[0] === 'notifications') return showScreen('notifications');
   if (parts[0] === 'about') return showScreen('about');
   if (parts[0] === 'onboard') return showScreen('onboard');
+  if (parts[0] === 'showcase') return showScreen('showcase');
   return showScreen('feed');
 }
 
@@ -5302,6 +5330,24 @@ function renderWorkshop(handle) {
       <div class="pcard-meta"><span class="${p.status}">— ${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
     </div>
   `).join('');
+  // 做过的项目 · 比普通 pcard 多展示完工日期 + 感想引语 · 让"做完的事"有该有的视觉权重
+  const renderDonePcards = (list) => list.map(p => {
+    const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
+    const reflection = shipUpdate ? shipUpdate.text : '';
+    const shipAt = p.shippedAt || (shipUpdate ? shipUpdate.at : 0);
+    return `
+      <div class="pcard pcard-done" onclick="showScreen('project','${handle}','${p.slug}')">
+        <div class="pcard-name">${escapeHtml(p.name)}</div>
+        <div class="pcard-desc">${escapeHtml(p.desc)}</div>
+        ${reflection ? `<blockquote class="pcard-ship-quote">${renderMentions(reflection.length > 160 ? reflection.slice(0, 160) + '…' : reflection)}</blockquote>` : ''}
+        <div class="pcard-meta">
+          <span class="${p.status}">— ${statusText(p.status)}</span>
+          ${shipAt ? ` &nbsp;·&nbsp; <span style="color: var(--vermilion);">✦ 完工 ${shortAgo(shipAt)}</span>` : ''}
+          ${(p.tools || []).length > 0 ? ` &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
 
   root.innerHTML = `
     <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
@@ -5332,8 +5378,8 @@ function renderWorkshop(handle) {
         </div>
       ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent)}
     </div>
+    ${done.length > 0 ? `<div class="mb-12"><div class="section-label" style="color: var(--vermilion);">做过的 · 完工陈列 (${done.length})</div>${renderDonePcards(done)}</div>` : ''}
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
-    ${done.length > 0 ? `<div class="mb-12"><div class="section-label">做过的 (${done.length})</div>${renderPcards(done)}</div>` : ''}
 
     ${isMe && trackingProjects.length > 0 ? `
       <div class="mb-12">
@@ -5613,6 +5659,67 @@ function renderOnboard() {
       </div>
     </div>
   `).join('');
+}
+
+/* ============ SHOWCASE 陈列馆 ============ */
+let showcaseToolFilter = 'all';
+function renderShowcase() {
+  // 收集所有已完工项目 + 各自的 ship update (kind=ship 最新一条 · 没有就退化到最近 update.text)
+  const items = [];
+  state.projects.forEach(p => {
+    if (p.status !== 'done') return;
+    const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
+    const reflection = shipUpdate ? shipUpdate.text : ((p.updates || [])[0] || {}).text || '';
+    const shipAt = p.shippedAt || (shipUpdate ? shipUpdate.at : ((p.updates || [])[0] || {}).at) || 0;
+    items.push({ p, reflection, shipAt, shipUpdateId: shipUpdate ? shipUpdate.id : null });
+  });
+  items.sort((a, b) => b.shipAt - a.shipAt);
+
+  // tools 筛选器 · 仅展示在陈列馆出现过的 tools
+  const toolSet = new Set();
+  items.forEach(it => (it.p.tools || []).forEach(t => toolSet.add(t)));
+  const tools = ['all', ...Array.from(toolSet)];
+  const filterRow = document.getElementById('showcase-tools-filter');
+  filterRow.innerHTML = '';
+  tools.forEach(t => {
+    const span = document.createElement('span');
+    span.className = 'filter-pill' + (showcaseToolFilter === t ? ' active' : '');
+    span.textContent = t === 'all' ? '全部' : t;
+    span.onclick = () => { showcaseToolFilter = t; renderShowcase(); };
+    filterRow.appendChild(span);
+  });
+
+  const filtered = showcaseToolFilter === 'all' ? items : items.filter(it => (it.p.tools || []).includes(showcaseToolFilter));
+
+  const list = document.getElementById('showcase-list');
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">陈列馆还没东西 — 完工第一个的人在你之前 · 或者就是你</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(({ p, reflection, shipAt }) => {
+    const tinkeredCount = (p.reactions && p.reactions.tinkered) ? p.reactions.tinkered.length : 0;
+    const methodCount = (p.updates || []).reduce((acc, u) => acc + ((u.usedBy && u.usedBy.length) || 0), 0);
+    const stamps = [];
+    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过 ${tinkeredCount}</span>`);
+    if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用 ${methodCount}</span>`);
+    return `
+      <div class="showcase-card">
+        <div class="showcase-card-head">
+          <div class="mono text-xs" style="color: var(--vermilion); letter-spacing: 0.18em;">✦ 完 工 · ${shortAgo(shipAt)}</div>
+          ${stamps.length > 0 ? `<div class="pcard-stamps">${stamps.join('')}</div>` : ''}
+        </div>
+        <h2 class="showcase-card-name" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</h2>
+        <div class="showcase-card-by">— <span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">@${p.owner}</span></div>
+        <div class="showcase-card-desc">${escapeHtml(p.desc)}</div>
+        ${reflection ? `<blockquote class="showcase-card-reflection">${renderMentions(reflection.length > 280 ? reflection.slice(0, 280) + '…' : reflection)}</blockquote>` : ''}
+        <div class="showcase-card-meta">
+          <span>${(p.tools || []).slice(0, 4).join(' · ')}</span>
+          ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 /* ============ NOTIFICATIONS ============ */

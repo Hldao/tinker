@@ -24,7 +24,7 @@ function buildState({ targetUserId } = {}) {
 
   // 抓所有项目 (包括 archive) · feed 由 webapp getFeedEvents 过滤 · workshop 的"做过的"区要显示 archive
   const projectsRows = db.prepare(`
-    SELECT id, owner_id, slug, name, desc, product_link, status, github_link, created_at, updated_at
+    SELECT id, owner_id, slug, name, desc, product_link, status, shipped_at, github_link, created_at, updated_at
     FROM projects
     ORDER BY updated_at DESC
   `).all();
@@ -98,6 +98,7 @@ function buildState({ targetUserId } = {}) {
       const out = { id: u.id, text: u.text, at: u.at };
       if (u.prompt) out.prompt = u.prompt;
       if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
+      if (u.kind) out.kind = u.kind;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;
       const usedBy = usedByMap[u.id];
@@ -130,6 +131,7 @@ function buildState({ targetUserId } = {}) {
       desc: p.desc,
       productLink: p.product_link,
       status: p.status,
+      shippedAt: p.shipped_at || undefined,
       githubLink: p.github_link || undefined,
       tools: (tools[p.id] || []).map(t => t.tool),
       updates: projectUpdates,

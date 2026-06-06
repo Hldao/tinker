@@ -168,13 +168,20 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
 }
 
 function changeProjectStatus({ projectId, newStatus }, { currentUserId }) {
-  const p = db.prepare('SELECT owner_id, status, name FROM projects WHERE id = ?').get(projectId);
+  const p = db.prepare('SELECT owner_id, status, name, shipped_at FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
   if (p.owner_id !== currentUserId) throw new Error('只能改自己项目的状态');
 
   const oldStatus = p.status;
-  db.prepare('UPDATE projects SET status = ?, updated_at = ? WHERE id = ?')
-    .run(newStatus, Date.now(), projectId);
+  const now = Date.now();
+  // 首次进 done · 记 shipped_at(以后再 done 不重置 · "ship 时刻"只算第一次)
+  if (newStatus === 'done' && oldStatus !== 'done' && !p.shipped_at) {
+    db.prepare('UPDATE projects SET status = ?, shipped_at = ?, updated_at = ? WHERE id = ?')
+      .run(newStatus, now, now, projectId);
+  } else {
+    db.prepare('UPDATE projects SET status = ?, updated_at = ? WHERE id = ?')
+      .run(newStatus, now, projectId);
+  }
 
   // 通知 · 跟老版 spec §5.3 行为一致
   const wantToTryRows = db.prepare(`
@@ -213,6 +220,57 @@ function changeProjectStatus({ projectId, newStatus }, { currentUserId }) {
     }
   }
   return getProjectFlat(projectId);
+}
+
+// ============================================
+// SHIP CEREMONY (完工)
+// ============================================
+// 原子操作:status → done · 记 shipped_at · 创建 kind='ship' 的 update · 通知 wantToTry
+// 跟普通 changeProjectStatus + addUpdate 的区别:这一刻是仪式 · 必须写感想
+// 感想会进时间线 · 同时显示在陈列馆作为该项目的代表内容
+function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk }, { currentUserId }) {
+  if (!reflection || !reflection.trim()) throw new Error('完工感想不能空 — 说一句也行');
+  const p = db.prepare('SELECT owner_id, name, status, shipped_at FROM projects WHERE id = ?').get(projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner_id !== currentUserId) throw new Error('只能给自己的项目完工');
+
+  const updateId = 'u-' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const now = Date.now();
+  const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
+  const wasDone = p.status === 'done';
+
+  const txn = db.transaction(() => {
+    // 第一次完工:status 改 done + 记 shipped_at
+    // 已经 done 状态下再次"完工"(比如想换个感想):允许 · 只创建新 ship update · 不动 shipped_at
+    if (!wasDone) {
+      db.prepare('UPDATE projects SET status = ?, shipped_at = ?, updated_at = ? WHERE id = ?')
+        .run('done', p.shipped_at || now, now, projectId);
+    } else {
+      db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectId);
+    }
+    // 创建 ship update
+    db.prepare(`
+      INSERT INTO updates (id, project_id, text, at, feedback_ask, kind) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(updateId, projectId, reflection.trim(), now, feedbackVal, 'ship');
+  });
+  txn();
+
+  const anchor = 'update-' + updateId;
+
+  // 通知"想试试"的人 · 跟 changeProjectStatus → done 一致
+  if (!wasDone) {
+    const wantToTryRows = db.prepare(`
+      SELECT user_id FROM reactions WHERE project_id = ? AND type = 'wantToTry' AND user_id != ?
+    `).all(projectId, currentUserId);
+    for (const r of wantToTryRows) {
+      notify({
+        targetUserId: r.user_id, fromUserId: currentUserId, type: 'projectDone',
+        projectId, extra: reflection.trim().slice(0, 200), anchor,
+      });
+    }
+  }
+
+  return { ok: true, updateId };
 }
 
 // helper: 取项目的扁平表示 (action 返回值用)
@@ -546,7 +604,7 @@ module.exports = {
   // users
   editTagline, renameHandle,
   // projects
-  addProject, editProject, changeProjectStatus,
+  addProject, editProject, changeProjectStatus, shipProject,
   // updates
   addUpdate, editUpdate, deleteUpdate,
   // reactions
