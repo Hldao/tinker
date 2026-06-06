@@ -1089,7 +1089,9 @@ function cmdHookUninstall() {
 //   A cumul   30  · 默认 background · 防止整天不知不觉
 
 // A · 60 min 内累积 commit 数 >= 阈值
-function triggerCumulativeCommits(opts = {}) {
+function triggerCumulativeCommits(opts = {}, state) {
+  // v0.2 #6: 一天只触发一次低优先级 · 防 first-commit / silence / cumulative 互相撞车
+  if (state && state.lowFiredTodayKey === todayKey()) return { fired: false };
   const windowMin = opts.windowMin || 60;
   const threshold = opts.threshold || 3;
   try {
@@ -1118,48 +1120,64 @@ function triggerKeywordMatch() {
   try {
     const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
     if (!title) return { fired: false };
+    // v0.2 #4: 加 commit body 第一行扫描 · 捕获"为什么这么改"的信号
+    let bodyFirstLine = '';
+    try {
+      const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+      bodyFirstLine = (body.split('\n')[0] || '').trim();
+    } catch {}
+    const scanText = title + (bodyFirstLine ? '\n' + bodyFirstLine : '');
     const titleSnippet = '"' + title.slice(0, 50) + '"';
 
     // 检查顺序很重要 · 同时命中时早的先返回 · 跟 priority 不是一个概念
     // 排序逻辑:
-    //   FRUSTRATED 第一 · 情绪信号最优先 · 不能让"跑通了"盖过"fuck 跑通了"
-    //   SHIP / STUCK / PROTOTYPE · 显式仪式词 · 信号最直接
-    //   BREAKTHROUGH · "终于明白" 不含跑通 · 没被 SHIP 吃掉才到这
+    //   FRUSTRATED 第一 · 情绪信号最优先 · v0.2 priority 95 → 101 · 真的最高
+    //   SHIP / STUCK / PROTOTYPE · 显式仪式词 · 信号最直接 priority 100
+    //   BREAKTHROUGH · "终于明白" 不含跑通 · 没被 SHIP 吃掉才到这 95
+    //   DECISION · v0.2 新加 · 工具链选型 priority 85 · 比 fix 长期价值高
     //   FIX / TINKER / DISCOVERY · 弱信号最后
 
-    // FRUSTRATED (炸毛 / 破防) · 文案 / 选项跟其他都不一样
+    // FRUSTRATED (炸毛 / 破防) · 文案 / 选项跟其他都不一样 · v0.2 priority 101 真的最高
     const FRUSTRATED_WORDS = /(\bfuck(?:ing|in')?\b|\bshit\b|\bdamn\b|\bwtf\b|\bhell\b|\bf+k\b|我操|卧槽|妈的|尼玛|\btmd\b|\btm\b|靠|崩了|炸了|废了|服了|醉了|无语|算了|弃了|不做了|不想做了|给爷整不会|不会了|不行了|\bgive up\b|\bdone with\b|\bover it\b|\bfed up\b|我傻|我蠢|智障|脑残|\bsb\b|我有病|累死|烦死|头大|头疼)/i;
-    if (FRUSTRATED_WORDS.test(title)) {
-      return { fired: true, priority: 95, reason: 'keyword-frustrated', kind: 'frustrated', msg: `气头上的 commit: ${dim(titleSnippet)}`, suggestion: '不打分。不告诉别人。看你想怎么处理。' };
+    if (FRUSTRATED_WORDS.test(scanText)) {
+      return { fired: true, priority: 101, reason: 'keyword-frustrated', kind: 'frustrated', msg: `气头上的 commit: ${dim(titleSnippet)}`, suggestion: '不打分。不告诉别人。看你想怎么处理。' };
     }
 
     // SHIP (仪式信号 · 完工) · 优先级 100 · 同时命中时盖过 BREAKTHROUGH
     const SHIP_WORDS = /(\bship(?:ped|s|it)?\b|\bdone\b|\bmerged?\b|\bdeployed?\b|\breleased?\b|\blaunch(?:ed)?\b|\brolled out\b|完工|跑通|发布|上线|上架|完成|\bfinished?\b)/i;
-    if (SHIP_WORDS.test(title)) {
+    if (SHIP_WORDS.test(scanText)) {
       return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `像完工的 commit: ${dim(titleSnippet)}`, suggestion: '要不要进陈列馆 · 写一句感想' };
     }
 
     // STUCK (技术性卡住 · 不像 FRUSTRATED 那么情绪化)
     const STUCK_WORDS = /(\bstuck\b|卡住|卡了|卡在|\bhotfix\b|\bbroken\b|挂了|不对劲|出问题|报错了|\bblocker\b)/i;
-    if (STUCK_WORDS.test(title)) {
+    if (STUCK_WORDS.test(scanText)) {
       return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `像卡住的 commit: ${dim(titleSnippet)}`, suggestion: '要不要标卡住 · 让在意的人看到' };
     }
 
     // PROTOTYPE
     const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b|\bdemo\b)/i;
-    if (PROTO_WORDS.test(title)) {
+    if (PROTO_WORDS.test(scanText)) {
       return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `像原型节点的 commit: ${dim(titleSnippet)}`, suggestion: '要不要把原型挂上 · 顺便发一笔' };
     }
 
     // BREAKTHROUGH · "终于明白 / 想清楚了" · 没被 SHIP 吃掉的顿悟时刻
     const BREAKTHROUGH_WORDS = /(终于(?:明白|搞清|搞定|想通|懂了)|搞清楚了|想清楚了|想通了|想明白了|顿悟|\baha\b|\bfinally\b(?!\s+(?:ship|done|done))|\bclicked\b|\bgot it\b)/i;
-    if (BREAKTHROUGH_WORDS.test(title)) {
+    if (BREAKTHROUGH_WORDS.test(scanText)) {
       return { fired: true, priority: 95, reason: 'keyword-breakthrough', kind: 'progress', msg: `像顿悟的 commit: ${dim(titleSnippet)}`, suggestion: '这种十秒钟很难复现 · 一笔留下来吧' };
+    }
+
+    // v0.2 #1 DECISION · 工具链选型 · 长期记得起来比 fix 重要
+    // 关键词刻意精确: 必须是"动词性决策" · 不抓 npm install / pip install 这种日常依赖
+    // 中文"装(了|上)" 是精确决策动词 · 英文用 adopt/migrate/switch to 等明确决策动词
+    const DECISION_WORDS = /(\badopt(?:ed|ing)?\b|\bswitch(?:ed|ing)?\s+to\b|\bmov(?:e|ed|ing)\s+to\b|\bmigrat(?:e|ed|ing)\s+to\b|\bstop\s+using\b|\bdeprecat(?:e|ed|ing)\b|装(?:了|上)|装上|换成|改用|不再用|不用了|切到|切换到|引入(?:了)?|选了|定下来|决定用|采用|放弃(?:了)?|移除(?:了)?|去掉了|改回|降级|升级)/i;
+    if (DECISION_WORDS.test(scanText)) {
+      return { fired: true, priority: 85, reason: 'keyword-decision', kind: 'decision', msg: `像工具链决策的 commit: ${dim(titleSnippet)}`, suggestion: '这种决策几个月后自己都想不起为什么 · 记一笔吧' };
     }
 
     // FIX
     const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|修好|修了|搞定|解决了|处理了)/i;
-    if (FIX_WORDS.test(title)) {
+    if (FIX_WORDS.test(scanText)) {
       return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim(titleSnippet)}`, suggestion: '要不要写一笔 · 说说这个坑' };
     }
 
@@ -1171,19 +1189,19 @@ function triggerKeywordMatch() {
     // 所以不过滤 · 不只匹配动词形 · 任何"捣鼓"出现都触发 · prompt 主动认歧义
     // 优先级 75 比泛 TINKER 高一档 · 但低于 100 不抢仪式
     const BRAND_WORDS = /(捣鼓|\btinker\b)/i;
-    if (BRAND_WORDS.test(title)) {
+    if (BRAND_WORDS.test(scanText)) {
       return { fired: true, priority: 75, reason: 'keyword-brand', kind: 'brand', msg: `commit 里有"捣鼓": ${dim(titleSnippet)}`, suggestion: '这是关于 Tinker 的什么?' };
     }
 
     // TINKER (泛 · 在玩 · active exploration) · 不含"捣鼓"·已经被上一段抓走
     const TINKER_WORDS = /(玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
-    if (TINKER_WORDS.test(title)) {
+    if (TINKER_WORDS.test(scanText)) {
       return { fired: true, priority: 70, reason: 'keyword-tinker', kind: 'progress', msg: `在捣鼓: ${dim(titleSnippet)}`, suggestion: '一句话说一下你在玩什么?' };
     }
 
     // DISCOVERY (发现 / 学到)
     const DISCOVERY_WORDS = /(发现|意识到|原来|才知道|学到|学了|理解了|\blearned\b|\brealized?\b|\bdiscovered?\b|\bturns out\b)/i;
-    if (DISCOVERY_WORDS.test(title)) {
+    if (DISCOVERY_WORDS.test(scanText)) {
       return { fired: true, priority: 70, reason: 'keyword-discovery', kind: 'progress', msg: `像学到东西的 commit: ${dim(titleSnippet)}`, suggestion: '学到 / 发现了什么? 给别人看看' };
     }
 
@@ -1194,6 +1212,8 @@ function triggerKeywordMatch() {
 // C · 长时间没发 update + 累了 commit · 需要 state 里有 lastPushAt 才能判断
 function triggerLongSilence(state, repoCfg) {
   if (!repoCfg) return { fired: false };
+  // v0.2 #6: 一天只触发一次低优先级
+  if (state && state.lowFiredTodayKey === todayKey()) return { fired: false };
   const last = (state.lastPushAtByProject || {})[repoCfg.projectId];
   if (!last) return { fired: false };  // 第一次 install · 不算 silence
   const HOURS = 24;
@@ -1212,7 +1232,9 @@ function triggerLongSilence(state, repoCfg) {
 }
 
 // D · 当天首次 commit · 早安式
-function triggerFirstCommitOfDay() {
+function triggerFirstCommitOfDay(state) {
+  // v0.2 #6: 一天只触发一次低优先级 · 避免 first-commit 被后续 cumulative 抢走
+  if (state && state.lowFiredTodayKey === todayKey()) return { fired: false };
   try {
     // "今天" 从凌晨 4 点开始算 · 跟 mute 'today' 的语义对齐 · 熬夜 coder 友好
     const d = new Date(); d.setHours(4, 0, 0, 0);
@@ -1454,11 +1476,12 @@ async function cmdWatch(taskFile) {
 function evaluateAllTriggers(state, repoCfg, cfg) {
   // UI session 单独评估 · 因为它需要写 state (启动 session 时)
   const uiResult = evaluateUiSession(state, cfg);
+  // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 接受 state · 一天 1 次
   const results = [
     triggerKeywordMatch(),
-    triggerFirstCommitOfDay(),
+    triggerFirstCommitOfDay(state),
     triggerLongSilence(state, repoCfg),
-    triggerCumulativeCommits(),
+    triggerCumulativeCommits({}, state),
   ].filter(r => r.fired);
   if (uiResult.fired) results.push(uiResult);
   if (results.length === 0) return null;
@@ -1541,11 +1564,18 @@ async function cmdCheck(opts) {
     choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'brand') {
     // 品牌信号 · "捣鼓" / Tinker 出现 · 主动认歧义 · 让用户挑哪种意思
-    choices.push({ name: '是 Tinker 项目本身的进展 · 发一笔', value: 'push' });
-    choices.push({ name: '是用 Tinker 做事情的反思 · 发一笔', value: 'push' });
+    // v0.2 #3: 两个选项 value 区分 · 让 input prompt 文案匹配语境
+    choices.push({ name: '是 Tinker 项目本身的进展 · 发一笔', value: 'push-brand-self' });
+    choices.push({ name: '是用 Tinker 做事情的反思 · 发一笔', value: 'push-brand-meta' });
     choices.push({ name: '巧合 · 跟 Tinker 没关系 · 跳过', value: 'skip-once' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+  } else if (result.kind === 'decision') {
+    // v0.2 #1: 工具链选型决策 · 长期价值高 · 让用户记下来
+    choices.push({ name: '记决策 · 写一笔', value: 'push-decision' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'ship') {
     choices.push({ name: '✦ 进陈列馆 · 写一句完工感想', value: 'ship' });
     choices.push({ name: '只发一笔普通进展', value: 'push' });
@@ -1578,6 +1608,11 @@ async function cmdCheck(opts) {
   } catch { choice = 'later'; }
 
   state.lastPromptedAt = now;
+  // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 命中后 · 当天不再问
+  // priority < 70: first-commit 60 / silence 50 / cumulative 30
+  if (result.priority < 70) {
+    state.lowFiredTodayKey = todayKey();
+  }
 
   const cfg = mustHaveConfig();
 
@@ -1627,15 +1662,25 @@ async function cmdCheck(opts) {
     } else {
       log(sepia('  before 快照丢了 · 这次没贴对比图 (后续会修)'));
     }
-  } else if (choice === 'push') {
+  } else if (choice === 'push' || choice === 'push-brand-self' || choice === 'push-brand-meta' || choice === 'push-decision') {
     savePromptState(state);
-    const text = await promptForText('一句话进展 (会发到 ' + repoCfg.projectName + ')', 60);
+    // v0.2 #1 #3: input prompt 文案随 kind 切换 · 让用户写对语境
+    let msg = '一句话进展 (会发到 ' + repoCfg.projectName + ')';
+    if (choice === 'push-brand-self') {
+      msg = 'Tinker 项目本身这次改了什么 (会发到 ' + repoCfg.projectName + ')';
+    } else if (choice === 'push-brand-meta') {
+      msg = '用 Tinker 这件事的反思 (会发到 ' + repoCfg.projectName + ')';
+    } else if (choice === 'push-decision') {
+      msg = '这次决策的简述 (装/换/选了什么 · 为什么 · 会发到 ' + repoCfg.projectName + ')';
+    }
+    const text = await promptForText(msg, 60);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
     await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
     state.lastPushAtByProject = state.lastPushAtByProject || {};
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
     savePromptState(state);
-    ok('发出去了 → ' + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
+    const okMsg = choice === 'push-decision' ? '✓ 决策记下来了 → ' : '发出去了 → ';
+    ok(okMsg + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
   } else if (choice === 'ship' || choice === 'prototype') {
     savePromptState(state);
     const verb = choice === 'ship' ? '完工感想' : '原型说明';
@@ -1693,6 +1738,57 @@ async function cmdCheck(opts) {
     savePromptState(state);
     log(sepia('  静音 24 小时 · 用 ') + vermilion('tinker mute off') + sepia(' 解除'));
   }
+}
+
+// `tinker llm [set|off|status]` · 单独配 LLM key · 不用重跑整个 login
+async function cmdLlm(sub) {
+  const cfg = loadConfig();
+  if (!cfg) { err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1); }
+
+  if (sub === 'off' || sub === 'clear') {
+    delete cfg.llm;
+    saveConfig(cfg);
+    ok('LLM 配置已清掉 · prompt 流程回到手敲模式');
+    return;
+  }
+
+  if (sub === 'status' || (sub === undefined && cfg.llm && cfg.llm.apiKey)) {
+    if (!cfg.llm || !cfg.llm.apiKey) {
+      log(sepia('  LLM 没配置 · 跑 ') + vermilion('tinker llm set') + sepia(' 来配'));
+      return;
+    }
+    log('');
+    log(sepia('  LLM 配置:'));
+    log(sepia('    provider ') + vermilion(cfg.llm.provider || 'anthropic'));
+    log(sepia('    model    ') + sepia(cfg.llm.model || '(provider 默认)'));
+    log(sepia('    key      ') + sepia(cfg.llm.apiKey.slice(0, 8) + '...' + cfg.llm.apiKey.slice(-4)));
+    log('');
+    log(sepia('  重新配: ') + vermilion('tinker llm set'));
+    log(sepia('  清掉:  ') + vermilion('tinker llm off'));
+    return;
+  }
+
+  // set (or 没配过 · sub === undefined 也走这里)
+  const { input, select, password } = require('@inquirer/prompts');
+  log('');
+  log(sepia('  配 LLM · 给 prompt 自动起草用'));
+  log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
+  const provider = await select({
+    message: 'LLM provider',
+    choices: [
+      { name: 'Anthropic Claude (推荐 · 跟产品哲学一致)', value: 'anthropic' },
+      { name: 'DeepSeek (国内友好 · 便宜)', value: 'deepseek' },
+      { name: 'OpenAI GPT', value: 'openai' },
+    ],
+    default: cfg.llm?.provider || 'anthropic',
+  });
+  const apiKey = await password({
+    message: 'API key (不会显示)',
+    validate: (v) => v.trim().length > 0 || '不能空',
+  });
+  cfg.llm = { provider, apiKey: apiKey.trim() };
+  saveConfig(cfg);
+  ok('LLM 配好了 · 下次 prompt 选"发"就能看到自动起草');
 }
 
 // `tinker session status | end` · 看 / 强制结束 当前 UI session
@@ -1805,6 +1901,7 @@ function help() {
   log('  ' + vermilion('tinker check') + sepia('                       手动跑一次触发器评估 (hook 自动调这个)'));
   log('  ' + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('today') + sepia(' / ') + vermilion('forever') + sepia(' / ') + vermilion('off') + sepia('   静音控制'));
   log('  ' + vermilion('tinker session status') + sepia(' / ') + vermilion('end') + sepia('     看 UI session 状态 / 手动结束'));
+  log('  ' + vermilion('tinker llm set') + sepia(' / ') + vermilion('status') + sepia(' / ') + vermilion('off') + sepia('       配 / 看 / 清 LLM key (给自动起草用)'));
   log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
@@ -1868,6 +1965,7 @@ async function main() {
       case 'check': await cmdCheck({ fromHook: opts.fromHook || args.includes('--from-hook') }); break;
       case 'mute': cmdMute(args[1]); break;
       case 'session': await cmdSession(args[1]); break;
+      case 'llm': await cmdLlm(args[1]); break;
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default: err('未知命令: ' + cmd); help(); process.exit(1);
