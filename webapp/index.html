@@ -4819,6 +4819,145 @@
   /* ===============================================================
      END v0.54 陈列馆 CRUD 闭环
      =============================================================== */
+
+  /* ================================================================
+   *  v0.56 · 工作室画像化 (跟新陈列馆角色分清)
+   *  --------------------------------------------------------------
+   *  陈列馆 v0.55 集体化后 · 工作室定位调整:
+   *    · 不再重复"完工陈列"(已经在陈列馆了)
+   *    · 强化"vibe coder 个人画像"(在做什么 / 跟谁学手艺 / 用什么工具)
+   *
+   *  三件套:
+   *    A · 页头加 mini-stats 小档案
+   *      在做 N，跑通 M，跟进过 K，常用 工具1 · 工具2 · 工具3
+   *      mono 11.5 sepia · 数字 ink · 别人来访秒识"这是谁"
+   *
+   *    B · "做过的"简化为索引 chip
+   *      不再重复陈列馆里的 reflection 详卡
+   *      一行一个: 项目名 + 完工日期 + 工具 + 在陈列馆 →
+   *      isMe 仍有 "改 / 换图" 入口
+   *
+   *    C · "在跟进的"对外可见 (硬信号: 接走 + 方法被用)
+   *      之前 isMe-only · 隐藏了 vibe coder 之间的手艺谱系
+   *      别人来访看到 @daodao "接走了 @润江 / 用了 @猫猫 的方法"
+   *      "想试试"弱信号删除 (不重复 feed 里的 tinker 状态)
+   *  ================================================================ */
+
+  /* —— A · 工作室小档案 —— */
+  .workshop-mini-stats {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px dotted var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.1em;
+    line-height: 1.7;
+  }
+  .workshop-mini-stats .num {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    padding: 0 2px;
+  }
+  .workshop-mini-stats .ws-tools {
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  /* —— B · 做过的索引 chip —— */
+  .done-index-list {
+    border-top: 1px solid var(--rule);
+  }
+  .done-index-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px dotted var(--rule);
+    cursor: pointer;
+    transition: background 0.18s ease, padding-left 0.18s ease;
+  }
+  .done-index-chip:hover {
+    background: rgba(194, 65, 12, 0.025);
+    padding-left: 10px;
+  }
+  .done-chip-left {
+    flex: 1;
+    min-width: 0;
+  }
+  .done-chip-name {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.005em;
+    margin-bottom: 4px;
+  }
+  .done-index-chip:hover .done-chip-name {
+    color: var(--vermilion);
+  }
+  .done-chip-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.06em;
+  }
+  .done-chip-right {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: 'Newsreader', serif;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .done-chip-edit {
+    color: var(--sepia);
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    padding-bottom: 1px;
+    opacity: 0.7;
+    transition: opacity 0.18s ease, color 0.18s ease;
+  }
+  .done-index-chip:hover .done-chip-edit {
+    opacity: 1;
+  }
+  .done-chip-edit:hover {
+    color: var(--vermilion) !important;
+    border-bottom: 1px solid var(--vermilion);
+  }
+  .done-chip-go {
+    color: var(--vermilion);
+    letter-spacing: 0.005em;
+    opacity: 0.5;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+  .done-index-chip:hover .done-chip-go {
+    opacity: 1;
+    transform: translateX(3px);
+  }
+
+  /* 小屏: chip 改成竖排 · 节省空间 */
+  @media (max-width: 720px) {
+    .done-index-chip {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .done-chip-right {
+      align-self: flex-end;
+    }
+  }
+
+  /* hover-none (移动端) 兜底 */
+  @media (hover: none) {
+    .done-chip-edit { opacity: 1; }
+    .done-chip-go { opacity: 1; }
+  }
+
+  /* ===============================================================
+     END v0.56 工作室画像化
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5431,10 +5570,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.55 · 31 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.56 · 32 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.55</span>
+  <span class="bb-ver">v0.56</span>
 </div>
 
 <script>
@@ -6000,23 +6139,22 @@ function renderWorkshop(handle) {
       </div>
     </div>
   `;}).join('');
-  // 做过的项目 · 比普通 pcard 多展示完工日期 + 感想引语 · 让"做完的事"有该有的视觉权重
-  const renderDonePcards = (list) => list.map(p => {
+  // v0.56 做过的简化为索引 chip 行 · 不再重复陈列馆的 reflection 详卡
+  // 陈列馆已经是集体陈列位 · 工作室里只做索引指路
+  const renderDoneIndex = (list) => list.map(p => {
     const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
-    const reflection = shipUpdate ? shipUpdate.text : '';
     const shipAt = p.shippedAt || (shipUpdate ? shipUpdate.at : 0);
     const hasCover = shipUpdate && shipUpdate.images && shipUpdate.images.length > 0;
+    const dateStr = shipAt ? formatShipDate(shipAt) : '';
     return `
-      <div class="pcard pcard-done" onclick="showScreen('project','${handle}','${p.slug}')">
-        <div class="pcard-name">${escapeHtml(p.name)}</div>
-        <div class="pcard-desc">${escapeHtml(p.desc)}</div>
-        ${reflection ? `<blockquote class="pcard-ship-quote">${renderMentions(reflection.length > 160 ? reflection.slice(0, 160) + '…' : reflection)}</blockquote>` : ''}
-        <div class="pcard-meta">
-          <span class="${p.status}">— ${statusText(p.status)}</span>
-          ${shipAt ? ` &nbsp;·&nbsp; <span style="color: var(--vermilion);">✦ 完工 ${shortAgo(shipAt)}</span>` : ''}
-          ${(p.tools || []).length > 0 ? ` &nbsp;·&nbsp; ${p.tools.slice(0,2).join('、')}` : ''}
-          &nbsp;·&nbsp; <span class="pcard-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${p.id}')">在陈列馆 →</span>
-          ${isMe ? `<span class="pcard-done-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')" title="${hasCover ? '改感想 / 换图' : '补传陈列馆封面图'}">${hasCover ? '改感想 / 换图' : '+ 补图'}</span>` : ''}
+      <div class="done-index-chip" onclick="showScreen('showcase','${p.id}')">
+        <div class="done-chip-left">
+          <div class="done-chip-name">${escapeHtml(p.name)}</div>
+          <div class="done-chip-meta">${dateStr ? `✦ ${dateStr}` : ''}${(p.tools || []).length > 0 ? ` · ${p.tools.slice(0,2).join(' · ')}` : ''}</div>
+        </div>
+        <div class="done-chip-right">
+          ${isMe ? `<span class="done-chip-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')" title="${hasCover ? '改感想 / 换图' : '补传陈列馆封面图'}">${hasCover ? '改 / 换图' : '+ 补图'}</span>` : ''}
+          <span class="done-chip-go">在陈列馆 →</span>
         </div>
       </div>
     `;
@@ -6031,6 +6169,7 @@ function renderWorkshop(handle) {
         ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
         ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="vertical-align: middle;">CLI 钥匙</span>` : ''}
       </p>
+      ${miniStatsHtml}
     </div>
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
@@ -6051,13 +6190,21 @@ function renderWorkshop(handle) {
         </div>
       ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent)}
     </div>
-    ${done.length > 0 ? `<div class="mb-12"><div class="section-label" style="color: var(--vermilion);">做过的 · 完工陈列 (${done.length})</div>${renderDonePcards(done)}</div>` : ''}
+    ${done.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label flex items-center justify-between" style="color: var(--vermilion);">
+          <span>做过的 · 都在陈列馆 (${done.length})</span>
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0; color: var(--vermilion); border-bottom-color: var(--vermilion);" onclick="showScreen('showcase')">看全部陈列 →</span>
+        </div>
+        <div class="done-index-list">${renderDoneIndex(done)}</div>
+      </div>
+    ` : ''}
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
 
-    ${isMe && trackingProjects.length > 0 ? `
+    ${trackingPublic.length > 0 ? `
       <div class="mb-12">
-        <div class="section-label">我在跟进的 (${trackingProjects.length})</div>
-        ${trackingProjects.map(({p, roleLabel}) => `
+        <div class="section-label">${isMe ? '我在跟进的' : `@${handle} 在跟进的`} (${trackingPublic.length})</div>
+        ${trackingPublic.map(({p, roleLabel}) => `
           <div class="pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
             <div class="pcard-name">@${p.owner} / ${escapeHtml(p.name)}</div>
             <div class="pcard-meta">

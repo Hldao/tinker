@@ -43,9 +43,9 @@
 ## [Unreleased] / 0.5.x · UI 体系化打磨 (进行中)
 
 > Owner: 设计线 (ui.N)
-> 进展: webapp/index.html 累积 v0.27 → v0.55 共 31 个子段
+> 进展: webapp/index.html 累积 v0.27 → v0.56 共 32 个子段
 > 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
-> Build badge: webapp 右下角小角标 `ui · v0.55` (hover 显示完整 patch 历史)
+> Build badge: webapp 右下角小角标 `ui · v0.56` (hover 显示完整 patch 历史)
 
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
@@ -81,6 +81,7 @@
 - **v0.53** 完工 ceremony 三处补图入口 · 闭环已 done 项目 · openShipCeremony 升级支持 reship 模式 (预填 reflection/feedbackAsk/images · 文案切换 "改一下完工感想/补图" · CTA "✦ 更新陈列馆") · 三处入口: ① 陈列馆卡片 meta 区"改感想/补图" (owner-only) · ② 项目页 pheader done 状态时"✦ 改感想/补图" small-action · ③ 工作室"做过的"区 pcard 加 "+ 补图" 或 "改感想/换图" (有无 cover image 不同文案) · 后端 shipProject 早已支持重复 ship · 仅前端补入口
 - **v0.54** 陈列馆 CRUD 闭环 · 补 Create + Delete 入口 · ① Create: 陈列馆头部 "✦ 让一个项目入馆" CTA + 新 modal-ship-pick · 列出 owner 所有非 done/archive 项目 (active/stuck/paused) · 选中 → openShipCeremony · 无候选时引导挂项目 / 入场仪式 · ② Delete: 陈列馆 owner actions 加 "让它出馆" (sepia dotted · 默认 opacity 0.65 · hover 1.0 · confirm 二次确认 · changeProjectStatus done → paused · 历史 ship update 保留 · 随时可再入馆)
 - **v0.55** 陈列馆集体性强调 · 数据层一直是全站 (state.projects 跨 owner) · 但文案让它看着像个人作品集 · 4 处文案 + 1 处统计修复 · sub "Tinker 上所有人做完的、还能玩到的小作品都在这" · CTA "让一个项目入馆" → "让你的作品也入馆" (强调"也" 暗示已有别人) · closing "大家在做没做完的去主屏「动静」看" · 馆藏统计渐进式加 "来自 N 位作者" (>= 2 才出现)
+- **v0.56** 工作室画像化 · 陈列馆 v0.55 集体化后 · 工作室定位调整为"vibe coder 个人画像" · 三件套: ① 页头加 mini-stats 小档案 "在做 N，跑通 M，跟进过 K，常用 工具1·2·3" (mono 11.5px sepia · 数字 ink · 别人来访秒识"是谁") · ② "做过的"简化为索引 chip · 不再重复陈列馆 reflection 详卡 · 一行项目名 + ✦ 完工日期 + 工具 + 在陈列馆 → · isMe 保 "改/换图" 入口 · 索引 hover padding-left + name vermilion 微动效 · ③ "在跟进的"对外可见 · 删 isMe 限制 · 只暴露硬信号 (接走 + 方法被用) · "想试试"删除 · 别人来访看到 vibe coder 之间的手艺谱系 · 段标题随 isMe 切换 "我在跟进的"/"@X 在跟进的"
 
 ### [ui] markup 减法记录 (累积 5 处)
 所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
