@@ -437,6 +437,12 @@
   .pick-project-item-meta .stuck { color: var(--vermilion); }
   .pick-project-item-meta .done { color: var(--moss); }
 
+  /* API tokens 列表 */
+  .api-token-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px dotted var(--rule); gap: 12px; }
+  .api-token-row:last-child { border-bottom: none; }
+  .api-token-label { font-family: 'Newsreader', serif; font-size: 15px; color: var(--ink); }
+  .api-token-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-top: 2px; }
+
   /* NEW PROJECT modal — status pills + tools pills */
   .status-pill { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); border: 1px dotted var(--sepia-light); padding: 4px 12px; cursor: pointer; transition: all 0.15s; text-transform: lowercase; display: inline-block; }
   .status-pill:hover { color: var(--ink); border-color: var(--ink); }
@@ -4142,6 +4148,39 @@
   </div>
 </div>
 
+<!-- API tokens (CLI 钥匙) modal -->
+<div id="modal-api-tokens" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 600px; max-height: 88vh; overflow-y: auto;">
+    <h3 class="modal-title">CLI 钥匙</h3>
+    <p class="modal-sub">给 <code class="inline-code">tinker</code> 命令行用 · 也能放进 Cursor / Claude Code 的对话里直接 push 进展</p>
+
+    <div id="api-tokens-list" class="mt-5"></div>
+
+    <div class="mt-6 pt-5" style="border-top: 1px dotted var(--rule);">
+      <label class="mono text-xs block mb-2" style="color: var(--sepia); letter-spacing: 0.05em;">生成一把新钥匙</label>
+      <div class="flex gap-3 items-center">
+        <input id="new-token-label" class="input-bare flex-1" placeholder="给它起个名 · 比如 Cursor / 我的笔记本">
+        <button onclick="submitNewToken()" class="btn-act-primary">生成 →</button>
+      </div>
+    </div>
+
+    <div id="new-token-revealed" class="hidden mt-6 pt-5" style="border-top: 1px dashed var(--vermilion);">
+      <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.15em;">这把钥匙只显示一次</div>
+      <p class="serif" style="font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.5;">
+        关掉这个窗口就再也看不到了 · 复制下来存好。丢了就生成新的。
+      </p>
+      <div class="tl-prompt-box" style="margin-top: 0;">
+        <div id="new-token-value" class="tl-prompt-text" style="font-size: 13px; user-select: all; word-break: break-all; margin-bottom: 8px;"></div>
+        <span class="react-action serif" id="new-token-copy" onclick="copyText(this, document.getElementById('new-token-value').textContent)" style="font-size: 14px; display: inline-flex; align-items: center; gap: 5px;">复制</span>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 mt-8">
+      <button onclick="closeModal('modal-api-tokens')" class="btn-act" style="border-bottom: none;">关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- STATUS PICKER modal — 改项目状态 -->
 <div id="modal-status-picker" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
@@ -4306,6 +4345,32 @@ async function apiWelcome(handle, tagline) {
 
 async function apiLogout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+}
+
+// ============ API tokens (CLI) ============
+async function apiListTokens() {
+  const res = await fetch('/api/account/tokens', { credentials: 'same-origin' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '读取 token 失败');
+  return data;
+}
+async function apiCreateToken(label) {
+  const res = await fetch('/api/account/tokens', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '生成 token 失败');
+  return data;
+}
+async function apiRevokeToken(tokenId) {
+  const res = await fetch('/api/account/tokens/' + encodeURIComponent(tokenId), {
+    method: 'DELETE', credentials: 'same-origin',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '撤销 token 失败');
+  return data;
 }
 
 
@@ -4731,6 +4796,7 @@ function renderWorkshop(handle) {
       <p class="workshop-tagline">
         「${escapeHtml(user.tagline)}」
         ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
+        ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="vertical-align: middle;">CLI 钥匙</span>` : ''}
       </p>
     </div>
     <div class="mb-12">
@@ -5561,6 +5627,62 @@ async function submitEditWorkshop() {
     closeModal('modal-edit-workshop');
     renderWorkshop(currentUser.handle);
     showToast('改好了');
+  } catch (e) { showToast(e.message); }
+}
+
+// ============ API tokens ============
+async function openApiTokens() {
+  if (!currentUser.handle) { openLogin('管理钥匙'); return; }
+  document.getElementById('new-token-label').value = '';
+  document.getElementById('new-token-revealed').classList.add('hidden');
+  document.getElementById('modal-api-tokens').classList.remove('hidden');
+  await refreshApiTokensList();
+}
+async function refreshApiTokensList() {
+  const root = document.getElementById('api-tokens-list');
+  root.innerHTML = '<div class="serif" style="color: var(--sepia); font-size: 14px;">读取中...</div>';
+  try {
+    const tokens = await apiListTokens();
+    if (tokens.length === 0) {
+      root.innerHTML = '<div class="serif" style="color: var(--sepia); font-size: 14px; padding: 8px 0;">还没生成过钥匙。下面生成一把就能在 CLI / Cursor / Claude Code 里用 Tinker。</div>';
+      return;
+    }
+    root.innerHTML = '<div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">现 有 钥 匙 · ' + tokens.length + '</div>' +
+      tokens.map(t => `
+        <div class="api-token-row">
+          <div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-meta">
+              <span class="mono">${escapeHtml(t.prefix)}…</span> ·
+              建于 ${shortAgo(t.created_at)}
+              ${t.last_used_at ? ' · 上次用 ' + shortAgo(t.last_used_at) : ' · 还没用过'}
+            </div>
+          </div>
+          <span class="react-action serif" onclick="confirmRevokeToken('${t.id}', '${escapeHtml(t.label || '没起名的').replace(/'/g,'&#39;')}')" style="color: var(--vermilion); font-size: 13px;">撤销</span>
+        </div>
+      `).join('');
+  } catch (e) {
+    root.innerHTML = '<div class="serif" style="color: var(--vermilion); font-size: 14px;">读不到 token · ' + escapeHtml(e.message) + '</div>';
+  }
+}
+async function submitNewToken() {
+  const label = document.getElementById('new-token-label').value.trim();
+  try {
+    const created = await apiCreateToken(label);
+    // 显示一次 · 不再返回
+    document.getElementById('new-token-value').textContent = created.token;
+    document.getElementById('new-token-revealed').classList.remove('hidden');
+    document.getElementById('new-token-label').value = '';
+    await refreshApiTokensList();
+    showToast('生成了 · 复制下来存好 · 关掉就看不见了');
+  } catch (e) { showToast(e.message); }
+}
+async function confirmRevokeToken(tokenId, labelDesc) {
+  if (!confirm('撤销「' + labelDesc + '」? · 用这把钥匙的所有 CLI / agent 会立刻失败 · 不可恢复')) return;
+  try {
+    await apiRevokeToken(tokenId);
+    await refreshApiTokensList();
+    showToast('撤销了');
   } catch (e) { showToast(e.message); }
 }
 
