@@ -196,7 +196,16 @@ function gitHistorySince(spec) {
 // 默认 Tinker 工艺人日志 voice · 用户可以在项目里 .tinker/voice.md 覆盖
 const DEFAULT_VOICE = `Tinker(中文名:捣鼓)是给 vibe coder 的工作室社区,进展 voice 是工匠的工作日志,不是 release note,不是 changelog,不是产品发布会。
 
-最重要的反直觉:不要总结所有事。挑一条让你心里咯噔一下的事说,把那一刻的想法讲清楚就够。LLM 默认的"全面覆盖"模式在这里是错的。
+最重要的反直觉:不要总结所有事。挑一个具体的转向或具体的发现讲清楚就够。
+
+==================
+对作者自己写 vs 对 LLM 代写 · 这条规则有两种走法
+==================
+- 作者自己写:挑心里咯噔一下的事讲,把那一刻的想法说清楚。
+- LLM 代写:只在 commit / git history 里能找到具体转向锚点时才讲转向。
+  如果作者没说怎么想,你 (LLM) 不要硬猜情绪。
+  不要编"咯噔""卡得厉害""突然意识到""服气""纠结"这种内心活动。
+  没锚点时,退一步:只描述实际发生的事,加一句可复用的 takeaway,不编情绪。
 
 字数:控制在 150 到 280 字之间。宁可少,不要长。
 
@@ -236,15 +245,21 @@ const DEFAULT_VOICE = `Tinker(中文名:捣鼓)是给 vibe coder 的工作室社
 7. 不写"今天/最近/这段时间"开头。平台显示时间,作者不重复。
 8. 不写"很有意思""值得记""有意义"这种自我评价。读者自己感受。
 9. 不要 markdown 块级元素(# 标题 / - 列表 / > 引用)。inline 的 **粗体** 和 \`代码\` 可以。
+10. LLM 代写时,不写"咯噔""服气""卡得厉害""突然意识到""纠结"这种作者内心活动。git history 里没写就不许编。作者自己写时这条不限制。
+11. 不写"Tinker 真正值钱的是命令行""主战场转向 X""用户根本不是 Y 是 Z"这种立场宣告。除非作者明确说过,LLM 不允许替作者下产品方向定论。
 
 ==================
 鼓励的写法
 ==================
 - 短句优先,普通句号断开
-- 第一句话给个状态/心情概览("没怎么写代码,但..." / "今天卡得有点厉害" / "突然意识到 X")
+- 第一句话给个状态概览("没怎么写代码,但..." / "改了一下 X" / "加了一个东西")
 - 选一个最值得说的事讲透,不是全部 commit 列一遍
 - "为什么"比"做了什么"重要
 - 实事求是。git 没说的别替作者编
+- 末尾留一句 takeaway 或可复用的小判断,不强求,但有的话其他人 (或其他 AI) 看了能学到东西
+  例:"AI 没作者视角,让它替你想会走偏,让它替你整理可以"
+  例:"这种决策几个月后想不起来当时为什么这么做,要写下来"
+  例:"卡住可以发,只要还在试就行"
 
 ==================
 实事求是规则
@@ -387,24 +402,33 @@ async function llmQuickDraft(cfg, opts = {}) {
 }
 
 // 草稿后处理 · 抹掉最常见的 LLM tell
-// 设计原则:只动那些 99% 是 AI 写作 tell 的东西 (em-dash · 堆中圆点)
+// 设计原则:只动那些 99% 是 AI 写作 tell 的东西 (em-dash · 堆中圆点 · "今天" 开头)
 // 不动正常的中文标点 · 不擅自重写句子
 function sanitizeDraft(text) {
   if (!text) return null;
-  let t = text;
+  let t = text.trim();
+
   // em-dash 几乎全是 AI tell · 转成逗号
   t = t.replace(/——+/g, '，');
   t = t.replace(/[­‐‑‒–—―]+/g, '，');
+
   // 句中堆 · 的兜底:正文里超过 2 次 · 间隔分隔的全换成逗号
   const midDotCount = (t.match(/(?<=[^\s])·(?=[^\s])/g) || []).length;
   if (midDotCount > 2) {
     t = t.replace(/(?<=[^\s])·(?=[^\s])/g, '，');
   }
+
+  // "今天 / 最近 / 这段时间" 开头是 LLM 戒不掉的习惯 · 平台已显示时间 · 直接砍
+  // 砍掉之后首字母不强求大写 · 中文不需要
+  t = t.replace(/^\s*(今天|最近|这段时间|这几天|昨天|这两天)\s*[，,。\s]+\s*/, '');
+
   // 多个连续标点折叠
   t = t.replace(/，{2,}/g, '，');
   t = t.replace(/。{2,}/g, '。');
+
   // trim 末尾的标点
   t = t.replace(/[，、；]\s*$/, '。');
+
   return t.trim();
 }
 
@@ -560,6 +584,8 @@ async function cmdDraft(opts) {
     String(now.getMinutes()).padStart(2,'0');
   const draftFile = path.join(draftsDir, stamp + '.md');
 
+  // v0.4 bug 修复:cmdDraft 之前漏调 sanitize · LLM 的 em-dash 等 tell 没被清掉
+  candidates.forEach(c => { if (c && c.text) c.text = sanitizeDraft(c.text); });
   const md = renderDraftMarkdown({
     candidates, since: history.since, commits: (history.log||'').split('\n').filter(Boolean).length, handle: cfg.handle,
   });
@@ -963,7 +989,100 @@ async function cmdShip(opts) {
 // 装的时候 git clone 到 ~/.tinker-src · update 就是 pull + 重新 npm install -g
 const SRC_DIR = path.join(os.homedir(), '.tinker-src');
 
-async function cmdUpdate() {
+// === 版本检测 · 不强求更新 · 只在背景里查一下并提示 ===
+const UPDATE_CACHE_FILE = path.join(CONFIG_DIR, 'update-status.json');
+const GITHUB_REPO = 'Hldao/tinker';
+
+// 拿本地 CLI 源码的 git SHA · 不存在(直接 npm 安装)返 null
+function getInstalledSha() {
+  try {
+    if (fs.existsSync(path.join(SRC_DIR, '.git'))) {
+      return execSync('git rev-parse HEAD', { cwd: SRC_DIR, encoding: 'utf-8' }).trim();
+    }
+  } catch {}
+  return null;
+}
+
+// 从 GitHub 拉最新 main commit · 计算 behindBy (本地落后多少 commit)
+async function fetchRemoteStatus() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/main`, {
+      headers: { 'User-Agent': 'tinker-cli', 'Accept': 'application/vnd.github+json' },
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const latestSha = data.sha;
+    const latestMsg = (data.commit && data.commit.message || '').split('\n')[0];
+    const latestDate = data.commit && data.commit.author && data.commit.author.date;
+
+    const installedSha = getInstalledSha();
+    let behindBy = 0;
+    if (installedSha && installedSha !== latestSha) {
+      // GitHub compare API · 算 ahead_by (从我方到 latest 多少 commit)
+      const cr = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/compare/${installedSha}...${latestSha}`, {
+        headers: { 'User-Agent': 'tinker-cli', 'Accept': 'application/vnd.github+json' },
+      });
+      if (cr.ok) {
+        const cd = await cr.json();
+        behindBy = cd.ahead_by || 0;
+      }
+    }
+    return { checkedAt: Date.now(), latestSha, latestMsg, latestDate, installedSha, behindBy };
+  } catch {
+    return null;
+  }
+}
+
+// 后台异步刷新 cache · fire and forget
+function spawnUpdateCheckAsync() {
+  try {
+    const { spawn } = require('child_process');
+    const child = spawn(process.argv[0], [process.argv[1], 'update', '--check-only'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+  } catch {}
+}
+
+// 从 cache 读 update 状态 · 在合适时机 (≥ 5 commit 落后 或 ≥ 7 天没更新) 显示提示
+function showUpdateBannerIfNeeded() {
+  let cache;
+  try { cache = JSON.parse(fs.readFileSync(UPDATE_CACHE_FILE, 'utf-8')); } catch { return; }
+  if (!cache.behindBy || cache.behindBy < 1) return;
+  // 显示阈值: 落后 5+ commit · 或 落后 7+ 天 (latestDate 比 checkedAt 早就是稳定状态 · 不算)
+  const daysOld = cache.latestDate ? Math.floor((Date.now() - new Date(cache.latestDate).getTime()) / 86400000) : 0;
+  const shouldShow = cache.behindBy >= 5 || daysOld >= 7;
+  if (!shouldShow) return;
+
+  log('');
+  log(sepia('  ── ') + vermilion('CLI 有更新') + sepia(' ──'));
+  log(sepia('  落后 ') + bold(cache.behindBy + ' 个 commit') + sepia(' · 最新: ') + sepia(cache.latestMsg.slice(0, 50)));
+  log(sepia('  跑 ') + vermilion('tinker update') + sepia(' 升级 · 不急'));
+  log('');
+}
+
+async function cmdUpdate(opts = {}) {
+  // --check-only · 只刷新 update cache · 不真的升级 (后台 spawn 用)
+  if (opts.checkOnly) {
+    // cache TTL 24h · 在 TTL 内直接退 · 不打 GitHub API
+    try {
+      const cache = JSON.parse(fs.readFileSync(UPDATE_CACHE_FILE, 'utf-8'));
+      if (Date.now() - cache.checkedAt < 24 * 60 * 60 * 1000) return;
+    } catch {}
+    const status = await fetchRemoteStatus();
+    if (status) {
+      try {
+        if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        fs.writeFileSync(UPDATE_CACHE_FILE, JSON.stringify(status, null, 2));
+      } catch {}
+    }
+    return;
+  }
+  return cmdUpdateReal();
+}
+
+async function cmdUpdateReal() {
   log('');
   if (!fs.existsSync(SRC_DIR)) {
     err('找不到 ' + sepia(SRC_DIR) + err('  这意味着你不是按官方一键命令装的'));
@@ -1556,6 +1675,10 @@ async function cmdCheck(opts) {
   const fromHook = !!opts.fromHook;
   const state = loadPromptState();
   const now = Date.now();
+
+  // 后台异步刷新 update cache · 不阻塞主流程
+  // (cache TTL 24h · 重复跑也只在过期时真发 GitHub 请求 · 浪费小)
+  spawnUpdateCheckAsync();
 
   // 静音 / 延后 / 已 dismiss 今日 · 全部直接退
   if (state.mutedUntil && state.mutedUntil > now) {
@@ -2154,7 +2277,7 @@ async function main() {
       case 'push': await cmdPush(opts); break;
       case 'stuck': await cmdStuck(opts); break;
       case 'ship': await cmdShip(opts); break;
-      case 'update': await cmdUpdate(); break;
+      case 'update': await cmdUpdate({ checkOnly: args.includes('--check-only') }); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':
         if (args[1] === 'install') await cmdHookInstall();
@@ -2169,6 +2292,11 @@ async function main() {
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default: err('未知命令: ' + cmd); help(); process.exit(1);
+    }
+    // 命令跑完 · 如果 cache 显示有更新就在末尾静静提示一行
+    // 不在 hook / watch / check (--from-hook) / update 等后台/系统命令里显示
+    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h'].includes(cmd)) {
+      showUpdateBannerIfNeeded();
     }
   } catch (e) {
     if (e.message && (e.message.includes('User force closed') || e.message.includes('ExitPromptError'))) {
