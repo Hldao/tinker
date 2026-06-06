@@ -2283,7 +2283,7 @@
      ─────────────────────────────────────────────────────────────── */
   /* 用 feed-head 容器的 ::before 加 eyebrow · CSS 文本 hardcode (不动 markup) */
   #screen-feed > .mb-8::before {
-    content: 'Dispatches · 今 日 工 房';
+    content: '今日工房';
     display: flex;
     align-items: center;
     gap: 14px;
@@ -4264,6 +4264,230 @@
   /* ===============================================================
      END v0.50.1 inline-code 溢出修复
      =============================================================== */
+
+  /* ================================================================
+   *  v0.51 · 陈列馆视觉升级 + 全站 AI 符号清洗
+   *  --------------------------------------------------------------
+   *  AI 符号清洗 (markup 已改 · 此处无 CSS 需要):
+   *    · 字间空格全删 · letter-spacing 走 CSS
+   *    · 文案 staccato `·` 链 → 顿号 / 句号 / 破折号
+   *    · padStart "04" → 自然 "4"
+   *    · 保留: 卷期号 / 工具列表 / 时间元数据的 ·
+   *
+   *  陈列馆视觉 (参考 NYT 年度作品集 + 工艺人案头):
+   *    · 序号 01/02/03 浮左 (Fraunces italic · sepia-light)
+   *    · dateline "入馆 · 2026.05.25" 绝对日期 + "完工已 N 天"
+   *    · 铭牌行 (作者 + 工具栈一起)
+   *    · 截图框 16:9 paper + inset shadow (有图才显示)
+   *    · 完工感想 加 mono 小标签
+   *    · 印章 dotted 边框 + tabular num
+   *    · 馆藏统计低调
+   *  ================================================================ */
+
+  /* —— 馆藏统计 —— */
+  .showcase-stats {
+    margin-top: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.18em;
+  }
+  .showcase-stats .num {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    padding: 0 2px;
+  }
+
+  /* —— showcase-card 撑开 —— */
+  .showcase-card {
+    padding: 56px 0 64px !important;
+    position: relative;
+  }
+  .showcase-card:first-of-type {
+    padding-top: 12px !important;
+  }
+
+  /* —— 序号 浮左 —— */
+  .showcase-index {
+    position: absolute;
+    left: -68px;
+    top: 18px;
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 144;
+    font-size: 56px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--sepia-light);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* —— dateline 行 · 入馆 + 完工 N 天 —— */
+  .showcase-dateline {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    margin-bottom: 22px;
+    padding-bottom: 10px;
+    border-bottom: 1px dotted var(--rule);
+  }
+  .showcase-dateline .dl-left {
+    letter-spacing: 0.22em;
+  }
+  .showcase-dateline .dl-right {
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+  .showcase-dateline .ship-mark {
+    color: var(--vermilion);
+    font-weight: 500;
+    margin-right: 3px;
+  }
+
+  /* —— 项目名 加大 —— */
+  .showcase-card-name {
+    font-size: 42px !important;
+    margin-bottom: 10px !important;
+  }
+
+  /* —— 铭牌行 —— */
+  .showcase-card-plaque {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .showcase-card-plaque .plaque-by {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+  }
+  .showcase-card-plaque .plaque-handle {
+    color: var(--vermilion);
+    border-bottom: 1px dotted rgba(194, 65, 12, 0.4);
+    cursor: pointer;
+  }
+  .showcase-card-plaque .plaque-sep {
+    color: var(--sepia-light);
+  }
+  .showcase-card-plaque .plaque-tools {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.1em;
+  }
+
+  /* —— 截图框 16:9 · paper bg · inset shadow —— */
+  .showcase-card-figure {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    box-shadow: 0 1px 0 var(--rule), inset 0 0 0 5px var(--bg);
+    margin-bottom: 30px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.4s ease, box-shadow 0.4s ease;
+  }
+  .showcase-card-figure:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 0 var(--rule), inset 0 0 0 5px var(--bg);
+  }
+  .showcase-card-figure img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* —— 描述 —— */
+  .showcase-card .showcase-card-desc {
+    font-size: 17px !important;
+    line-height: 1.6 !important;
+    margin-bottom: 24px !important;
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— 完工感想 加 mono 小标签 —— */
+  .showcase-card .showcase-card-reflection {
+    font-size: 16.5px !important;
+    line-height: 1.7 !important;
+    padding: 4px 0 4px 22px !important;
+    margin: 0 0 30px 0 !important;
+    border-left: 3px solid var(--vermilion);
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    letter-spacing: 0.005em;
+    background: transparent;
+  }
+  .showcase-card .showcase-card-reflection .quote-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--vermilion);
+    letter-spacing: 0.28em;
+    margin-bottom: 10px;
+    font-weight: 500;
+    display: block;
+    text-transform: uppercase;
+  }
+
+  /* —— meta · 印章 + CTA —— */
+  .showcase-card .showcase-card-meta {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    gap: 16px !important;
+    flex-wrap: wrap;
+  }
+  .showcase-stamps-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .showcase-card .pcard-stamp {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 10.5px !important;
+    color: var(--sepia) !important;
+    letter-spacing: 0.15em !important;
+    padding: 4px 10px !important;
+    border: 1px dotted var(--rule) !important;
+    background: rgba(28, 25, 23, 0.018) !important;
+    border-radius: 0 !important;
+  }
+  .showcase-card .pcard-stamp .num {
+    color: var(--vermilion) !important;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    margin-left: 4px;
+  }
+  .showcase-card .showcase-card-cta {
+    font-size: 14.5px !important;
+    transition: opacity 0.18s, transform 0.18s;
+  }
+  .showcase-card .showcase-card-cta:hover {
+    opacity: 0.7;
+    transform: translateX(2px);
+  }
+
+  /* —— 小屏: 序号隐藏 · 卡片紧凑 —— */
+  @media (max-width: 720px) {
+    .showcase-index { display: none; }
+    .showcase-card-name { font-size: 30px !important; }
+    .showcase-card { padding: 36px 0 40px !important; }
+  }
+
+  /* ===============================================================
+     END v0.51 陈列馆视觉升级 + AI 符号清洗
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -4324,15 +4548,15 @@
       <div class="mb-8" style="background: var(--paper); padding: 16px 20px; border-left: 3px solid var(--vermilion);">
         <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.1em;">ALPHA · 试运行</div>
         <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.65;">
-          这是非常早期的 alpha · 跑在自有服务器 (阿里云大陆 · 暂用 IP 访问 · daogu.cc 备案中) · 数据有原子写入 + backup · 但还没接数据库 · 也没有真实认证。
-          适合<strong>团队内部互相测试 + 真实反馈</strong> · 不建议放重要私密数据。
+          这是非常早期的 alpha 版本。跑在自有服务器上（阿里云大陆，暂用 IP 访问，daogu.cc 备案中），数据有原子写入 + backup，但还没接数据库，也没有真实认证。
+          适合<strong>团队内部互相测试 + 真实反馈</strong>，不建议放重要私密数据。
         </p>
         <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px; font-style: italic;">
-          感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
+          感谢你来帮忙。真实反馈（用了什么不顺、哪里没看懂、哪里好）比静默使用更有用。
         </p>
       </div>
 
-      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">关 于</div>
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.22em;">关于</div>
 
       <h1 class="display" style="font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); margin-bottom: 18px;">
         捣鼓 <span style="color: var(--sepia-light); font-size: 38px;">/</span> Tinker
@@ -4377,12 +4601,12 @@
 
         <div>
           <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 做完的事也有位置</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">完工不是静默操作。改成「跑通了」时要写一句感想 · 进 <span class="react-action" onclick="showScreen('showcase')" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">陈列馆</span> · 让做完的小作品被看见。但仍然<strong>不投票 · 不排行</strong>·看到喜欢的就真的去试用。</p>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">完工不是静默操作。改成「跑通了」时要写一句感想，进<span class="react-action" onclick="showScreen('showcase')" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">陈列馆</span>，让做完的小作品被看见。但仍然<strong>不投票，不排行</strong> — 看到喜欢的就真的去试用。</p>
         </div>
       </div>
 
       <div style="border-top: 2px solid var(--ink); padding-top: 32px;">
-        <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.15em; text-transform: uppercase;">关 于 产 品 本 身</div>
+        <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.22em; text-transform: uppercase;">关于产品本身</div>
 
         <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 24px;">
           <p>Tinker 用 Claude Code + Node.js + Docker 做的。</p>
@@ -4415,9 +4639,10 @@
 
   <section class="screen" id="screen-showcase">
     <div class="mb-6">
-      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.22em;">陈 列 馆</div>
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">陈列馆</div>
       <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">完工了 · 还能玩到的小作品 · 时间倒序 · <strong>不投票 · 不排行 · 看到喜欢的真的去试用</strong></p>
+      <p class="feed-sub">完工了、还能玩到的小作品。时间倒序，<strong>不投票，不排行 — 看到喜欢的，去试用一下</strong>。</p>
+      <div id="showcase-stats" class="showcase-stats"></div>
     </div>
     <div class="filter-row mb-4">
       <div id="showcase-tools-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
@@ -4431,7 +4656,7 @@
   <section class="screen" id="screen-notifications">
     <div class="mb-8">
       <h1 class="feed-title mb-3">通知</h1>
-      <p class="feed-sub">谁接走了你的东西 · 谁觉得有意思 · 谁留了便签 — 时间倒序</p>
+      <p class="feed-sub">谁接走了你的东西、谁觉得有意思、谁留了便签 — 时间倒序</p>
     </div>
     <div id="notif-list"></div>
     <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
@@ -4441,7 +4666,7 @@
 
   <section class="screen" id="screen-onboard">
     <div class="mb-12">
-      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.1em;">入 场 仪 式</div>
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">入场仪式</div>
       <h1 class="onboard-h1 mb-4">先做一个小东西</h1>
       <p class="serif italic text-lg" style="color: var(--sepia);">不是看完教程才能进来 — 我们觉得"做出来"比"学会了"更接近 vibe coding 的本质。挑一个,5 分钟。</p>
     </div>
@@ -4461,7 +4686,7 @@
 <div id="modal-note" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
     <h3 class="modal-title">留个便签</h3>
-    <p class="modal-sub">独立显示 · 不能盖楼 · 可以加截图说明</p>
+    <p class="modal-sub">独立显示，不能盖楼，可以加截图说明</p>
     <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句... (**粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
@@ -4470,7 +4695,7 @@
         + 加张图 (可选)
         <input type="file" accept="image/*" multiple onchange="handleNoteImageSelect(event)" style="display: none;">
       </label>
-      <div class="upload-hint">截图说明 · 设计对比 · 错误信息 — 都可以 · 也可以直接粘贴 (⌘V)</div>
+      <div class="upload-hint">截图说明、设计对比、错误信息 — 都可以；也可以直接粘贴（⌘V）</div>
     </div>
 
     <div class="mt-5">
@@ -4511,7 +4736,7 @@
 <div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
     <h3 class="modal-title">记一笔</h3>
-    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
+    <p class="modal-sub">跑通了 X、卡在 Y、试了 Z 失败 — 写啥都行</p>
     <textarea id="update-text" class="input-bare" rows="4" placeholder="今天... (短句就好 · **粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
@@ -4520,7 +4745,7 @@
         + 加张图 (可选)
         <input type="file" accept="image/*" multiple onchange="handleImageSelect(event)" style="display: none;">
       </label>
-      <div class="upload-hint">调 bug 截图 · 运行效果 · 设计稿 — 都可以 · 也可以直接粘贴 (⌘V)</div>
+      <div class="upload-hint">调 bug 截图、运行效果、设计稿 — 都可以；也可以直接粘贴（⌘V）</div>
     </div>
 
     <!-- v0.4: 跟反馈闭环联动的可选项 · 默认都不勾 · 不轰炸接走的人 -->
@@ -4535,10 +4760,10 @@
       </label>
       <label class="update-extra-row">
         <input type="checkbox" id="update-seeking-feedback" onchange="document.getElementById('update-feedback-ask-wrap').classList.toggle('hidden', !this.checked)">
-        <span><span class="extra-title">求看看 · 想拿反馈</span><span class="extra-sub">这条进展会被标"求 反 馈" · 进 feed 的求反馈频道 · 试用 CTA 加强</span></span>
+        <span><span class="extra-title">求看看，想拿反馈</span><span class="extra-sub">这条进展会被标为「求反馈」，进 feed 的求反馈频道，试用 CTA 自动加强</span></span>
       </label>
       <div id="update-feedback-ask-wrap" class="hidden" style="padding-left: 32px;">
-        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.04em;">想 知 道 (可选)</label>
+        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.2em;">想知道（可选）</label>
         <textarea id="update-feedback-ask" class="input-bare" rows="2" placeholder="比如:用户能不能 5 秒内看懂这是干嘛的 / 这个交互流程顺不顺 / 文案哪里别扭" style="font-size: 14px; resize: vertical;"></textarea>
       </div>
     </div>
@@ -4687,9 +4912,9 @@
     </div>
 
     <div class="mt-8 pt-6" style="border-top: 1px dotted var(--rule);">
-      <div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">用 AI 接入 · 不装 CLI</div>
+      <div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.22em;">用 AI 接入，不装 CLI</div>
       <p class="serif" style="font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.55;">
-        把接入指南粘进 Cursor / Claude Code / 任意 AI 对话 · 配上自己的钥匙 · AI 就能直接帮你把 vibe coding 进展发到 Tinker。<strong>不用装 node · 不用装 CLI · 复制粘贴就能用</strong>。
+        把接入指南粘进 Cursor / Claude Code / 任意 AI 对话，配上自己的钥匙，AI 就能直接帮你把 vibe coding 进展发到 Tinker。<strong>不用装 node，不用装 CLI，复制粘贴就能用</strong>。
       </p>
       <div class="flex gap-5 items-center flex-wrap">
         <span class="react-action serif" onclick="copyAiPrompt(this, false)" style="font-size: 14px; color: var(--vermilion); border-bottom-color: var(--vermilion); display: inline-flex; align-items: center; gap: 5px;">复制接入指南(空钥匙占位)</span>
@@ -4726,7 +4951,7 @@
 <!-- SHIP CEREMONY modal — 完工 · 写一句感想 · 走 shipProject action -->
 <div id="modal-ship-ceremony" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 560px;">
-    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.22em;">✦ 完 工</div>
+    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.22em;">✦ 完工</div>
     <h3 class="modal-title">写一句完工感想</h3>
     <p class="modal-sub">这条感想会进时间线 · 也进陈列馆作为这件作品的代表内容 · 别凑数 · 你最想说的那句</p>
     <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="比如:卡了三周的 cron 终于把状态对上了 · 我想知道是不是有更简单的写法" style="font-size: 16px; resize: vertical;"></textarea>
@@ -4737,7 +4962,7 @@
         <span><span class="extra-title">求看看 · 想拿反馈</span><span class="extra-sub">完工默认勾上 · 让陈列馆里看到这个项目的人能给你反馈</span></span>
       </label>
       <div id="ship-feedback-ask-wrap" style="padding-left: 32px;">
-        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.04em;">想 知 道 (可选)</label>
+        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.2em;">想知道（可选）</label>
         <textarea id="ship-feedback-ask" class="input-bare" rows="2" placeholder="比如:5 秒内看得懂这是干嘛的吗 / 这个流程哪里不顺" style="font-size: 14px; resize: vertical;"></textarea>
       </div>
     </div>
@@ -4826,10 +5051,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.50.1 · 26 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.51 · 27 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.50.1</span>
+  <span class="bb-ver">v0.51</span>
 </div>
 
 <script>
@@ -5205,7 +5430,7 @@ function renderFeed() {
     // 文案随当前筛选 · 让空状态有解释
     let msg;
     if (seekingFeedbackOnly) {
-      msg = '现在没人在求反馈 · 等你做完一个 · 回来勾一下"求看看"';
+      msg = '现在没人在求反馈，等你做完一个，回来勾一下「求看看」';
     } else {
       const labels = { all: '今天还没什么动静', active: '现在没人在做的项目', stuck: '没人卡住 · 好事', done: '还没有跑通的项目', paused: '没暂停的项目' };
       msg = labels[currentStatusFilter] || '没东西';
@@ -5289,7 +5514,7 @@ function makeEntryEl(e) {
         <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
         <span class="entry-slash">/</span>
         <span class="entry-project">${escapeHtml(e.projectName)}</span>
-        ${seeking ? `<span class="entry-seeking-badge">求 反 馈</span>` : ''}
+        ${seeking ? `<span class="entry-seeking-badge">求反馈</span>` : ''}
         <span class="entry-status ${e.status}">${statusText(e.status)}</span>
       </div>
       ${seeking && e.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(e.feedbackAsk)}</div>` : ''}
@@ -5507,17 +5732,17 @@ function renderProject(owner, slug) {
           <div class="tl-entry ${u.kind === 'ship' ? 'tl-entry-ship' : ''}" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
-              ${u.kind === 'ship' ? `<div class="tl-ship-badge">✦ 完 工</div>` : ''}
+              ${u.kind === 'ship' ? `<div class="tl-ship-badge">✦ 完工</div>` : ''}
               ${u.feedbackAsk !== undefined ? `
                 <div class="tl-feedback-ask-block">
-                  <div class="tl-feedback-ask-label">求 反 馈</div>
+                  <div class="tl-feedback-ask-label">求反馈</div>
                   ${u.feedbackAsk ? `<div class="tl-feedback-ask-text"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
                 </div>
               ` : ''}
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
                 <div class="tl-prompt-box">
-                  <div class="tl-prompt-label">开 场</div>
+                  <div class="tl-prompt-label">开场</div>
                   <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
                   <span class="react-action" style="font-family: Newsreader, serif; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制</span>
                 </div>
@@ -5538,7 +5763,7 @@ function renderProject(owner, slug) {
               ` : ''}
               ${usedByList.length > 0 ? `
                 <div class="tl-used-block">
-                  <div class="tl-used-header">被 用 过 · ${usedByList.length}</div>
+                  <div class="tl-used-header">被用过 · ${usedByList.length}</div>
                   <div class="tl-used-list">
                     ${usedByList.map(used => `
                       <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
@@ -5678,19 +5903,37 @@ function renderOnboard() {
 
 /* ============ SHOWCASE 陈列馆 ============ */
 let showcaseToolFilter = 'all';
+// v0.51: 陈列馆 markup 重做 · 报纸 dateline + 工艺人铭牌 + 截图框
+function formatShipDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.getFullYear() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
+}
+function daysSinceShip(ts) {
+  if (!ts) return 0;
+  return Math.max(0, Math.floor((Date.now() - ts) / 86400000));
+}
+
 function renderShowcase() {
-  // 收集所有已完工项目 + 各自的 ship update (kind=ship 最新一条 · 没有就退化到最近 update.text)
+  // 收集所有已完工项目 + ship update + cover image (取自 ship update 或退化到任意 update 的第一张图)
   const items = [];
   state.projects.forEach(p => {
     if (p.status !== 'done') return;
     const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
     const reflection = shipUpdate ? shipUpdate.text : ((p.updates || [])[0] || {}).text || '';
     const shipAt = p.shippedAt || (shipUpdate ? shipUpdate.at : ((p.updates || [])[0] || {}).at) || 0;
-    items.push({ p, reflection, shipAt, shipUpdateId: shipUpdate ? shipUpdate.id : null });
+    let coverImage = null;
+    if (shipUpdate && shipUpdate.images && shipUpdate.images.length > 0) {
+      coverImage = shipUpdate.images[0];
+    } else {
+      const upWithImg = (p.updates || []).find(u => u.images && u.images.length > 0);
+      if (upWithImg) coverImage = upWithImg.images[0];
+    }
+    items.push({ p, reflection, shipAt, shipUpdateId: shipUpdate ? shipUpdate.id : null, coverImage });
   });
   items.sort((a, b) => b.shipAt - a.shipAt);
 
-  // tools 筛选器 · 仅展示在陈列馆出现过的 tools
+  // tools 筛选器
   const toolSet = new Set();
   items.forEach(it => (it.p.tools || []).forEach(t => toolSet.add(t)));
   const tools = ['all', ...Array.from(toolSet)];
@@ -5706,33 +5949,60 @@ function renderShowcase() {
 
   const filtered = showcaseToolFilter === 'all' ? items : items.filter(it => (it.p.tools || []).includes(showcaseToolFilter));
 
+  // 馆藏统计
+  const statsEl = document.getElementById('showcase-stats');
+  if (statsEl) {
+    if (items.length === 0) {
+      statsEl.innerHTML = '';
+    } else {
+      const now = new Date();
+      const thisMonthCount = items.filter(it => {
+        const d = new Date(it.shipAt);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      }).length;
+      statsEl.innerHTML = `馆藏 <span class="num">${items.length}</span> 件${thisMonthCount > 0 ? `，本月新入 <span class="num">${thisMonthCount}</span> 件` : ''}`;
+    }
+  }
+
   const list = document.getElementById('showcase-list');
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">陈列馆还没东西 — 完工第一个的人在你之前 · 或者就是你</div>`;
+    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">陈列馆还没东西 — 完工第一个的人在你之前，或者就是你</div>`;
     return;
   }
 
-  list.innerHTML = filtered.map(({ p, reflection, shipAt }) => {
+  list.innerHTML = filtered.map(({ p, reflection, shipAt, coverImage }, idx) => {
     const tinkeredCount = (p.reactions && p.reactions.tinkered) ? p.reactions.tinkered.length : 0;
     const methodCount = (p.updates || []).reduce((acc, u) => acc + ((u.usedBy && u.usedBy.length) || 0), 0);
     const stamps = [];
-    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过 ${tinkeredCount}</span>`);
-    if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用 ${methodCount}</span>`);
+    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过<span class="num">${tinkeredCount}</span></span>`);
+    if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用<span class="num">${methodCount}</span></span>`);
+    const idxStr = String(idx + 1).padStart(2, '0');
     return `
-      <div class="showcase-card">
-        <div class="showcase-card-head">
-          <div class="mono text-xs" style="color: var(--vermilion); letter-spacing: 0.18em;">✦ 完 工 · ${shortAgo(shipAt)}</div>
-          ${stamps.length > 0 ? `<div class="pcard-stamps">${stamps.join('')}</div>` : ''}
+      <article class="showcase-card">
+        <div class="showcase-index">${idxStr}</div>
+        <div class="showcase-dateline">
+          <span class="dl-left">入馆 · ${formatShipDate(shipAt)}</span>
+          <span class="dl-right"><span class="ship-mark">✦</span>完工已 ${daysSinceShip(shipAt)} 天</span>
         </div>
         <h2 class="showcase-card-name" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</h2>
-        <div class="showcase-card-by">— <span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">@${p.owner}</span></div>
-        <div class="showcase-card-desc">${escapeHtml(p.desc)}</div>
-        ${reflection ? `<blockquote class="showcase-card-reflection">${renderMentions(reflection.length > 280 ? reflection.slice(0, 280) + '…' : reflection)}</blockquote>` : ''}
+        <div class="showcase-card-plaque">
+          <span class="plaque-by">— <span class="plaque-handle" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">@${p.owner}</span></span>
+          ${(p.tools || []).length > 0 ? `<span class="plaque-sep">·</span><span class="plaque-tools">${(p.tools || []).slice(0, 4).join(' · ')}</span>` : ''}
+        </div>
+        ${coverImage ? `
+        <div class="showcase-card-figure" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(coverImage.src).replace(/"/g,'&quot;')}, ${JSON.stringify(coverImage.caption||'').replace(/"/g,'&quot;')})">
+          <img src="${coverImage.src}" alt="${escapeHtml(coverImage.caption || '')}">
+        </div>` : ''}
+        ${p.desc ? `<div class="showcase-card-desc">${escapeHtml(p.desc)}</div>` : ''}
+        ${reflection ? `<blockquote class="showcase-card-reflection">
+          <span class="quote-label">完工感想</span>
+          ${renderMentions(reflection.length > 280 ? reflection.slice(0, 280) + '…' : reflection)}
+        </blockquote>` : ''}
         <div class="showcase-card-meta">
-          <span>${(p.tools || []).slice(0, 4).join(' · ')}</span>
+          ${stamps.length > 0 ? `<div class="showcase-stamps-row">${stamps.join('')}</div>` : '<div></div>'}
           ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
         </div>
-      </div>
+      </article>
     `;
   }).join('');
 }
@@ -6321,7 +6591,7 @@ async function refreshApiTokensList() {
       root.innerHTML = '<div class="serif" style="color: var(--sepia); font-size: 14px; padding: 8px 0;">还没生成过钥匙。下面生成一把就能在 CLI / Cursor / Claude Code 里用 Tinker。</div>';
       return;
     }
-    root.innerHTML = '<div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">现 有 钥 匙 · ' + tokens.length + '</div>' +
+    root.innerHTML = '<div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.22em;">现有钥匙 · ' + tokens.length + '</div>' +
       tokens.map(t => `
         <div class="api-token-row">
           <div>

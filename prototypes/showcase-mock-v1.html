@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>陈列馆 · 设计预览 v1 · B+C 杂交方向</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #faf8f3;
+    --main-bg: #f8f5ec;
+    --paper: #f5f1e8;
+    --ink: #1c1917;
+    --ink-soft: #3f3a36;
+    --sepia: #78716c;
+    --sepia-light: #c2b8a4;
+    --rule: #d8d3c4;
+    --vermilion: #c2410c;
+    --vermilion-deep: #a83a0e;
+    --moss: #4d7c0f;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { min-height: 100vh; }
+
+  body {
+    background-color: var(--main-bg);
+    color: var(--ink);
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 16px;
+    line-height: 1.55;
+    background-image:
+      radial-gradient(at 18% 22%, rgba(194, 65, 12, 0.018) 0px, transparent 50%),
+      radial-gradient(at 82% 78%, rgba(120, 113, 108, 0.025) 0px, transparent 50%);
+  }
+
+  /* —— mock masthead —— */
+  .mock-masthead {
+    background: var(--bg);
+    border-bottom: 2px solid var(--ink);
+    padding: 26px 32px 6px;
+  }
+  .mock-masthead .row1 {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 30px;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .mock-masthead .brand {
+    font-family: 'Newsreader', serif;
+    font-size: 28px;
+    color: var(--ink);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .mock-masthead .brand-cn {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', serif;
+    font-size: 24px;
+    margin-left: 8px;
+    letter-spacing: 0.02em;
+  }
+  .mock-masthead .nav {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .mock-masthead .nav button {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    color: var(--ink);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+    cursor: pointer;
+  }
+  .mock-masthead .nav button.current {
+    border-bottom-color: var(--vermilion);
+    color: var(--vermilion);
+    font-weight: 500;
+  }
+  .mock-masthead .nav .about-dotted {
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+  }
+  .mock-masthead .cta {
+    font-family: 'Newsreader', serif;
+    font-size: 14px;
+    color: var(--vermilion);
+    padding: 5px 13px;
+    border: 1px solid rgba(194, 65, 12, 0.32);
+    background: rgba(194, 65, 12, 0.03);
+    margin-left: 8px;
+    cursor: pointer;
+  }
+  .mock-masthead .dateline {
+    max-width: 880px;
+    margin: 10px auto 0;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    border-top: 1px dotted var(--rule);
+    padding: 9px 0 7px;
+  }
+  .mock-masthead .dateline .issue {
+    color: var(--ink);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+    padding: 0 1px;
+  }
+  .mock-masthead .dateline .find {
+    color: var(--sepia);
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    margin-left: 12px;
+  }
+
+  /* —— 主容器 —— */
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 76px 40px 90px;
+  }
+
+  /* —— 页头 —— */
+  .head {
+    margin-bottom: 64px;
+    padding-bottom: 36px;
+    border-bottom: 2px solid var(--ink);
+    position: relative;
+  }
+  .head .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--vermilion);
+    letter-spacing: 0.28em;
+    margin-bottom: 22px;
+    text-transform: uppercase;
+  }
+  .head h1 {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 500;
+    font-size: 64px;
+    letter-spacing: -0.025em;
+    line-height: 1.04;
+    color: var(--ink);
+    margin-bottom: 18px;
+  }
+  .head .sub {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 16.5px;
+    color: var(--sepia);
+    line-height: 1.6;
+    letter-spacing: 0.005em;
+    max-width: 640px;
+  }
+  .head .sub strong {
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  /* 馆藏统计 · 极淡 */
+  .head .stats {
+    margin-top: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.18em;
+  }
+  .head .stats .num {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    padding: 0 2px;
+  }
+
+  /* —— 展品 —— */
+  .exhibit {
+    padding: 56px 0 64px;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+  }
+  .exhibit:last-child {
+    border-bottom: none;
+  }
+  .exhibit:first-of-type {
+    padding-top: 8px;
+  }
+
+  /* 展品序号 · 浮在左上 · 极浅 */
+  .ex-index {
+    position: absolute;
+    left: -68px;
+    top: 6px;
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 144;
+    font-size: 56px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--sepia-light);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    user-select: none;
+  }
+
+  /* dateline 行 · 报纸"入馆"气质 */
+  .ex-dateline {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    margin-bottom: 22px;
+    padding-bottom: 10px;
+    border-bottom: 1px dotted var(--rule);
+  }
+  .ex-dateline .left {
+    letter-spacing: 0.22em;
+  }
+  .ex-dateline .right {
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+  .ex-dateline .ship-mark {
+    color: var(--vermilion);
+    font-weight: 500;
+    margin-right: 3px;
+  }
+
+  /* 项目名 · 大字 Fraunces */
+  .ex-name {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 500;
+    font-size: 42px;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+    color: var(--ink);
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  .ex-name:hover {
+    color: var(--vermilion);
+  }
+
+  /* 铭牌行 · 作者 / 工具 */
+  .ex-plaque {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+  }
+  .ex-plaque .by {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    letter-spacing: 0.005em;
+  }
+  .ex-plaque .by .handle {
+    color: var(--vermilion);
+    border-bottom: 1px dotted rgba(194, 65, 12, 0.4);
+    cursor: pointer;
+  }
+  .ex-plaque .sep {
+    color: var(--sepia-light);
+  }
+  .ex-plaque .tools {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.1em;
+  }
+
+  /* 截图框 · 项目预览 · 4-5px 描边 paper bg */
+  .ex-figure {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    box-shadow:
+      0 1px 0 var(--rule),
+      inset 0 0 0 5px var(--bg);
+    margin-bottom: 30px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.4s ease, box-shadow 0.4s ease;
+  }
+  .ex-figure:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 3px 0 var(--rule),
+      inset 0 0 0 5px var(--bg);
+  }
+  .ex-figure svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* 描述 */
+  .ex-desc {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 17px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    letter-spacing: 0.005em;
+    margin-bottom: 24px;
+  }
+
+  /* 完工感想 · vermilion 左边线 blockquote */
+  .ex-reflection {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 16.5px;
+    color: var(--ink);
+    line-height: 1.7;
+    border-left: 3px solid var(--vermilion);
+    padding: 4px 0 4px 22px;
+    margin-bottom: 30px;
+    letter-spacing: 0.005em;
+    position: relative;
+  }
+  .ex-reflection .quote-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--vermilion);
+    letter-spacing: 0.28em;
+    margin-bottom: 10px;
+    font-weight: 500;
+    display: block;
+    text-transform: uppercase;
+  }
+
+  /* 底部 meta · 印章 + 去试用 */
+  .ex-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .ex-stamps {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ex-stamp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--sepia);
+    letter-spacing: 0.15em;
+    padding: 4px 10px;
+    border: 1px dotted var(--rule);
+    background: rgba(28, 25, 23, 0.018);
+  }
+  .ex-stamp .num {
+    color: var(--vermilion-deep);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    margin-left: 4px;
+  }
+  .ex-cta {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    color: var(--vermilion);
+    letter-spacing: 0.005em;
+    border-bottom: 1px solid var(--vermilion);
+    padding-bottom: 1px;
+    text-decoration: none;
+    transition: opacity 0.18s, transform 0.18s;
+  }
+  .ex-cta:hover {
+    opacity: 0.7;
+    transform: translateX(2px);
+  }
+
+  /* 底部 closing line */
+  .closing {
+    margin-top: 80px;
+    padding-top: 36px;
+    border-top: 1px solid var(--rule);
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.22em;
+    line-height: 1.7;
+  }
+
+  /* —— 设计说明浮条 (mock 专用) —— */
+  .design-note {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    background: var(--ink);
+    color: #f5e9c8;
+    padding: 12px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    line-height: 1.6;
+    max-width: 260px;
+    box-shadow: 0 4px 16px rgba(28, 25, 23, 0.22);
+    z-index: 1000;
+  }
+  .design-note .label {
+    color: var(--vermilion);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 10px;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  /* —— 小屏适配 —— */
+  @media (max-width: 720px) {
+    .container { padding: 50px 24px 60px; }
+    .head h1 { font-size: 44px; }
+    .ex-name { font-size: 32px; }
+    .ex-index { display: none; }
+    .mock-masthead { padding: 18px 18px 6px; }
+    .mock-masthead .brand { font-size: 22px; }
+    .mock-masthead .brand-cn { font-size: 19px; }
+    .mock-masthead .nav { gap: 14px; }
+    .mock-masthead .nav button { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── mock masthead 复用现有系统 ─── -->
+<div class="mock-masthead">
+  <div class="row1">
+    <span class="brand">Tinker <span class="brand-cn">捣鼓</span></span>
+    <div class="nav">
+      <button>动静</button>
+      <button>我的工作室</button>
+      <button>通知</button>
+      <button class="current">陈列馆</button>
+      <button class="about-dotted">关于</button>
+      <button class="cta">+ 记一笔</button>
+    </div>
+  </div>
+  <div class="dateline">
+    <span>卷一 · 第 <span class="issue">002</span> 期 · 试运行 · <span style="color: var(--vermilion);">@daodao</span></span>
+    <span>Sat · 06 · Jun · 2026<span class="find">找</span></span>
+  </div>
+</div>
+
+<main class="container">
+
+  <!-- ─── 页头 · v2 弱化 AI 符号 ─── -->
+  <section class="head">
+    <div class="eyebrow">陈列馆</div>
+    <h1>做出来的</h1>
+    <p class="sub">完工了、还能玩到的小作品。时间倒序，<strong>不投票，不排行 — 看到喜欢的，去试用一下</strong>。</p>
+    <div class="stats">
+      馆藏 <span class="num">4</span> 件，本月新入 <span class="num">2</span> 件
+    </div>
+  </section>
+
+  <!-- ─── 展品 1 · Tinker ─── -->
+  <article class="exhibit">
+    <div class="ex-index">01</div>
+
+    <div class="ex-dateline">
+      <span class="left">入 馆 · 2026.05.25</span>
+      <span class="right"><span class="ship-mark">✦</span>完工已 12 天</span>
+    </div>
+
+    <h2 class="ex-name">Tinker · 捣鼓</h2>
+    <div class="ex-plaque">
+      <span class="by">— <span class="handle">@daodao</span></span>
+      <span class="sep">·</span>
+      <span class="tools">Claude Code · Node.js · Docker</span>
+    </div>
+
+    <div class="ex-figure">
+      <svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+        <rect width="1600" height="900" fill="#f5f1e8"/>
+        <rect x="0" y="0" width="1600" height="120" fill="#faf8f3"/>
+        <line x1="0" y1="120" x2="1600" y2="120" stroke="#1c1917" stroke-width="3"/>
+        <text x="80" y="80" font-family="Newsreader, serif" font-size="36" fill="#1c1917" font-weight="500">Tinker · 捣鼓</text>
+        <text x="1380" y="80" font-family="JetBrains Mono, monospace" font-size="14" fill="#78716c" text-anchor="end" letter-spacing="3">+ 记 一 笔</text>
+        <text x="80" y="220" font-family="JetBrains Mono, monospace" font-size="14" fill="#c2410c" letter-spacing="6">DISPATCHES · 今 日 工 房</text>
+        <text x="80" y="330" font-family="Fraunces, serif" font-size="72" fill="#1c1917" font-weight="500">今天有动静</text>
+        <line x1="80" y1="400" x2="700" y2="400" stroke="#d8d3c4"/>
+        <text x="80" y="500" font-family="Fraunces, serif" font-size="36" font-style="italic" fill="#c2410c" font-weight="500">3h</text>
+        <text x="180" y="490" font-family="JetBrains Mono, monospace" font-size="18" fill="#3f3a36">@daodao</text>
+        <text x="280" y="490" font-family="Newsreader, serif" font-size="20" fill="#1c1917" font-style="italic">Tinker / 捣鼓</text>
+        <text x="180" y="540" font-family="Newsreader, serif" font-size="20" fill="#1c1917">装 tinker CLI 一键命令 · 不装命令行的另一条路是...</text>
+        <line x1="80" y1="620" x2="1520" y2="620" stroke="#d8d3c4" stroke-dasharray="3,5"/>
+        <text x="80" y="700" font-family="Fraunces, serif" font-size="36" font-style="italic" fill="#c2410c" font-weight="500">12h</text>
+        <text x="180" y="690" font-family="JetBrains Mono, monospace" font-size="18" fill="#3f3a36">@润江</text>
+        <text x="280" y="690" font-family="Newsreader, serif" font-size="20" fill="#1c1917" font-style="italic">早起打卡 / Sunrise</text>
+        <text x="180" y="740" font-family="Newsreader, serif" font-size="20" fill="#1c1917">把天气预报和闹钟连起来 · 阴天提前 30 分响...</text>
+        <text x="80" y="860" font-family="JetBrains Mono, monospace" font-size="12" fill="#78716c" letter-spacing="3">卷 一 · 第 002 期 · 试 运 行 · Sat · 06 · Jun · 2026</text>
+      </svg>
+    </div>
+
+    <p class="ex-desc">给"用 AI 创造但不必懂代码"的人的工作室 · 反算法、反 trending、反数字游戏 · 一份每天都在出的小报。</p>
+
+    <blockquote class="ex-reflection">
+      <span class="quote-label">完 工 感 想</span>
+      卡了三周的 cron 终于把状态对上了 · 我想知道是不是有更简单的写法 — 但这一版已经是我能做到的最干净。
+    </blockquote>
+
+    <div class="ex-foot">
+      <div class="ex-stamps">
+        <span class="ex-stamp">被 接 走 过<span class="num">3</span></span>
+        <span class="ex-stamp">方 法 被 用<span class="num">5</span></span>
+      </div>
+      <a href="#" class="ex-cta">去 试 用 →</a>
+    </div>
+  </article>
+
+  <!-- ─── 展品 2 · 早起打卡 ─── -->
+  <article class="exhibit">
+    <div class="ex-index">02</div>
+
+    <div class="ex-dateline">
+      <span class="left">入 馆 · 2026.05.18</span>
+      <span class="right"><span class="ship-mark">✦</span>完工已 19 天</span>
+    </div>
+
+    <h2 class="ex-name">早起打卡 · Sunrise</h2>
+    <div class="ex-plaque">
+      <span class="by">— <span class="handle">@润江</span></span>
+      <span class="sep">·</span>
+      <span class="tools">DeepSeek · Vue · 阿里云</span>
+    </div>
+
+    <div class="ex-figure">
+      <svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#c2410c" stop-opacity="0.18"/>
+            <stop offset="50%" stop-color="#b45309" stop-opacity="0.06"/>
+            <stop offset="100%" stop-color="#f8f5ec" stop-opacity="1"/>
+          </linearGradient>
+        </defs>
+        <rect width="1600" height="900" fill="url(#sky)"/>
+        <circle cx="800" cy="540" r="160" fill="#c2410c" opacity="0.42"/>
+        <circle cx="800" cy="540" r="220" fill="#c2410c" opacity="0.12"/>
+        <line x1="220" y1="660" x2="1380" y2="660" stroke="#78716c" stroke-width="2"/>
+        <text x="800" y="790" font-family="Fraunces, serif" font-size="92" fill="#1c1917" text-anchor="middle" font-weight="500" font-variation-settings="'opsz' 144">06 : 12</text>
+        <text x="800" y="850" font-family="JetBrains Mono, monospace" font-size="18" fill="#78716c" text-anchor="middle" letter-spacing="6">明 早 阴 · 提 前 30 分</text>
+      </svg>
+    </div>
+
+    <p class="ex-desc">把日出闹钟跟天气预报连起来的小工具 · 阴天提前响 30 分 · 晴天准点 · 周末自动延后一档。</p>
+
+    <blockquote class="ex-reflection">
+      <span class="quote-label">完 工 感 想</span>
+      原来"看天预报阴天"这件事可以代码化 · 而且别人也愿意用 · 比我预期的多。
+    </blockquote>
+
+    <div class="ex-foot">
+      <div class="ex-stamps">
+        <span class="ex-stamp">被 接 走 过<span class="num">1</span></span>
+      </div>
+      <a href="#" class="ex-cta">去 试 用 →</a>
+    </div>
+  </article>
+
+  <!-- ─── 展品 3 · 猫粮记账 ─── -->
+  <article class="exhibit">
+    <div class="ex-index">03</div>
+
+    <div class="ex-dateline">
+      <span class="left">入 馆 · 2026.05.11</span>
+      <span class="right"><span class="ship-mark">✦</span>完工已 26 天</span>
+    </div>
+
+    <h2 class="ex-name">猫粮记账 · CatLedger</h2>
+    <div class="ex-plaque">
+      <span class="by">— <span class="handle">@猫猫</span></span>
+      <span class="sep">·</span>
+      <span class="tools">ChatGPT · Lovable · Cloudflare</span>
+    </div>
+
+    <div class="ex-figure">
+      <svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+        <rect width="1600" height="900" fill="#faf8f3"/>
+        <rect x="0" y="0" width="1600" height="120" fill="#f5f1e8"/>
+        <text x="120" y="80" font-family="Fraunces, serif" font-size="44" fill="#1c1917" font-weight="500">CatLedger</text>
+        <rect x="1300" y="40" width="200" height="56" fill="#c2410c" rx="3"/>
+        <text x="1400" y="78" font-family="JetBrains Mono, monospace" font-size="20" fill="#faf8f3" text-anchor="middle" letter-spacing="4">+ 录 一 笔</text>
+        <line x1="0" y1="120" x2="1600" y2="120" stroke="#1c1917" stroke-width="2"/>
+        <text x="120" y="220" font-family="JetBrains Mono, monospace" font-size="14" fill="#78716c" letter-spacing="6">今 日 · 2026.06.06</text>
+
+        <text x="120" y="320" font-family="JetBrains Mono, monospace" font-size="20" fill="#78716c">07:23</text>
+        <text x="280" y="320" font-family="Newsreader, serif" font-size="24" fill="#1c1917">早餐 · 干粮 35g · 妈妈喂</text>
+        <line x1="120" y1="370" x2="1480" y2="370" stroke="#d8d3c4" stroke-dasharray="2,5"/>
+
+        <text x="120" y="460" font-family="JetBrains Mono, monospace" font-size="20" fill="#78716c">12:50</text>
+        <text x="280" y="460" font-family="Newsreader, serif" font-size="24" fill="#1c1917">午餐 · 罐头 80g · 爸爸喂</text>
+        <line x1="120" y1="510" x2="1480" y2="510" stroke="#d8d3c4" stroke-dasharray="2,5"/>
+
+        <text x="120" y="600" font-family="JetBrains Mono, monospace" font-size="20" fill="#78716c">19:11</text>
+        <text x="280" y="600" font-family="Newsreader, serif" font-size="24" fill="#1c1917">晚餐 · 干粮 40g · 妈妈喂</text>
+        <line x1="120" y1="660" x2="1480" y2="660" stroke="#1c1917"/>
+
+        <text x="120" y="780" font-family="Newsreader, serif" font-size="22" fill="#3f3a36" font-style="italic">今 日 共 155g</text>
+        <text x="1480" y="780" font-family="JetBrains Mono, monospace" font-size="18" fill="#c2410c" text-anchor="end" letter-spacing="2">比 昨 日 -10g ↓</text>
+      </svg>
+    </div>
+
+    <p class="ex-desc">自家猫吃了什么 / 多少克 / 谁喂的 · 一只手能录的 PWA · 离线可用 · 数据存自己设备 · 不上云。</p>
+
+    <blockquote class="ex-reflection">
+      <span class="quote-label">完 工 感 想</span>
+      做着做着发现 PWA 比想象中容易 · 推荐都试一下 · 离线可用是真的香 · 网不好的地方也能记。
+    </blockquote>
+
+    <div class="ex-foot">
+      <div class="ex-stamps">
+        <span class="ex-stamp">方 法 被 用<span class="num">2</span></span>
+      </div>
+      <a href="#" class="ex-cta">去 试 用 →</a>
+    </div>
+  </article>
+
+  <!-- ─── 展品 4 · 小学数学口算 ─── -->
+  <article class="exhibit">
+    <div class="ex-index">04</div>
+
+    <div class="ex-dateline">
+      <span class="left">入 馆 · 2026.05.03</span>
+      <span class="right"><span class="ship-mark">✦</span>完工已 34 天</span>
+    </div>
+
+    <h2 class="ex-name">小学数学口算 · Counter</h2>
+    <div class="ex-plaque">
+      <span class="by">— <span class="handle">@hldao</span></span>
+      <span class="sep">·</span>
+      <span class="tools">Cursor · React · Tailwind</span>
+    </div>
+
+    <div class="ex-figure">
+      <svg viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+        <rect width="1600" height="900" fill="#f8f5ec"/>
+        <text x="800" y="180" font-family="JetBrains Mono, monospace" font-size="16" fill="#78716c" text-anchor="middle" letter-spacing="8">第 7 题 · 共 10 题</text>
+        <rect x="450" y="220" width="700" height="6" fill="#d8d3c4"/>
+        <rect x="450" y="220" width="490" height="6" fill="#c2410c" opacity="0.7"/>
+        <text x="800" y="480" font-family="Fraunces, serif" font-size="180" fill="#1c1917" text-anchor="middle" font-weight="500" font-variation-settings="'opsz' 144">37 + 28</text>
+        <line x1="580" y1="570" x2="1020" y2="570" stroke="#1c1917" stroke-width="3"/>
+        <text x="800" y="690" font-family="Fraunces, serif" font-size="64" fill="#c2410c" text-anchor="middle" font-style="italic" font-weight="500">|</text>
+        <text x="800" y="820" font-family="Newsreader, serif" font-size="20" fill="#78716c" text-anchor="middle" font-style="italic">想想看 · 答错了也没关系</text>
+      </svg>
+    </div>
+
+    <p class="ex-desc">给小孩练加减法 · 自适应难度 · 答错了不批评只重出 · 累计答对 10 道才升级。</p>
+
+    <blockquote class="ex-reflection">
+      <span class="quote-label">完 工 感 想</span>
+      教育类小工具最难的是"鼓励"的语气 · 反复改了 8 版才让我家娃愿意自己开。
+    </blockquote>
+
+    <div class="ex-foot">
+      <div class="ex-stamps">
+        <span class="ex-stamp">被 接 走 过<span class="num">2</span></span>
+        <span class="ex-stamp">方 法 被 用<span class="num">3</span></span>
+      </div>
+      <a href="#" class="ex-cta">去 试 用 →</a>
+    </div>
+  </article>
+
+  <!-- ─── 收尾 ─── -->
+  <div class="closing">
+    — 完 工 的 事 情 才 进 这 里 · 在 做 的 去 主 屏 「 动 静 」 看 —
+  </div>
+
+</main>
+
+<!-- 设计说明浮条 · mock 专用 · 真页不会有 -->
+<div class="design-note">
+  <span class="label">陈列馆 · MOCK v1</span>
+  报纸 dateline + 工艺人铭牌<br>
+  · 大字 Fraunces 项目名<br>
+  · 16:9 截图框 (描边 paper bg)<br>
+  · 引文式完工感想<br>
+  · 印章 + 去试用 CTA
+</div>
+
+</body>
+</html>
