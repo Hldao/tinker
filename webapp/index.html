@@ -2399,13 +2399,11 @@
 
   /* ───────────────────────────────────────────────────────────────
      B · feed-title 前加 EYEBROW 视觉锚点
-     原 feed-head: 大标题 "今天有动静" + 副标 + cta · 缺乏顶部视觉抓手
-     加: mono uppercase "DISPATCHES · 今日工房" + 右侧延伸 thin bar
-     是关于页 eyebrow 系统在主屏的延伸
+     v0.60 革命:动静 + 陈列馆合并为"工坊" · 两屏共用同一 eyebrow
      ─────────────────────────────────────────────────────────────── */
-  /* 用 feed-head 容器的 ::before 加 eyebrow · CSS 文本 hardcode (不动 markup) */
-  #screen-feed > .mb-8::before {
-    content: '今日工房';
+  #screen-feed > .mb-8::before,
+  #screen-showcase > .mb-6::before {
+    content: '工 坊';
     display: flex;
     align-items: center;
     gap: 14px;
@@ -5136,7 +5134,6 @@
 
   <section class="screen active" id="screen-feed">
     <div class="mb-8">
-      <div class="workshop-eyebrow mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.3em;">工 坊</div>
       <h1 class="feed-title mb-3">今天有动静</h1>
       <p class="feed-sub mb-2">大家在做的、做出来的 — 路过看一眼别人在捣鼓什么</p>
       <span class="feed-cta-line" onclick="openPickProject()">或者你今天也来记一笔 →</span>
@@ -5261,7 +5258,6 @@
 
   <section class="screen" id="screen-showcase">
     <div class="mb-6">
-      <div class="workshop-eyebrow mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.3em;">工 坊</div>
       <h1 class="feed-title mb-3">做出来的</h1>
       <p class="feed-sub">大家在做的、做出来的 — 按项目分组,看每个作品的积累</p>
       <div id="showcase-stats" class="showcase-stats"></div>
@@ -5727,10 +5723,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.58 · 34 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.60 · 36 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.58</span>
+  <span class="bb-ver">v0.60</span>
 </div>
 
 <script>
