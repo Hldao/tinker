@@ -444,6 +444,7 @@ async function llmDraft(cfg, gitContext) {
     const data = await res.json();
     if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
     rawText = data.content[0].text.trim();
+    recordLLMUsage(provider, data.usage && (data.usage.input_tokens + data.usage.output_tokens), 'draft');
   } else if (provider === 'openai') {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -458,6 +459,7 @@ async function llmDraft(cfg, gitContext) {
     const data = await res.json();
     if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
     rawText = data.choices[0].message.content.trim();
+    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'draft');
   } else if (provider === 'deepseek') {
     const res = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -471,6 +473,7 @@ async function llmDraft(cfg, gitContext) {
     const data = await res.json();
     if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
     rawText = data.choices[0].message.content.trim();
+    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'draft');
   } else {
     throw new Error('不支持的 LLM provider: ' + provider);
   }
@@ -630,6 +633,32 @@ function validateDraft(text) {
   }
 
   return violations;
+}
+
+// === LLM token 用量记录 (给 tinker goodnight / config 用) ===
+const LLM_USAGE_FILE = path.join(CONFIG_DIR, 'llm-usage.json');
+function recordLLMUsage(provider, tokens, kind) {
+  if (!tokens) return;
+  try {
+    let history = [];
+    try { history = JSON.parse(fs.readFileSync(LLM_USAGE_FILE, 'utf-8')); } catch {}
+    if (!Array.isArray(history)) history = [];
+    history.push({ at: Date.now(), provider, tokens, kind: kind || 'unknown' });
+    // 只保留最近 1000 条 · 防止文件越来越大
+    if (history.length > 1000) history = history.slice(-1000);
+    fs.writeFileSync(LLM_USAGE_FILE, JSON.stringify(history, null, 2));
+  } catch {}
+}
+function getTodayLLMUsage() {
+  try {
+    const history = JSON.parse(fs.readFileSync(LLM_USAGE_FILE, 'utf-8'));
+    if (!Array.isArray(history)) return [];
+    const tk = todayKey();
+    return history.filter(h => {
+      const d = new Date(h.at);
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') === tk;
+    });
+  } catch { return []; }
 }
 
 // 草稿后处理 · 抹掉最常见的 LLM tell
@@ -1749,6 +1778,179 @@ function triggerAiLimit() {
   } catch { return { fired: false }; }
 }
 
+// v0.7 又 7 个高价值瞬间触发器 · 补足"对社区有沉淀价值的瞬间"
+
+// 重启 · 项目沉默 7+ 天后第一条 commit
+// 跟 silence (22h 没发但有 commit) 不同 · 这是"放弃后回来"的经验
+// 对社区价值 ★★ · 别人也常有这种时刻
+function triggerRestart() {
+  try {
+    const out = execSync('git log -2 --pretty=%ct', { encoding: 'utf-8' }).trim();
+    const lines = out.split('\n');
+    if (lines.length < 2) return { fired: false };  // 第一条 commit 不算
+    const now = parseInt(lines[0], 10) * 1000;
+    const prev = parseInt(lines[1], 10) * 1000;
+    const gap = now - prev;
+    if (gap < 7 * 24 * 60 * 60 * 1000) return { fired: false };
+    const days = Math.floor(gap / 86400000);
+    return {
+      fired: true,
+      priority: 80,
+      reason: 'restart',
+      kind: 'restart',
+      msg: `沉了 ${days} 天后又动了 · 这条是回来后第一个 commit`,
+      suggestion: '回来了 · 说说这段时间想清楚了什么 / 为什么回来',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 工具组合发现 · commit msg 含 2+ AI 工具名 + 创作词
+// 手艺组合是 vibe coder 最珍贵的事 · 单工具好用大家都会 · 组合才是手艺
+function triggerToolCombo() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    const AI_TOOLS = ['claude', 'cursor', 'copilot', 'deepseek', 'chatgpt', 'gpt', 'gemini', 'bolt', 'lovable', 'replit', 'windsurf', 'trae', 'v0', 'kimi', '通义', '豆包', '文心'];
+    const found = [];
+    AI_TOOLS.forEach(t => {
+      const re = new RegExp('\\b' + t + '(?:\\s*code)?\\b', 'i');
+      if (re.test(scanText)) found.push(t);
+    });
+    if (found.length < 2) return { fired: false };
+    const CREATIVE_WORDS = /(做了|加了|写了|配合|一起|搭配|换\s*用|改用|结合|串|接)/i;
+    if (!CREATIVE_WORDS.test(scanText)) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 80,
+      reason: 'tool-combo',
+      kind: 'tool-combo',
+      msg: `用了 ${found.join(' + ')} · ${dim(titleSnippet)}`,
+      suggestion: '工具组合是 vibe coder 最贵的手艺 · 这个组合怎么搭的',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 跨项目借鉴 · commit 含"借鉴 / 仿照 / 像 X 那样" 等
+// 手艺谱系信号 · vibe coder 之间学手艺的网状
+function triggerCrossProject() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    const REF_WORDS = /(借鉴|仿照|模仿|参考|学(?:了|过|的是)|像\s*\S+\s*(?:那样|一样|的做法)|套了\s*\S+\s*的|拿\s*\S+\s*的|从\s*\S+\s*学|copy(?:ed|ing)?\s+from|inspired\s+by)/i;
+    if (!REF_WORDS.test(scanText)) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 75,
+      reason: 'cross-project',
+      kind: 'cross-project',
+      msg: `像借鉴别人作品的 commit: ${dim(titleSnippet)}`,
+      suggestion: '借鉴谁的什么 · 怎么改用到自己项目',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 长 commit body 兜底 · body > 200 字 + 其他触发器都没命中
+// 作者花时间写 = 觉得值得记 · 简单粗暴但有效
+// priority 65 · 比其他都低 · 只在其他都没命中时兜底
+function triggerLongBody() {
+  try {
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    if (body.length < 200) return { fired: false };
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 65,
+      reason: 'long-body',
+      kind: 'long-body',
+      msg: `这条 commit 你写了 ${body.length} 字 · 用心了: ${dim(titleSnippet)}`,
+      suggestion: '作者花时间写的事一般值得记 · 顺手发一笔吧',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 测试 / 验证发现 · commit 加了测试文件 + commit msg 含验证词
+// 别人不用再重复实验 · 验证 == 缩短全社区的探索时间
+function triggerTestVerify() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + (body.split('\n')[0] || '');
+    const VERIFY_WORDS = /(试了|验证|跑通|测试|确认|实测|实验|检验|\btest(?:ed|s)?\b|\bverify\b|\bconfirm\b)/i;
+    if (!VERIFY_WORDS.test(scanText)) return { fired: false };
+    let hasTestFile = false;
+    try {
+      const files = execSync('git diff --name-only HEAD~1 HEAD 2>/dev/null', { encoding: 'utf-8' }).trim();
+      const TEST_FILE_RE = /(^|\/)tests?\/|_test\.[a-z]+$|\.test\.[a-z]+$|\.spec\.[a-z]+$|^test_[^\/]+\.[a-z]+$/i;
+      hasTestFile = files.split('\n').some(f => TEST_FILE_RE.test(f));
+    } catch {}
+    if (!hasTestFile) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 75,
+      reason: 'test-verify',
+      kind: 'test-verify',
+      msg: `加了测试 · 验证了什么: ${dim(titleSnippet)}`,
+      suggestion: '别人不用再重复 · 说说这次验证了什么 + 结果',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 命名 / 概念灵感 · commit 含改名词 或 文件改名
+// 命名是创造力的体现 · 重要的命名值得记
+function triggerNaming() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    const NAME_WORDS = /(改名|改叫|重命名|改成叫|换个名|叫\s*\S+\s*不叫|名字\s*改|\brename(?:d|ing)?\b)/i;
+    const wordMatch = NAME_WORDS.test(scanText);
+    let renamedFiles = false;
+    try {
+      const status = execSync('git diff --name-status HEAD~1 HEAD 2>/dev/null', { encoding: 'utf-8' }).trim();
+      renamedFiles = /^R\d+\s/m.test(status);
+    } catch {}
+    if (!wordMatch && !renamedFiles) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 70,
+      reason: 'naming',
+      kind: 'naming',
+      msg: `像改名 / 重命名的 commit: ${dim(titleSnippet)}`,
+      suggestion: '命名是创造力 · 为什么换这个名 / 之前哪里不对',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 反向选择 · 撤回的勇气 · 跟 subtraction 不同
+// subtraction = 砍掉东西 (减法决策)
+// reversal = 撤回决定 (回退 / 改回 / 走不通 / 想错了)
+// 这种"承认走错了"的经验 · 比 ship 更稀缺
+function triggerReversal() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    const REVERSAL_WORDS = /(\brevert(?:ed|ing)?\b|\bundo(?:ne)?\b|\broll\s*back\b|撤回|回退|改回|还原|放弃了|认怂|认输|这条路不通|走不通|想错了|想反了|算了不|删掉那条|走错路|绕了弯路)/i;
+    if (!REVERSAL_WORDS.test(scanText)) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 85,
+      reason: 'reversal',
+      kind: 'reversal',
+      msg: `像撤回 / 改回的 commit: ${dim(titleSnippet)}`,
+      suggestion: '撤回需要勇气 · 说说一开始为什么选 X / 后来为什么改回',
+    };
+  } catch { return { fired: false }; }
+}
+
 // D · 当天首次 commit · 早安式
 function triggerFirstCommitOfDay(state) {
   // v0.2 #6: 一天只触发一次低优先级 · 避免 first-commit 被后续 cumulative 抢走
@@ -1994,13 +2196,20 @@ async function cmdWatch(taskFile) {
 function evaluateAllTriggers(state, repoCfg, cfg) {
   // UI session 单独评估 · 因为它需要写 state (启动 session 时)
   const uiResult = evaluateUiSession(state, cfg);
-  // v0.5 加 3 个高价值瞬间触发器
+  // v0.6 第一波 3 个 + v0.7 第二波 7 个 高价值瞬间触发器
   // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 接受 state · 一天 1 次
   const results = [
     triggerKeywordMatch(),
     triggerCleverFix(),
     triggerSubtraction(),
     triggerAiLimit(),
+    triggerRestart(),
+    triggerToolCombo(),
+    triggerCrossProject(),
+    triggerTestVerify(),
+    triggerNaming(),
+    triggerReversal(),
+    triggerLongBody(),
     triggerFirstCommitOfDay(state),
     triggerLongSilence(state, repoCfg),
     triggerCumulativeCommits({}, state),
@@ -2119,6 +2328,48 @@ async function cmdCheck(opts) {
   } else if (result.kind === 'ai-limit') {
     // v0.5: AI 边界经验 · alpha 期最贵的"手艺"
     choices.push({ name: '记 AI 边界 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'restart') {
+    // v0.7: 项目沉默后回归 · 放弃后重启的经验
+    choices.push({ name: '记回归 · 说说为什么回来', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'tool-combo') {
+    // v0.7: 工具组合发现 · 手艺组合
+    choices.push({ name: '记这个组合搭法 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'cross-project') {
+    // v0.7: 跨项目借鉴 · 手艺谱系
+    choices.push({ name: '记这次借鉴 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'test-verify') {
+    // v0.7: 测试 / 验证发现 · 别人不用再重复
+    choices.push({ name: '记这次验证 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'naming') {
+    // v0.7: 命名 / 重命名 · 创造力体现
+    choices.push({ name: '记这次改名 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'reversal') {
+    // v0.7: 撤回的勇气 · 承认走错了
+    choices.push({ name: '记这次撤回 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'long-body') {
+    // v0.7: 长 body 兜底 · 作者花时间写
+    choices.push({ name: '顺手发一笔', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
