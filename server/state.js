@@ -118,6 +118,7 @@ function buildState({ targetUserId } = {}) {
       user: idToHandle[t.user_id],
       name: t.name,
       link: t.link,
+      at: t.at,
     }));
     return {
       id: p.id,
