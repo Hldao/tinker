@@ -5556,6 +5556,54 @@
   /* ===============================================================
      END v0.63 exhibit modal 整体重构
      =============================================================== */
+
+  /* ================================================================
+   *  v0.64 · 通知页交互闭环修复
+   *  --------------------------------------------------------------
+   *  用户反馈: "通知页交互 / 红点逻辑 / 取消逻辑 看看遗漏"
+   *
+   *  6 处修复:
+   *    #1 单条点击后 list 不 re-render → optimistic mark + renderNotifications
+   *    #2 "全部已读" 跨筛选歧义 → 文案改"清掉所有未读(N 条)" 明示全局
+   *    #3 死链通知不能消除 → 项目已删时也 markRead + re-render
+   *    #4 红点没显示未读数 → "● N" 格式 · >99 → "● 99+"
+   *    #5 文案歧义 "点开任意一条会自动标已读" → "点开一条就标它已读"
+   *    #6 type chip 没显示未读数 → "[全部 · 12 (3 未)]" 格式
+   *
+   *  这里只加 CSS · JS 已改
+   *  ================================================================ */
+
+  /* —— type chip / "全部" 上的未读数小标 —— */
+  .notif-type-filter .filter-pill .unread-dot {
+    color: var(--vermilion);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    margin-left: 3px;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .notif-type-filter .filter-pill.active .unread-dot {
+    color: var(--vermilion);
+    opacity: 0.85;
+  }
+
+  /* —— masthead 红点 · 加未读数后字号调整 —— */
+  .masthead .masthead-nav-primary #nav-unread-mark:not(.hidden) {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--vermilion);
+    font-weight: 500;
+    margin-left: 4px;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+    display: inline-block;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===============================================================
+     END v0.64 通知页交互闭环修复
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -6210,10 +6258,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.63 · 39 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.64 · 40 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.63</span>
+  <span class="bb-ver">v0.64</span>
 </div>
 
 <script>
@@ -7434,13 +7482,20 @@ function renderNotifications() {
     return;
   }
 
-  // v0.58 按类型分组筛选 · 跨 type 集中浏览
+  // v0.58 按类型分组筛选 + v0.64 加未读数
   const typeCounts = {};
-  list.forEach(n => { typeCounts[n.type] = (typeCounts[n.type] || 0) + 1; });
+  const typeUnreadCounts = {};
+  list.forEach(n => {
+    typeCounts[n.type] = (typeCounts[n.type] || 0) + 1;
+    if (!n.read) typeUnreadCounts[n.type] = (typeUnreadCounts[n.type] || 0) + 1;
+  });
+  const totalUnread = list.filter(n => !n.read).length;
+  const unreadSpan = (n) => n > 0 ? ` <span class="unread-dot">${n} 未</span>` : '';
+
   const typeFilterPills = `<div class="filter-row notif-type-filter">
-    <span class="filter-pill ${notifTypeFilter === 'all' ? 'active' : ''}" onclick="setNotifTypeFilter('all')">全部 · ${list.length}</span>
+    <span class="filter-pill ${notifTypeFilter === 'all' ? 'active' : ''}" onclick="setNotifTypeFilter('all')">全部 · ${list.length}${unreadSpan(totalUnread)}</span>
     ${Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).map(([type, count]) => `
-      <span class="filter-pill ${notifTypeFilter === type ? 'active' : ''}" onclick="setNotifTypeFilter('${type}')">${NOTIF_TYPE_LABELS[type] || type} · ${count}</span>
+      <span class="filter-pill ${notifTypeFilter === type ? 'active' : ''}" onclick="setNotifTypeFilter('${type}')">${NOTIF_TYPE_LABELS[type] || type} · ${count}${unreadSpan(typeUnreadCounts[type] || 0)}</span>
     `).join('')}
   </div>`;
 
@@ -7448,12 +7503,15 @@ function renderNotifications() {
   const filtered = notifTypeFilter === 'all' ? list : list.filter(n => n.type === notifTypeFilter);
 
   const unreadCount = filtered.filter(n => !n.read).length;
+  // v0.64 文案修复:
+  // - "点开任意一条会自动标已读" 歧义改 "点开一条就标它已读"
+  // - "全部标已读" 改 "清掉所有未读 (N 条)" · 明示作用范围 (跨筛选)
   const header = unreadCount > 0 ? `
     <div class="notif-bulk-row">
       <span style="color: var(--sepia); font-family: 'JetBrains Mono', monospace; font-size: 11px;">
-        ${unreadCount} 条未读 · 点开任意一条会自动标已读
+        ${unreadCount} 条未读${notifTypeFilter !== 'all' ? ' (此筛选下)' : ''} · 点开一条就标它已读
       </span>
-      <span class="react-action serif italic" style="color: var(--sepia); font-size: 13px;" onclick="markAllNotifsRead()">全部标已读</span>
+      ${totalUnread > 0 ? `<span class="react-action serif italic" style="color: var(--sepia); font-size: 13px;" onclick="markAllNotifsRead()">清掉所有未读 (${totalUnread} 条)</span>` : ''}
     </div>
   ` : '';
 
@@ -7496,21 +7554,37 @@ function updateUnreadBadge() {
   const unread = (state.notifications || []).filter(n => n.target === me && !n.read).length;
   const mark = document.getElementById('nav-unread-mark');
   if (!mark) return;
-  if (unread > 0) mark.classList.remove('hidden');
-  else mark.classList.add('hidden');
+  if (unread > 0) {
+    mark.classList.remove('hidden');
+    // v0.64 显示未读数 · >99 截断成 99+ 防字溢出
+    mark.textContent = unread > 99 ? '● 99+' : '● ' + unread;
+  } else {
+    mark.classList.add('hidden');
+    mark.textContent = '●';   // hide 状态恢复默认 · 避免下次显示有残留数字
+  }
 }
 
 // 点开通知 · 1) 标已读 (后端单条) 2) 跳到项目页 3) 滚到 anchor + flash
+// v0.64 修复:
+//   - optimistic 在 client state 立刻 mark read · 让 list 立刻更新 (之前回来还高亮)
+//   - 项目已删的死链通知也标已读 · 让它从未读列表消失 (之前永远卡 unread)
 function onNotifClick(notifId, projectOwner, projectSlug, anchor) {
+  // optimistic mark client state read · UI 立刻反应 (badge + entry class)
+  const localN = (state.notifications || []).find(x => x.id === notifId);
+  if (localN) localN.read = true;
+  // 后端同步 · 失败也不阻塞
+  apiAction('markNotifRead', { notifId }).catch(() => {});
+  updateUnreadBadge();
+
+  // 项目已删 · 死链通知也算已读 · re-render 让它从 unread 视觉消失 · 不跳转
   if (!projectOwner || !projectSlug) {
-    showToast('这个项目已经被删了');
+    showToast('这个项目已经被删了 · 通知已标已读');
+    renderNotifications();
     return;
   }
-  // optimistic mark as read · 失败也不阻塞跳转
-  apiAction('markNotifRead', { notifId }).then(() => updateUnreadBadge()).catch(()=>{});
+
   showScreen('project', projectOwner, projectSlug);
   if (anchor) {
-    // renderProject 已同步执行 · DOM 应该已经 ready
     setTimeout(() => flashAnchor(anchor), 50);
   }
 }
