@@ -2207,6 +2207,32 @@ function clearPending() {
 // strip ANSI 颜色码 · JSON 里不该带终端控制符
 function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, ''); }
 
+// v0.4 Phase 1 · 静默收集 voice sample 到 ~/.tinker/style-pool/good/
+// 每次成功 push (从 cmdResolve) 时调一次 · 累积作者真实风格样本
+// 之后 tinker voice analyze 会读这个池子总结 fingerprint
+function savePoolSample(pending, choice, text, handle) {
+  if (!text || !text.trim()) return;
+  try {
+    const dir = path.join(CONFIG_DIR, 'style-pool', 'good');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    const file = path.join(dir, `${stamp}-${choice}.md`);
+    const meta = [
+      '---',
+      `handle: ${handle || ''}`,
+      `at: ${new Date().toISOString()}`,
+      `choice: ${choice}`,
+      `kind: ${(pending && pending.kind) || ''}`,
+      `project: ${(pending && pending.projectName) || ''}`,
+      `commit: ${(pending && pending.commitTitle) || ''}`,
+      '---',
+    ].join('\n');
+    fs.writeFileSync(file, `${meta}\n\n${text.trim()}\n`);
+  } catch {
+    // 静默失败 · 不打扰主流程
+  }
+}
+
 // v0.3 cmdResolve · 接受外部 (AI agent) 决定的 choice + 可选 text · 执行 pending 动作
 // 用法:
 //   tinker resolve push-decision --message "装了 fnm 替代 nvm · 启动快多了"
@@ -2239,6 +2265,7 @@ async function cmdResolve(choice, opts) {
       await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
+      savePoolSample(pending, choice, text, cfg.handle);
       const okMsg = choice === 'push-decision' ? '✓ 决策记下来了' : '发出去了';
       ok(okMsg);
     } else if (choice === 'ship' || choice === 'prototype') {
@@ -2251,6 +2278,7 @@ async function cmdResolve(choice, opts) {
       });
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
+      savePoolSample(pending, choice, text, cfg.handle);
       ok(choice === 'ship' ? '✦ 完工 · 已进陈列馆' : '◐ 原型 · 已进陈列馆');
     } else if (choice === 'stuck' || choice === 'stuck-quiet') {
       const cfg = mustHaveConfig();
@@ -2258,6 +2286,7 @@ async function cmdResolve(choice, opts) {
       await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
+      savePoolSample(pending, choice, text, cfg.handle);
       ok('⚠ 卡住了 · 已通知关心你的人');
     } else if (choice === 'later') {
       state.laterUntil = now + 60 * 60 * 1000;
@@ -2291,6 +2320,128 @@ async function cmdResolve(choice, opts) {
     err(e.message);
     process.exit(1);
   }
+}
+
+// v0.4 Phase 2 · 读 ~/.tinker/style-pool/good/*.md · 调 LLM 总结作者真实 voice fingerprint
+// 输出到 当前 cwd 的 .tinker/voice-fingerprint.md
+// 之后 tinker draft 应该读这个 fingerprint 加进 prompt (Phase 3 · 暂未做)
+async function cmdVoiceAnalyze() {
+  const cfg = mustHaveConfig();
+  if (!cfg.llm || !cfg.llm.apiKey) {
+    err('LLM 没配置 · 跑 ' + vermilion('tinker login') + ' 配一下');
+    process.exit(1);
+  }
+  const poolDir = path.join(CONFIG_DIR, 'style-pool', 'good');
+  if (!fs.existsSync(poolDir)) {
+    log(sepia('  还没有 sample · style-pool 是空的'));
+    log(sepia('  在 AI 模式下每次 ') + vermilion('tinker resolve push*') + sepia(' 会自动收集 · 用一段时间再 analyze'));
+    return;
+  }
+  const files = fs.readdirSync(poolDir).filter(f => f.endsWith('.md')).sort();
+  if (files.length < 3) {
+    log(sepia(`  pool 太薄 (${files.length} 篇) · 至少需要 3 篇才能 analyze`));
+    log(sepia('  少于 3 篇 fingerprint 会过拟合 · 再多发几条试试'));
+    return;
+  }
+  log(sepia(`  读 ${files.length} 篇 sample...`));
+  const samples = files.map(f => {
+    const raw = fs.readFileSync(path.join(poolDir, f), 'utf-8');
+    // 取 frontmatter 后的 text 内容
+    const m = raw.match(/---\s*\n[\s\S]*?\n---\s*\n([\s\S]+)$/);
+    return m ? m[1].trim() : raw.trim();
+  }).filter(Boolean);
+
+  const joined = samples.map((s, i) => `### 样本 ${i + 1}\n${s}\n`).join('\n');
+  const prompt = `分析这位作者的语言风格,输出一份 voice fingerprint。这份 fingerprint 之后会喂给 LLM 起草草稿用,目的是让 LLM 模仿这位作者的真实气质。
+
+==================
+任务
+==================
+读这 ${samples.length} 篇真实 update,总结作者的:
+- 节奏 (平均字数 / 句长 / 段落数)
+- 标点偏好 (顿号 / 逗号 / 句号 / 中圆点 / em-dash / 引号类型和频率)
+- 高频词汇 / 罕见词汇 / 完全没用过的词
+- 开头习惯 (第一句话怎么开)
+- 结尾习惯 (是否留 takeaway / 结尾是否带反思)
+- 技术名词处理 (是否用 ALL_CAPS / 是否带版本号 / 是否解释术语)
+- 工程化程度 (像 PM 周报 / 像私人日记 / 像工匠日志)
+- 其他能让另一个 LLM mimic 这种气质的特征
+
+==================
+输出格式
+==================
+直接 markdown · 顶级标题用 \`##\` 不用 \`#\` · 不要"好的我来分析"这种废话开头 · 直接 fingerprint 正文。
+
+==================
+作者过去发过的 ${samples.length} 篇真实 update
+==================
+${joined}`;
+
+  log(sepia('  调 LLM 分析中...'));
+  const provider = cfg.llm.provider || 'deepseek';
+  const apiKey = cfg.llm.apiKey;
+  let fingerprint;
+  try {
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
+          max_tokens: 3000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
+      fingerprint = data.content[0].text.trim();
+    } else if (provider === 'openai') {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: cfg.llm.model || 'gpt-4o-mini',
+          max_tokens: 3000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
+      fingerprint = data.choices[0].message.content.trim();
+    } else if (provider === 'deepseek') {
+      const res = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: cfg.llm.model || 'deepseek-chat',
+          max_tokens: 3000,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
+      fingerprint = data.choices[0].message.content.trim();
+    } else {
+      throw new Error('不支持的 LLM provider: ' + provider);
+    }
+  } catch (e) {
+    err('LLM 调用失败: ' + e.message);
+    process.exit(1);
+  }
+
+  const tinkerDir = path.join(process.cwd(), '.tinker');
+  try { fs.mkdirSync(tinkerDir, { recursive: true }); } catch {}
+  const outFile = path.join(tinkerDir, 'voice-fingerprint.md');
+  const header = `# voice fingerprint · @${cfg.handle || ''} · ${new Date().toISOString().slice(0, 10)}\n基于过去 ${samples.length} 篇真实 update 分析 · ${new Date().toLocaleString()}\n\n`;
+  fs.writeFileSync(outFile, header + fingerprint + '\n');
+
+  log('');
+  ok('生成完成 → ' + sepia(path.relative(process.cwd(), outFile)));
+  log('');
+  log(sepia('  下一步 (Phase 3 暂未实现):'));
+  log(sepia('    · tinker draft 还没读 fingerprint · 仍用 DEFAULT_VOICE 起草'));
+  log(sepia('    · 等 sample 累积到 ' + bold('10+') + sepia(' 篇时再来 analyze 一次,fingerprint 会更准')));
+  log('');
 }
 
 function cmdMute(args) {
@@ -2428,6 +2579,10 @@ async function main() {
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook, json: opts.json }); break;
       case 'resolve': await cmdResolve(args[1], opts); break;
+      case 'voice':
+        if (args[1] === 'analyze') await cmdVoiceAnalyze();
+        else { log(sepia('  用法: ') + vermilion('tinker voice analyze')); log(sepia('  把过去发过的 update 喂给 LLM 总结 fingerprint')); }
+        break;
       case 'mute': cmdMute(args[1]); break;
       case 'session': await cmdSession(args[1]); break;
       case 'llm': await cmdLlm(args[1]); break;
