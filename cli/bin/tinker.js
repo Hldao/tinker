@@ -737,6 +737,37 @@ async function cmdStuck(opts) {
   }
 }
 
+// 把本地图片转 base64 data URL,作为 ship images 的一员
+function imageFromPath(filePath) {
+  if (!fs.existsSync(filePath)) throw new Error('找不到图: ' + filePath);
+  const buf = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).slice(1).toLowerCase() || 'png';
+  const mime = ext === 'jpg' ? 'image/jpeg' : 'image/' + ext;
+  return [{ src: 'data:' + mime + ';base64,' + buf.toString('base64'), caption: '' }];
+}
+
+// 调 microlink.io 抓 URL 截图 → 下载 → 转 base64 data URL
+// 免费 50 次/天,不需要 API key,16:9 viewport 跟陈列馆 figure 匹配
+async function screenshotUrl(url) {
+  const api = 'https://api.microlink.io/?url=' + encodeURIComponent(url) + '&screenshot=true&type=jpeg&viewport.width=1280&viewport.height=720&meta=false';
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 30000); // 30s 超时
+  let json;
+  try {
+    const res = await fetch(api, { signal: ctl.signal });
+    if (!res.ok) throw new Error('microlink ' + res.status);
+    json = await res.json();
+  } finally { clearTimeout(timer); }
+  const shotUrl = json && json.data && json.data.screenshot && json.data.screenshot.url;
+  if (!shotUrl) throw new Error('microlink 没返回截图 URL');
+  const imgRes = await fetch(shotUrl);
+  if (!imgRes.ok) throw new Error('下载截图 ' + imgRes.status);
+  const arrBuf = await imgRes.arrayBuffer();
+  const sizeKB = Math.round(arrBuf.byteLength / 1024);
+  const base64 = Buffer.from(arrBuf).toString('base64');
+  return { images: [{ src: 'data:image/jpeg;base64,' + base64, caption: '自动抓的首页截图' }], sizeKB };
+}
+
 async function cmdShip(opts) {
   const cfg = mustHaveConfig();
   const state = await apiState(cfg);
@@ -744,7 +775,7 @@ async function cmdShip(opts) {
   // 完工只对当前不是 done 的项目有意义
   const mine = state.projects.filter(p => p.owner === me && p.status !== 'done' && p.status !== 'archive');
   if (mine.length === 0) {
-    err('你没有可以完工的项目 (都已 done 或 archive 了) · 去 ' + cfg.serverUrl + ' 看看');
+    err('你没有可以完工的项目 (都已 done 或 archive 了),去 ' + cfg.serverUrl + ' 看看');
     process.exit(1);
   }
 
@@ -769,27 +800,53 @@ async function cmdShip(opts) {
   if (!reflection) {
     const { input } = require('@inquirer/prompts');
     reflection = await input({
-      message: '写一句完工感想 (会进时间线 · 也进陈列馆代表这件作品)',
+      message: '写一句完工感想 (会进时间线,也进陈列馆代表这件作品)',
       default: undefined,
     });
   }
   reflection = (reflection || '').trim();
-  if (!reflection) { err('完工感想不能空 — 说一句也行'); process.exit(1); }
+  if (!reflection) { err('完工感想不能空,说一句也行'); process.exit(1); }
 
-  // --feedback-ask "..." 启用求反馈 + 写问题 · --no-feedback 关求反馈
+  // --feedback-ask "..." 启用求反馈 + 写问题,--no-feedback 关求反馈
   let seekingFeedback = true;
   let feedbackAsk = '';
   if (opts.noFeedback) seekingFeedback = false;
   if (opts.feedbackAsk) feedbackAsk = opts.feedbackAsk;
 
   const p = mine.find(x => x.id === projectId);
+
+  // 决定 images:
+  //   --image <path>  : 用本地图(优先)
+  //   --no-screenshot : 不带图
+  //   默认            : microlink 抓 productLink 截图当封面
+  let images;
+  let coverNote = '';
+  if (opts.image) {
+    try {
+      images = imageFromPath(opts.image);
+      coverNote = '本地图 ' + opts.image;
+    } catch (e) {
+      log(sepia('  ⚠ ') + e.message + sepia(',这次不带图发'));
+    }
+  } else if (!opts.noScreenshot && p.productLink) {
+    log(sepia('  抓首页截图 ') + dim('(microlink.io,如果失败也会继续 ship)') + '...');
+    try {
+      const r = await screenshotUrl(p.productLink);
+      images = r.images;
+      coverNote = '首页截图 ' + r.sizeKB + 'KB';
+    } catch (e) {
+      log(sepia('  ⚠ 截图失败:') + e.message + sepia(',这次不带图发'));
+    }
+  }
+
   try {
-    await apiAction(cfg, 'shipProject', { projectId, reflection, seekingFeedback, feedbackAsk });
+    await apiAction(cfg, 'shipProject', { projectId, reflection, seekingFeedback, feedbackAsk, images });
     const wt = (p.reactions && p.reactions.wantToTry) ? p.reactions.wantToTry.length : 0;
     log('');
     ok(vermilion('✦ 完工 ') + '— ' + bold(p.name));
     log(sepia('  感想: ') + reflection.slice(0, 80) + (reflection.length > 80 ? '…' : ''));
-    if (seekingFeedback) log(sepia('  求反馈: ') + (feedbackAsk || '勾上了 · 没填具体问题'));
+    if (coverNote) log(sepia('  封面: ') + coverNote);
+    if (seekingFeedback) log(sepia('  求反馈: ') + (feedbackAsk || '勾上了,没填具体问题'));
     if (wt > 0) log(sepia('  已通知 ') + bold(wt + '') + sepia(' 个想试试的人'));
     log(sepia('  陈列馆: ') + cfg.serverUrl + '/#/showcase');
     log('');
@@ -845,9 +902,11 @@ function help() {
   log('  ' + vermilion('tinker stuck -m "..."') + sepia('              标项目卡住 + 写"卡在哪" · 通知关心你的人'));
   log('');
   log(sepia('  ') + vermilion('完工'));
-  log('  ' + vermilion('tinker ship -m "..."') + sepia('               改 done + 写完工感想 · 进时间线和陈列馆'));
+  log('  ' + vermilion('tinker ship -m "..."') + sepia('               改 done + 写完工感想 · 默认抓 productLink 截图当陈列馆封面'));
   log('  ' + vermilion('tinker ship -m "..." --feedback-ask "..."') + sepia(' · 加上"想知道"的具体问题'));
   log('  ' + vermilion('tinker ship -m "..." --no-feedback') + sepia('    · 不勾求反馈'));
+  log('  ' + vermilion('tinker ship -m "..." --image ./shot.png') + sepia('     · 用本地图当封面 (优先于自动截图)'));
+  log('  ' + vermilion('tinker ship -m "..." --no-screenshot') + sepia('       · 不带封面'));
   log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
@@ -875,6 +934,9 @@ function parseArgs(args) {
     else if (a === '--feedback-ask') opts.feedbackAsk = args[++i];
     else if (a.startsWith('--feedback-ask=')) opts.feedbackAsk = a.slice('--feedback-ask='.length);
     else if (a === '--no-feedback') opts.noFeedback = true;
+    else if (a === '--image') opts.image = args[++i];
+    else if (a.startsWith('--image=')) opts.image = a.slice('--image='.length);
+    else if (a === '--no-screenshot') opts.noScreenshot = true;
     // 不以 - 开头的第一个 positional 当成草稿文件路径
     else if (!a.startsWith('-') && !opts.draftFile) {
       // 必须是已存在的文件 / 以 .md 结尾
