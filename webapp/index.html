@@ -374,6 +374,15 @@
   }
   .tl-used-list .nh { color: var(--ink); font-weight: 600; font-style: normal; }
   .tl-used-list .nh:hover { color: var(--vermilion); cursor: pointer; }
+  /* 被用过 升级版 section header 样式 + 顶部点线分隔 */
+  .tl-used-block { margin-top: 18px; padding-top: 12px; border-top: 1px dotted var(--rule); }
+  .tl-used-header { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.15em; margin-bottom: 8px; }
+  /* update 卡片下面"N 条便签提到这里"反向跳转链接 */
+  .tl-note-ref { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; cursor: pointer; transition: color 0.15s; }
+  .tl-note-ref:hover { color: var(--vermilion); }
+  /* 便签墙某条便签关联了 update · 顶上"说的是「XXX」"跳转链接 */
+  .note-ref { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-bottom: 6px; cursor: pointer; transition: color 0.15s; padding-bottom: 6px; border-bottom: 1px dotted var(--rule); line-height: 1.5; }
+  .note-ref:hover { color: var(--vermilion); }
   .quote-block {
     border-left: 2px solid var(--rule);
     padding: 6px 16px;
@@ -3792,29 +3801,276 @@
   /* ===============================================================
      END v0.47 masthead 回原 cream
      =============================================================== */
+
+  /* ================================================================
+   *  v0.48 · masthead 减项分层 · 给顶部留呼吸
+   *  --------------------------------------------------------------
+   *  诊断:
+   *    ① nav 装 6 项 触发超载 · 视觉等权扫不动
+   *    ② 左 logo 3 段 + 右 nav 6 段 · 两团块挤 · 中间无气口
+   *    ③ + 记一笔 是 primary CTA · 却埋在 nav 末尾
+   *    ④ ⌘K kbd 工程师审美 · 跟工艺人调性不搭
+   *    ⑤ dateline 行也左右都满 · 节奏单一
+   *
+   *  处方:
+   *    · 主行 = logo + 主 nav 3 项 + 独立 CTA (浮成按钮形态)
+   *    · 副行 = tagline + secondary 2 项 (找 / 关于 沉下来)
+   *    · dateline 加 dotted 顶线 · 标注"元数据"层级
+   *    · 删 ⌘K kbd · 改走 tooltip
+   *    · nav 内部 gap 加大 · 每项呼吸
+   *  ================================================================ */
+
+  /* —— 主行 —— */
+  .masthead .masthead-main-row {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    padding-top: 26px !important;
+    padding-bottom: 6px !important;
+  }
+  .masthead .masthead-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .masthead .masthead-actions {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .masthead .masthead-nav-primary {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+  }
+  .masthead .masthead-nav-primary button {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: 0.005em;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+    transition: border-color 0.18s ease, color 0.18s ease;
+    background: transparent;
+  }
+  .masthead .masthead-nav-primary button:hover {
+    border-bottom-color: var(--ink);
+  }
+
+  /* —— + 记一笔 · 独立 CTA · 浮起 —— */
+  .masthead .masthead-cta {
+    font-family: 'Newsreader', serif !important;
+    font-size: 14px !important;
+    color: var(--vermilion) !important;
+    padding: 5px 13px !important;
+    border: 1px solid rgba(194, 65, 12, 0.32) !important;
+    background: rgba(194, 65, 12, 0.03) !important;
+    letter-spacing: 0.01em;
+    transition: background 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+    cursor: pointer;
+  }
+  .masthead .masthead-cta:hover {
+    background: rgba(194, 65, 12, 0.07) !important;
+    border-color: var(--vermilion) !important;
+    transform: translateY(-0.5px);
+  }
+
+  /* —— 副行 —— */
+  .masthead .masthead-sub-row {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    padding-top: 0 !important;
+    padding-bottom: 10px !important;
+  }
+  .masthead .masthead-sub-row .tagline {
+    display: inline !important;     /* 撤销 v0.47 之前的隐藏 · 副行专属 */
+    font-style: italic;
+    color: var(--sepia);
+    font-size: 13.5px;
+    letter-spacing: 0.005em;
+    margin-left: 0 !important;
+  }
+  .masthead .masthead-nav-secondary {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .masthead .masthead-nav-secondary button {
+    font-family: 'Newsreader', serif;
+    font-size: 12.5px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+    background: transparent;
+    transition: color 0.18s ease, border-color 0.18s ease;
+    cursor: pointer;
+  }
+  .masthead .masthead-nav-secondary button:hover {
+    color: var(--ink);
+    border-bottom-color: var(--sepia);
+  }
+
+  /* —— dateline 行 · 加 dotted 顶线 标元数据 —— */
+  .masthead .max-w-3xl.pb-2 {
+    padding-top: 8px !important;
+    padding-bottom: 14px !important;
+    border-top: 1px dotted var(--rule) !important;
+    margin-top: 2px;
+  }
+
+  /* —— 通知未读 dot —— */
+  .masthead .masthead-nav-primary #nav-unread-mark:not(.hidden) {
+    color: var(--vermilion);
+    font-size: 8px;
+    margin-left: 4px;
+    vertical-align: middle;
+    display: inline-block;
+  }
+
+  /* —— 撤销旧 v0.27/v0.31/v0.32 段对 masthead 的部分干扰 —— */
+  .masthead .max-w-3xl.py-5 {
+    padding-top: 26px !important;   /* 用 v0.48 自己的值 · 别让旧 line 566 覆盖 */
+  }
+
+  /* —— 小屏响应式 · 接管 v0.31.1 / line 1822+ —— */
+  @media (max-width: 720px) {
+    .masthead .masthead-main-row {
+      padding-left: 18px !important;
+      padding-right: 18px !important;
+      padding-top: 18px !important;
+    }
+    .masthead .masthead-sub-row {
+      padding-left: 18px !important;
+      padding-right: 18px !important;
+    }
+    .masthead .masthead-nav-primary { gap: 16px !important; }
+    .masthead .masthead-nav-primary button { font-size: 13px; }
+    .masthead .masthead-actions { gap: 14px !important; }
+    .masthead .masthead-cta {
+      font-size: 12.5px !important;
+      padding: 4px 10px !important;
+    }
+    .masthead .masthead-nav-secondary { gap: 14px !important; }
+    .masthead .masthead-nav-secondary button { font-size: 11.5px; }
+    .masthead .masthead-sub-row .tagline { font-size: 12.5px; }
+  }
+  @media (max-width: 480px) {
+    .masthead .masthead-sub-row {
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-bottom: 8px !important;
+    }
+    .masthead .masthead-actions { gap: 12px !important; }
+  }
+
+  /* ===============================================================
+     END v0.48 masthead 减项分层
+     =============================================================== */
+
+  /* ================================================================
+   *  v0.49 · masthead 卷期号化 + secondary nav 沉底
+   *  --------------------------------------------------------------
+   *  参考成熟设计:
+   *    · NYT  "Vol. CLXXIV · No. 60,XXX" dateline 仪式感
+   *    · Defector "ESTABLISHED 2020" 时间锚紧贴品牌
+   *    · Substack publication "单一 primary CTA" 减项哲学
+   *
+   *  改动:
+   *    · tagline "· 在做的现场" 移除 (alpha 用户已内化 · 品牌不必每页喊话)
+   *    · dateline 加 "卷一 · 第 NNN 期" · epoch 2026-06-05 累积
+   *    · 卷期号数字 ink 色 · tabular-nums · 让它在 sepia 里浮出来
+   *    · secondary nav 沉到最底 · 右对齐 · 字号再轻一档
+   *    · 节奏: 主行(饱) → dateline(中) → secondary(轻) 三段衰减
+   *  ================================================================ */
+
+  /* —— dateline 行 · 卷期号 —— */
+  .masthead .masthead-dateline {
+    font-size: 11.5px !important;
+    letter-spacing: 0.04em;
+    padding-top: 9px !important;
+    padding-bottom: 7px !important;
+    color: var(--sepia) !important;
+  }
+  .masthead .masthead-dateline #masthead-issue-num {
+    color: var(--ink);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+    padding: 0 1px;
+  }
+
+  /* —— secondary nav · 单独一行 · 沉到最底 · 右对齐 —— */
+  .masthead .masthead-sub-row {
+    display: flex !important;
+    justify-content: flex-end !important;   /* 撤销 v0.48 的 space-between */
+    align-items: center !important;
+    padding-top: 0 !important;
+    padding-bottom: 9px !important;
+    border-top: none !important;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary {
+    gap: 16px !important;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary button {
+    font-size: 11.5px !important;             /* 比 v0.48 的 12.5 再轻一档 */
+    color: var(--sepia-light, #c2b8a4) !important;
+    letter-spacing: 0.06em;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary button:hover {
+    color: var(--ink) !important;
+    border-bottom-color: var(--sepia) !important;
+  }
+
+  /* —— 小屏响应式 —— */
+  @media (max-width: 720px) {
+    .masthead .masthead-dateline { font-size: 10.5px !important; }
+    .masthead .masthead-sub-row .masthead-nav-secondary button { font-size: 10.5px !important; }
+  }
+  @media (max-width: 480px) {
+    .masthead .masthead-dateline {
+      flex-wrap: wrap;
+      gap: 4px;
+      font-size: 10px !important;
+    }
+  }
+
+  /* ===============================================================
+     END v0.49 卷期号化 + secondary 沉底
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
 
 <header class="masthead">
-  <div class="max-w-3xl mx-auto px-8 py-5 flex items-end justify-between">
-    <div class="flex items-baseline gap-2 cursor-pointer" onclick="showScreen('feed')">
+  <!-- v0.48 主行 · logo + 主 nav 3 项 + 独立 CTA -->
+  <div class="max-w-3xl mx-auto px-8 py-5 masthead-main-row">
+    <div class="masthead-brand cursor-pointer" onclick="showScreen('feed')">
       <span class="title">Tinker</span>
       <span class="title-cn">捣鼓</span>
-      <span class="tagline serif" style="margin-left: 4px;">· 在做的现场</span>
     </div>
-    <nav class="flex items-center gap-5 text-sm">
-      <button onclick="showScreen('feed')">动静</button>
-      <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
-      <button onclick="navMyWorkshop()">我的工作室</button>
-      <button onclick="openSearch()" title="搜索 (⌘K)">找<span class="kbd">⌘K</span></button>
-      <button onclick="showScreen('about')" class="text-xs" style="color: var(--sepia);">关于</button>
-      <button onclick="navAddUpdate()" class="serif" style="color: var(--vermilion);">+ 记一笔</button>
-    </nav>
+    <div class="masthead-actions">
+      <nav class="masthead-nav-primary">
+        <button onclick="showScreen('feed')">动静</button>
+        <button onclick="navMyWorkshop()">我的工作室</button>
+        <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+      </nav>
+      <button class="masthead-cta serif" onclick="navAddUpdate()">+ 记一笔</button>
+    </div>
   </div>
-  <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
-    <span>第 1 期 · 试运行 · <span id="masthead-handle-area"></span></span>
+  <!-- v0.49 dateline · 卷期号化 · 紧贴主行 -->
+  <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono masthead-dateline" style="color: var(--sepia);">
+    <span>卷一 · 第 <span id="masthead-issue-num">002</span> 期 · 试运行 · <span id="masthead-handle-area"></span></span>
     <span id="masthead-date">2026 / 06 / 05</span>
+  </div>
+  <!-- v0.49 secondary nav · 沉到最底 · 右对齐 · tagline 已删 -->
+  <div class="max-w-3xl mx-auto px-8 masthead-sub-row">
+    <nav class="masthead-nav-secondary">
+      <button onclick="openSearch()" title="搜索 (⌘K)">找</button>
+      <button onclick="showScreen('about')">关于</button>
+    </nav>
   </div>
 </header>
 
@@ -3972,6 +4228,14 @@
         <input type="file" accept="image/*" multiple onchange="handleNoteImageSelect(event)" style="display: none;">
       </label>
       <div class="upload-hint">截图说明 · 设计对比 · 错误信息 — 都可以 · 也可以直接粘贴 (⌘V)</div>
+    </div>
+
+    <div class="mt-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia); letter-spacing: 0.04em;">这条便签是说哪条进展? (可选)</label>
+      <select id="note-update-id" class="input-bare" style="font-family: 'Newsreader', serif; font-size: 14px; padding: 6px 0; cursor: pointer;">
+        <option value="">— 关于整个项目 —</option>
+      </select>
+      <div class="upload-hint" style="margin-top: 4px;">关联到具体进展后 · 作者读起来更聚焦</div>
     </div>
 
     <div class="flex justify-end gap-4 mt-6">
@@ -4278,10 +4542,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.47 · 21 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.49 · 23 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.47</span>
+  <span class="bb-ver">v0.49</span>
 </div>
 
 <script>
@@ -4927,6 +5191,7 @@ function renderProject(owner, slug) {
         }).join('') : '';
         const usedByList = u.usedBy || [];
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
+        const notesAboutThis = (p.notes || []).filter(n => n.updateId === u.id);
         return `
           <div class="tl-entry" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
@@ -4940,25 +5205,33 @@ function renderProject(owner, slug) {
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
                 <div class="tl-prompt-box">
-                  <div class="tl-prompt-label">prompt</div>
+                  <div class="tl-prompt-label">开 场</div>
                   <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
-                  <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制提示词</span>
+                  <span class="react-action" style="font-family: Newsreader, serif; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制</span>
                 </div>
               ` : ''}
               ${imagesHtml}
               <div class="tl-actions">
                 ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
+                <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
-                ${usedByList.length > 0 ? `<span class="tl-used-count">${usedByList.length} 人用过这个方法</span>` : ''}
               </div>
+              ${notesAboutThis.length > 0 ? `
+                <div class="tl-note-ref" onclick="event.stopPropagation(); flashAnchor('note-${notesAboutThis[0].id}')">
+                  ↓ ${notesAboutThis.length} 条便签提到这里
+                </div>
+              ` : ''}
               ${usedByList.length > 0 ? `
-                <div class="tl-used-list">
-                  ${usedByList.map(used => `
-                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
-                  `).join('')}
+                <div class="tl-used-block">
+                  <div class="tl-used-header">被 用 过 · ${usedByList.length}</div>
+                  <div class="tl-used-list">
+                    ${usedByList.map(used => `
+                      <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+                    `).join('')}
+                  </div>
                 </div>
               ` : ''}
             </div>
@@ -5025,8 +5298,15 @@ function renderProject(owner, slug) {
       </div>
       <p class="mb-4 text-xs serif" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
       ${p.notes.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
-      ${p.notes.map((n, nIdx) => `
+      ${p.notes.map((n, nIdx) => {
+        const refUpdate = n.updateId ? p.updates.find(u => u.id === n.updateId) : null;
+        return `
         <div class="note-entry" id="note-${n.id}">
+          ${refUpdate ? `
+            <div class="note-ref" onclick="event.stopPropagation(); flashAnchor('update-${refUpdate.id}')">
+              ↑ 说的是 「${escapeHtml((refUpdate.text || '').replace(/\\s+/g,' ').slice(0, 60))}${refUpdate.text.length > 60 ? '…' : ''}」 · ${shortAgo(refUpdate.at)}
+            </div>
+          ` : ''}
           <div class="note-head">
             <span class="nu">@${n.user}</span> · ${timeAgo(n.at)}
             ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">${ICONS.undo}撤回</span>` : ''}
@@ -5042,7 +5322,7 @@ function renderProject(owner, slug) {
             </div>
           ` : ''}
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>
 
     ${(p.tools && p.tools.length > 0) || p.githubLink ? `
@@ -5449,10 +5729,10 @@ async function reactToProject(level) {
   } catch (e) { showToast(e.message); }
 }
 
-function openNote() {
+function openNote(preselectUpdateId) {
   if (!currentUser.handle) {
     const savedProjectCtx = currentProjectCtx;
-    setPending('openNote', { projectCtx: savedProjectCtx });
+    setPending('openNote', { projectCtx: savedProjectCtx, preselectUpdateId });
     openLogin('留便签');
     return;
   }
@@ -5462,9 +5742,28 @@ function openNote() {
   const draftKey = 'note-' + currentNoteCtx;
   const draft = loadDraft(draftKey);
   document.getElementById('note-text').value = (draft && draft.text) || '';
+
+  // 填充"说哪条进展"下拉
+  const sel = document.getElementById('note-update-id');
+  if (sel) {
+    const p = projectById(currentNoteCtx);
+    sel.innerHTML = '<option value="">— 关于整个项目 —</option>';
+    if (p && p.updates) {
+      p.updates.forEach(u => {
+        const preview = (u.text || '').replace(/\s+/g, ' ').slice(0, 50);
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = shortAgo(u.at) + ' · ' + preview + (u.text.length > 50 ? '…' : '');
+        sel.appendChild(opt);
+      });
+    }
+    sel.value = preselectUpdateId || (draft && draft.updateId) || '';
+    sel.onchange = () => saveDraft(draftKey, { text: document.getElementById('note-text').value, updateId: sel.value });
+  }
+
   document.getElementById('modal-note').classList.remove('hidden');
   const textEl = document.getElementById('note-text');
-  textEl.oninput = () => saveDraft(draftKey, { text: textEl.value });
+  textEl.oninput = () => saveDraft(draftKey, { text: textEl.value, updateId: sel ? sel.value : '' });
   setTimeout(() => textEl.focus(), 50);
 }
 async function deleteTinkered(projectId) {
@@ -5496,11 +5795,13 @@ async function submitNote() {
   const text = document.getElementById('note-text').value.trim();
   if (!text) { showToast('便签是空的 — 图片是辅助 · 文字才是核心'); return; }
   const p = projectById(currentNoteCtx);
+  const updateId = (document.getElementById('note-update-id') || {}).value || null;
   try {
     await apiAction('addNote', {
       projectId: p.id,
       text,
       images: notePendingImages.length > 0 ? notePendingImages.map(i => ({ src: i.src, caption: i.caption || '' })) : undefined,
+      updateId,
     });
     notePendingImages = [];
     clearDraft('note-' + p.id);
@@ -6129,6 +6430,17 @@ document.addEventListener('keydown', (e) => {
   el.innerHTML = `<span class="md-weekday">${WEEKDAYS[d.getDay()]}</span><span class="md-sep">·</span><span class="md-num">${String(d.getDate()).padStart(2,'0')}</span><span class="md-sep">·</span><span class="md-month">${MONTHS_EN[d.getMonth()]}</span><span class="md-sep">·</span><span class="md-year">${d.getFullYear()}</span>`;
 })();
 
+// v0.49: masthead 卷期号 · alpha epoch 2026-06-05 起算累积天数 · 报纸"第 N 期"仪式感
+(function() {
+  const EPOCH = new Date(2026, 5, 5);  // 月份 0-based · 5 = 6月
+  const now = new Date();
+  const epochDay = new Date(EPOCH.getFullYear(), EPOCH.getMonth(), EPOCH.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const issueNum = Math.floor((today - epochDay) / 86400000) + 1;
+  const el = document.getElementById('masthead-issue-num');
+  if (el) el.textContent = String(Math.max(1, issueNum)).padStart(3, '0');
+})();
+
 function refreshMastheadHandle() {
   const el = document.getElementById('masthead-handle-area');
   if (!el) return;
@@ -6183,7 +6495,7 @@ function dispatchPending(p) {
   if (!p || !p.kind) return;
   if (p.kind === 'reactToProject') { currentProjectCtx = p.projectCtx; reactToProject(p.level); }
   else if (p.kind === 'openTinkered') { currentProjectCtx = p.projectCtx; openTinkered(); }
-  else if (p.kind === 'openNote') { currentProjectCtx = p.projectCtx; openNote(); }
+  else if (p.kind === 'openNote') { currentProjectCtx = p.projectCtx; openNote(p.preselectUpdateId); }
   else if (p.kind === 'openMethodUsed') { openMethodUsed(p.projectId, p.updateIdx); }
   else if (p.kind === 'openNewProject') { openNewProject(p.isFirst); }
   else if (p.kind === 'openEditProject') { openEditProject(p.projectId); }
