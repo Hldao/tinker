@@ -4958,6 +4958,44 @@
   /* ===============================================================
      END v0.56 工作室画像化
      =============================================================== */
+
+  /* ================================================================
+   *  v0.57 · 陈列馆工具筛选 → 阶段筛选
+   *  --------------------------------------------------------------
+   *  用户反馈: "工具筛选这一排可以删 · 用阶段维度更合适"
+   *
+   *  改动:
+   *    · 删 #showcase-tools-filter markup + showcaseToolFilter state + JS
+   *    · 留 #showcase-kind-filter (平行 claude-code 之前已加)
+   *    · 让 kind pills 选中时跟 kind 颜色呼应
+   *      ✦ 完工 active → vermilion
+   *      ◐ 原型 active → amber #b8860b
+   *      ○ 设计 active → moss
+   *    · 全部 active 保留 vermilion (跟现有 .filter-pill.active 一致)
+   *
+   *  为什么删工具筛选:
+   *    · 工具栈是"做法维度" · 跟"作品阶段" 不对位
+   *    · alpha 期作品少 (1-2 件/工具) · 筛选没价值
+   *    · 工具信息卡片铭牌行已经显示 · 不需要重复
+   *  ================================================================ */
+
+  /* —— kind 筛选 pill 跟 kind 颜色对应 (用 data-kind 属性选择器) —— */
+  #showcase-kind-filter .filter-pill {
+    margin-right: 22px;
+  }
+  #showcase-kind-filter .filter-pill[data-kind="prototype"].active {
+    color: #b8860b;
+    border-bottom-color: #b8860b;
+  }
+  #showcase-kind-filter .filter-pill[data-kind="design"].active {
+    color: var(--moss);
+    border-bottom-color: var(--moss);
+  }
+  /* ✦ 完工 + 全部 active 走默认 .filter-pill.active 的 vermilion */
+
+  /* ===============================================================
+     END v0.57 陈列馆工具筛选 → 阶段筛选
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5119,7 +5157,6 @@
     </div>
     <div class="filter-row mb-4">
       <div id="showcase-kind-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
-      <div id="showcase-tools-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
     </div>
     <div id="showcase-list"></div>
     <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
@@ -5570,10 +5607,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.56 · 32 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.57 · 33 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.56</span>
+  <span class="bb-ver">v0.57</span>
 </div>
 
 <script>
@@ -6496,7 +6533,7 @@ function renderOnboard() {
 }
 
 /* ============ SHOWCASE 陈列馆 ============ */
-let showcaseToolFilter = 'all';
+// v0.57: showcaseToolFilter 已删 · 工具筛选维度太分散 (1-2 件/工具) · 改用阶段筛选 (ship/prototype/design)
 let showcaseKindFilter = 'all'; // all / ship / prototype / design
 // v0.51: 陈列馆 markup 重做 · 报纸 dateline + 工艺人铭牌 + 截图框
 // v0.6:  陈列馆扩三类 · 完工 / 原型 / 设计 · 不再绑 status==done
@@ -6548,29 +6585,17 @@ function renderShowcase(focusId) {
       if (key !== 'all' && kindCounts[key] === 0) return;
       const span = document.createElement('span');
       span.className = 'filter-pill' + (showcaseKindFilter === key ? ' active' : '');
+      span.setAttribute('data-kind', key);   // v0.57: CSS attribute selector 用 · 让 active 颜色跟 kind 呼应
       span.textContent = label;
       span.onclick = () => { showcaseKindFilter = key; renderShowcase(); };
       kindFilterRow.appendChild(span);
     });
   }
 
-  // tools 筛选器
-  const toolSet = new Set();
-  items.forEach(it => (it.p.tools || []).forEach(t => toolSet.add(t)));
-  const tools = ['all', ...Array.from(toolSet)];
-  const filterRow = document.getElementById('showcase-tools-filter');
-  filterRow.innerHTML = '';
-  tools.forEach(t => {
-    const span = document.createElement('span');
-    span.className = 'filter-pill' + (showcaseToolFilter === t ? ' active' : '');
-    span.textContent = t === 'all' ? '全部工具' : t;
-    span.onclick = () => { showcaseToolFilter = t; renderShowcase(); };
-    filterRow.appendChild(span);
-  });
-
+  // v0.57: 工具筛选删除 · 阶段筛选 (kind) 已经覆盖浏览需求
+  // 工具栈仍在卡片铭牌行显示 · 但不再作为筛选维度
   let filtered = items;
   if (showcaseKindFilter !== 'all') filtered = filtered.filter(it => it.kind === showcaseKindFilter);
-  if (showcaseToolFilter !== 'all') filtered = filtered.filter(it => (it.p.tools || []).includes(showcaseToolFilter));
 
   // 馆藏统计 · v0.55 加贡献者数 · 强调集体性 (>= 2 位才显示)
   const statsEl = document.getElementById('showcase-stats');
