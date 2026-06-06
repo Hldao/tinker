@@ -35,6 +35,9 @@ function runMigrations(db) {
   const applied = [];
   for (const { file, version } of files) {
     const sql = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    // FK 关掉再跑迁移 · 让 "table rebuild" 类迁移可以安全 DROP/RECREATE 而不级联删数据
+    // (db.transaction 包了 BEGIN/COMMIT · PRAGMA foreign_keys 在事务里改是无效的)
+    db.pragma('foreign_keys = OFF');
     const txn = db.transaction(() => {
       db.exec(sql);
       db.prepare('INSERT INTO schema_version (version, applied_at) VALUES (?, ?)').run(version, Date.now());
@@ -43,8 +46,10 @@ function runMigrations(db) {
       txn();
       applied.push({ file, version });
     } catch (err) {
+      db.pragma('foreign_keys = ON');
       throw new Error(`Migration ${file} failed: ${err.message}`);
     }
+    db.pragma('foreign_keys = ON');
   }
 
   return { applied, currentVersion: files[files.length - 1].version };
