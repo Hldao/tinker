@@ -587,6 +587,7 @@ async function cmdPush(opts) {
   // 推 · server 从 token 拿身份 · 不需要 currentUser
   try {
     await apiAction(cfg, 'addUpdate', { projectId, text: pushText });
+    recordPushAt(projectId);
     const p = mine.find(x => x.id === projectId);
     log('');
     ok('记上了 — ' + bold(p.name));
@@ -656,6 +657,7 @@ async function cmdPushFromDraft(cfg, opts) {
   for (const i of selected) {
     try {
       await apiAction(cfg, 'addUpdate', { projectId, text: candidates[i].text });
+      recordPushAt(projectId);
       posted++;
       log(moss('  ✓ ') + sepia('候选 ' + (i+1) + ' 发了'));
     } catch (e) {
@@ -720,6 +722,7 @@ async function cmdStuck(opts) {
   try {
     await apiAction(cfg, 'changeProjectStatus', { projectId, newStatus: 'stuck' });
     await apiAction(cfg, 'addUpdate', { projectId, text: stuckText });
+    recordPushAt(projectId);
     log('');
     ok('标了卡住 — ' + bold(p.name));
     log(sepia('  写的是: ') + stuckText);
@@ -867,6 +870,7 @@ async function cmdShip(opts) {
 
   try {
     await apiAction(cfg, 'shipProject', { projectId, reflection, seekingFeedback, feedbackAsk, images });
+    recordPushAt(projectId);
     const wt = (p.reactions && p.reactions.wantToTry) ? p.reactions.wantToTry.length : 0;
     log('');
     ok(vermilion('✦ 完工 ') + '— ' + bold(p.name));
@@ -968,6 +972,15 @@ function todayKey() {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+// 记录最近一次 push 到 Tinker 的时间 (按项目) · 给触发器 C "长时间未发" 用
+function recordPushAt(projectId) {
+  if (!projectId) return;
+  const state = loadPromptState();
+  state.lastPushAtByProject = state.lastPushAtByProject || {};
+  state.lastPushAtByProject[projectId] = Date.now();
+  savePromptState(state);
+}
+
 function loadRepoConfig() {
   // 项目级 config · 告诉 check 这个 repo 关联哪个 Tinker 项目
   const f = path.join(process.cwd(), '.tinker', 'repo.json');
@@ -1050,7 +1063,15 @@ function cmdHookUninstall() {
   ok('hook 移除了');
 }
 
-// 触发器 A: 60 min 内累积 commit 数 >= 阈值
+// === 触发器评估 ===
+// 每个返回 { fired, priority, msg }; priority 大的优先 (高信号触发器盖低信号)
+// 优先级表:
+//   B keyword 100  · "我刚说我跑通了" 是最强信号
+//   D first   60  · 早安式 · 不可错过
+//   C silence 50  · 累了 commit 但没 push · 提醒
+//   A cumul   30  · 默认 background · 防止整天不知不觉
+
+// A · 60 min 内累积 commit 数 >= 阈值
 function triggerCumulativeCommits(opts = {}) {
   const windowMin = opts.windowMin || 60;
   const threshold = opts.threshold || 3;
@@ -1060,9 +1081,87 @@ function triggerCumulativeCommits(opts = {}) {
       { encoding: 'utf-8' }
     ).trim();
     const count = out ? out.split('\n').length : 0;
-    if (count >= threshold) return { fired: true, count, reason: 'cumulative', msg: `今天累了 ${count} 个 commit (近 ${windowMin} 分钟)` };
+    if (count >= threshold) {
+      return { fired: true, priority: 30, count, reason: 'cumulative', msg: `今天累了 ${count} 个 commit (近 ${windowMin} 分钟)` };
+    }
     return { fired: false };
   } catch { return { fired: false }; }
+}
+
+// B · 最近一条 commit message 含关键词 · 高信号
+function triggerKeywordMatch() {
+  try {
+    const lastMsg = execSync('git log -1 --pretty=%B', { encoding: 'utf-8' }).trim();
+    if (!lastMsg) return { fired: false };
+    // 完工 / 原型 / 卡住 各自映射到不同 suggestion
+    const SHIP_WORDS = /(ship|done|完工|跑通|launch|deployed?|发布|上线|finish(ed)?)/i;
+    const PROTO_WORDS = /(prototype|原型|mockup|demo)/i;
+    const STUCK_WORDS = /(stuck|卡住|卡了|debug|hotfix|broken|挂了)/i;
+    const FIX_WORDS = /(\bfix(?:ed)?\b|修好|搞定|解决了)/i;
+
+    if (SHIP_WORDS.test(lastMsg)) {
+      return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `刚才那条 commit 像是完工: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要进陈列馆 + 写一句完工感想?' };
+    }
+    if (PROTO_WORDS.test(lastMsg)) {
+      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `刚才那条 commit 像是原型节点: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要把原型挂上 · 顺便发一笔进展?' };
+    }
+    if (STUCK_WORDS.test(lastMsg)) {
+      return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `刚才那条像是卡了: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要标卡住 · 让在意的人能看到?' };
+    }
+    if (FIX_WORDS.test(lastMsg)) {
+      return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要写一笔 · 说说这个坑?' };
+    }
+    return { fired: false };
+  } catch { return { fired: false }; }
+}
+
+// C · 长时间没发 update + 累了 commit · 需要 state 里有 lastPushAt 才能判断
+function triggerLongSilence(state, repoCfg) {
+  if (!repoCfg) return { fired: false };
+  const last = (state.lastPushAtByProject || {})[repoCfg.projectId];
+  if (!last) return { fired: false };  // 第一次 install · 不算 silence
+  const HOURS = 24;
+  if (Date.now() - last < HOURS * 60 * 60 * 1000) return { fired: false };
+  // 这段时间有 commit 才算
+  try {
+    const out = execSync(
+      `git log --since="${Math.floor((Date.now() - last) / 1000)} seconds ago" --no-merges --pretty=format:"%h"`,
+      { encoding: 'utf-8' }
+    ).trim();
+    const count = out ? out.split('\n').length : 0;
+    if (count === 0) return { fired: false };
+    const hours = Math.floor((Date.now() - last) / 3600 / 1000);
+    return { fired: true, priority: 50, reason: 'silence', count, hours, msg: `${hours} 小时没发进展了 · 这段时间累了 ${count} 个 commit` };
+  } catch { return { fired: false }; }
+}
+
+// D · 当天首次 commit · 早安式
+function triggerFirstCommitOfDay() {
+  try {
+    // "今天" 从凌晨 4 点开始算 · 跟 mute 'today' 的语义对齐 · 熬夜 coder 友好
+    const d = new Date(); d.setHours(4, 0, 0, 0);
+    const since = `${d.toISOString().slice(0, 10)} 04:00`;
+    const out = execSync(
+      `git log --since="${since}" --no-merges --pretty=format:"%h"`,
+      { encoding: 'utf-8' }
+    ).trim();
+    const count = out ? out.split('\n').length : 0;
+    if (count !== 1) return { fired: false }; // 不是首条不触发
+    return { fired: true, priority: 60, reason: 'first-commit', msg: '早 · 今天首条 commit', suggestion: '想了想要做什么了吗? 写一笔规划自己听' };
+  } catch { return { fired: false }; }
+}
+
+// 把所有触发器汇总 · 选 priority 最高的那个
+function evaluateAllTriggers(state, repoCfg) {
+  const results = [
+    triggerKeywordMatch(),
+    triggerFirstCommitOfDay(),
+    triggerLongSilence(state, repoCfg),
+    triggerCumulativeCommits(),
+  ].filter(r => r.fired);
+  if (results.length === 0) return null;
+  results.sort((a, b) => b.priority - a.priority);
+  return results[0];
 }
 
 async function cmdCheck(opts) {
@@ -1088,18 +1187,25 @@ async function cmdCheck(opts) {
     return;
   }
   // 冷却 30 分钟 · 同一段时间不重复 prompt
-  if (state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000) {
+  // 例外: keyword 触发的高信号 (commit message 含 ship/done 等) 不受冷却约束
+  // 因为那是用户刚刚明确说"我做完了某件事" · 不能错过
+
+  // 知道是哪个项目
+  const repoCfg = loadRepoConfig();
+  if (!repoCfg) {
+    if (!fromHook) log(sepia('  这个 repo 还没绑定 Tinker 项目 · 先跑 ') + vermilion('tinker hook install'));
     return;
   }
 
-  // 评估触发器 (这一版只有 A)
-  const result = triggerCumulativeCommits();
-  if (!result.fired) return;
+  // 评估所有触发器 · 选最高 priority
+  const result = evaluateAllTriggers(state, repoCfg);
+  if (!result) {
+    if (!fromHook) log(sepia('  当前没有触发器命中 · 安静'));
+    return;
+  }
 
-  // 知道是哪个项目 · 给 push 用
-  const repoCfg = loadRepoConfig();
-  if (!repoCfg) {
-    log(sepia('  这个 repo 还没绑定 Tinker 项目 · 先跑 ') + vermilion('tinker hook install'));
+  // 冷却:30 分钟内已经 prompt 过 + 不是 keyword 级 (priority < 100) 不再 prompt
+  if (state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000 && result.priority < 100) {
     return;
   }
 
@@ -1107,35 +1213,73 @@ async function cmdCheck(opts) {
   log('');
   log(sepia('  ── ') + vermilion('tinker') + sepia(' ──'));
   log('  ' + bold(result.msg) + sepia(' · 在 ') + vermilion(repoCfg.projectName));
+  if (result.suggestion) log('  ' + sepia(result.suggestion));
   log('');
-  const { select } = require('@inquirer/prompts');
+
+  // 根据触发器类型 · 默认动作不一样:
+  //   keyword=ship → "进陈列馆" (走 shipProject) 排第一
+  //   keyword=stuck → "标卡住" 排第一
+  //   其他 → "发一笔" 排第一
+  const choices = [];
+  if (result.kind === 'ship') {
+    choices.push({ name: '✦ 进陈列馆 · 写一句完工感想', value: 'ship' });
+    choices.push({ name: '只发一笔普通进展', value: 'push' });
+  } else if (result.kind === 'stuck') {
+    choices.push({ name: '⚠ 标卡住 · 写在哪里卡了', value: 'stuck' });
+    choices.push({ name: '只发一笔普通进展', value: 'push' });
+  } else if (result.kind === 'prototype') {
+    choices.push({ name: '◐ 进陈列馆 · 作为原型', value: 'prototype' });
+    choices.push({ name: '只发一笔普通进展', value: 'push' });
+  } else {
+    choices.push({ name: '发 · 现在写一句', value: 'push' });
+  }
+  choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+  choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+  choices.push({ name: '静音 24 小时', value: 'mute' });
+
+  const { select, input } = require('@inquirer/prompts');
   let choice;
   try {
-    choice = await select({
-      message: '发一笔进展吗?',
-      choices: [
-        { name: '发 · 现在写一句', value: 'push' },
-        { name: '稍后 · 1 小时后再问', value: 'later' },
-        { name: '今天不发了 · 明天再问', value: 'skip-today' },
-        { name: '静音一段时间', value: 'mute' },
-      ],
-    });
-  } catch {
-    // 用户 Ctrl+C 退出 · 等价于 later
-    choice = 'later';
-  }
+    choice = await select({ message: '怎么处理?', choices });
+  } catch { choice = 'later'; }
 
   state.lastPromptedAt = now;
 
+  const cfg = mustHaveConfig();
   if (choice === 'push') {
     savePromptState(state);
-    // 调用现有 push 流程 · 让用户写文本 (LLM 起草是 P1)
-    const { input } = require('@inquirer/prompts');
     const text = (await input({ message: '一句话进展 (会发到 ' + repoCfg.projectName + ')' })).trim();
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
-    const cfg = mustHaveConfig();
     await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
+    state.lastPushAtByProject = state.lastPushAtByProject || {};
+    state.lastPushAtByProject[repoCfg.projectId] = Date.now();
+    savePromptState(state);
     ok('发出去了 → ' + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
+  } else if (choice === 'ship' || choice === 'prototype') {
+    savePromptState(state);
+    const verb = choice === 'ship' ? '完工感想' : '原型说明';
+    const text = (await input({ message: verb + ' (会进陈列馆代表 ' + repoCfg.projectName + ')' })).trim();
+    if (!text) { log(sepia('  没写内容 · 跳过')); return; }
+    await apiAction(cfg, 'exhibitProject', {
+      projectId: repoCfg.projectId,
+      kind: choice,
+      statement: text,
+      seekingFeedback: true,
+    });
+    state.lastPushAtByProject = state.lastPushAtByProject || {};
+    state.lastPushAtByProject[repoCfg.projectId] = Date.now();
+    savePromptState(state);
+    ok((choice === 'ship' ? '✦ 完工 · 已进陈列馆' : '◐ 原型 · 已进陈列馆'));
+  } else if (choice === 'stuck') {
+    savePromptState(state);
+    const text = (await input({ message: '卡在哪 (会标项目 stuck + 通知关心你的人)' })).trim();
+    if (!text) { log(sepia('  没写内容 · 跳过')); return; }
+    await apiAction(cfg, 'changeProjectStatus', { projectId: repoCfg.projectId, newStatus: 'stuck' });
+    await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
+    state.lastPushAtByProject = state.lastPushAtByProject || {};
+    state.lastPushAtByProject[repoCfg.projectId] = Date.now();
+    savePromptState(state);
+    ok('⚠ 卡住了 · 已通知');
   } else if (choice === 'later') {
     state.laterUntil = now + 60 * 60 * 1000;
     savePromptState(state);
