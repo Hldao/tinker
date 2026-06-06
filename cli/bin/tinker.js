@@ -1651,6 +1651,104 @@ function triggerLongSilence(state, repoCfg) {
   } catch { return { fired: false }; }
 }
 
+// v0.5 高价值瞬间触发器 · 不只识别 commit 模式 · 识别"对社区有沉淀价值的瞬间"
+
+// 巧妙修复 · fix 关键词 + diff 小 + commit body 长
+// 作者花时间解释"为什么这么修" 但代码只动几行 · 大概率是巧妙修法
+// 对社区价值 ★★★ · 别人撞到同样坑能直接学
+function triggerCleverFix() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    const FIX_WORDS_LOCAL = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|\bworkaround\b|修好|修了|搞定|解决了|处理了|绕过|绕开)/i;
+    if (!FIX_WORDS_LOCAL.test(scanText)) return { fired: false };
+    // body 必须够长 (作者花时间解释)
+    if (body.length < 100) return { fired: false };
+    // diff 净改动 < 30 行
+    let ins = 0, del = 0;
+    try {
+      const statOut = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
+      const insMatch = statOut.match(/(\d+) insertion/);
+      const delMatch = statOut.match(/(\d+) deletion/);
+      ins = insMatch ? parseInt(insMatch[1], 10) : 0;
+      del = delMatch ? parseInt(delMatch[1], 10) : 0;
+    } catch {}
+    const netChange = ins + del;
+    if (netChange === 0 || netChange > 30) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 90,
+      reason: 'clever-fix',
+      kind: 'clever-fix',
+      msg: `像巧妙修法的 commit (${netChange} 行改动 · body ${body.length} 字): ${dim(titleSnippet)}`,
+      suggestion: '这个修法看起来挺巧 · 别人撞到类似坑能学',
+    };
+  } catch { return { fired: false }; }
+}
+
+// 减法决策 · 删 >> 加 或 含"砍/删/不用了/撤回/revert"
+// 工程师圈极少见 · 减掉东西比加东西难 · 这种经验稀缺
+// 对社区价值 ★★★ · 最反直觉的决策
+function triggerSubtraction() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + (body.split('\n')[0] || '');
+    // 关键词模式
+    const SUBTRACTION_WORDS = /(\bremov(?:e|ed|ing)\b|\bdrop(?:ped|ping)?\b|\bdelet(?:e|ed|ing)\b|\brevert(?:ed|ing)?\b|\bcleanup\b|\bsimplif(?:y|ied|ication)\b|砍(?:了|掉)|删了|不用了|撤回|去掉了|移除|简化|抽掉)/i;
+    const wordMatch = SUBTRACTION_WORDS.test(scanText);
+    // diff stats (删 > 加 × 3 且至少删 30 行避免微小 cleanup 误触)
+    let ins = 0, del = 0;
+    try {
+      const statOut = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
+      const insMatch = statOut.match(/(\d+) insertion/);
+      const delMatch = statOut.match(/(\d+) deletion/);
+      ins = insMatch ? parseInt(insMatch[1], 10) : 0;
+      del = delMatch ? parseInt(delMatch[1], 10) : 0;
+    } catch {}
+    const statMatch = del > ins * 3 && del > 30;
+    if (!wordMatch && !statMatch) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 85,
+      reason: 'subtraction',
+      kind: 'subtraction',
+      msg: `像减法决策的 commit (删 ${del} · 加 ${ins}): ${dim(titleSnippet)}`,
+      suggestion: '减了不少 · 说说为什么砍掉这些 · 减法决策最难学',
+    };
+  } catch { return { fired: false }; }
+}
+
+// AI 边界经验 · 含 AI 工具名 + 含边界词
+// vibe coder 最需要的经验:这个 AI 在什么场景行/不行 · 怎么绕
+// 对社区价值 ★★★ · alpha 期最贵的"手艺"
+function triggerAiLimit() {
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    // AI 工具名 · 大小写不敏感
+    const AI_TOOL_WORDS = /(\bclaude(?:\s*code)?\b|\bcursor\b|\bcopilot\b|\bdeepseek\b|\bchatgpt\b|\bgpt[-]?4?o?\b|\bgemini\b|\bbolt\b|\blovable\b|\bv0\b|\breplit\b|\bwindsurf\b|\btrae\b)/i;
+    // 边界词 · 表明 AI 这次有局限
+    const LIMIT_WORDS = /(绕过|没想到|不行|失败|局限|还得自己|手写|搞错|搞不定|搞砸|装大佬|乱编|说反|理解错|脑补|hallucinat|made\s*up|got\s*confused|infinite\s*loop|too\s*many\s*token|context\s*limit|忽略了|漏掉|蒙了|犟|拗|改了\s*\d+\s*[次回轮版])/i;
+    const toolMatch = AI_TOOL_WORDS.test(scanText);
+    const limitMatch = LIMIT_WORDS.test(scanText);
+    if (!toolMatch || !limitMatch) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 85,
+      reason: 'ai-limit',
+      kind: 'ai-limit',
+      msg: `像 AI 边界经验的 commit: ${dim(titleSnippet)}`,
+      suggestion: 'AI 这次的边界经验 · 别人会用得上 · vibe coder 最需要这种',
+    };
+  } catch { return { fired: false }; }
+}
+
 // D · 当天首次 commit · 早安式
 function triggerFirstCommitOfDay(state) {
   // v0.2 #6: 一天只触发一次低优先级 · 避免 first-commit 被后续 cumulative 抢走
@@ -1896,9 +1994,13 @@ async function cmdWatch(taskFile) {
 function evaluateAllTriggers(state, repoCfg, cfg) {
   // UI session 单独评估 · 因为它需要写 state (启动 session 时)
   const uiResult = evaluateUiSession(state, cfg);
+  // v0.5 加 3 个高价值瞬间触发器
   // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 接受 state · 一天 1 次
   const results = [
     triggerKeywordMatch(),
+    triggerCleverFix(),
+    triggerSubtraction(),
+    triggerAiLimit(),
     triggerFirstCommitOfDay(state),
     triggerLongSilence(state, repoCfg),
     triggerCumulativeCommits({}, state),
@@ -1999,6 +2101,24 @@ async function cmdCheck(opts) {
   } else if (result.kind === 'decision') {
     // v0.2 #1: 工具链选型决策 · 长期价值高 · 让用户记下来
     choices.push({ name: '记决策 · 写一笔', value: 'push-decision' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'clever-fix') {
+    // v0.5: 巧妙修复 · 别人能学的真东西
+    choices.push({ name: '记这个修法 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'subtraction') {
+    // v0.5: 减法决策 · 工程师圈最难学的事
+    choices.push({ name: '说说为什么砍 · 写一笔', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
+  } else if (result.kind === 'ai-limit') {
+    // v0.5: AI 边界经验 · alpha 期最贵的"手艺"
+    choices.push({ name: '记 AI 边界 · 写一笔', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
