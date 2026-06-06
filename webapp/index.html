@@ -4040,6 +4040,106 @@
   /* ===============================================================
      END v0.49 卷期号化 + secondary 沉底
      =============================================================== */
+
+  /* ================================================================
+   *  v0.49.1 · secondary nav 加重 · 用户反馈"太轻看不见"
+   *  --------------------------------------------------------------
+   *  问题: sepia-light (#c2b8a4) 跟 cream 米色反差不够 · 几乎看不见
+   *  修复:
+   *    · 颜色 sepia-light → sepia (#78716c)
+   *    · 字号 11.5 → 12.5px · 跟 dateline 同档
+   *    · 加常态 dotted underline · 暗示可点 (报纸"副刊链接"质感)
+   *    · hover 转 solid underline + 字色变 ink
+   *  ================================================================ */
+
+  .masthead .masthead-sub-row .masthead-nav-secondary button {
+    font-size: 12.5px !important;
+    color: var(--sepia) !important;
+    letter-spacing: 0.03em !important;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.45) !important;
+    padding-bottom: 1px !important;
+    transition: color 0.18s ease, border-bottom-color 0.18s ease, border-bottom-style 0.18s ease;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary button:hover {
+    color: var(--ink) !important;
+    border-bottom: 1px solid var(--sepia) !important;
+  }
+
+  @media (max-width: 720px) {
+    .masthead .masthead-sub-row .masthead-nav-secondary button {
+      font-size: 11.5px !important;
+    }
+  }
+
+  /* ===============================================================
+     END v0.49.1 secondary nav 加重
+     =============================================================== */
+
+  /* ================================================================
+   *  v0.49.2 · 关于回主 nav · 找沉 dateline · 副行删除
+   *  --------------------------------------------------------------
+   *  用户洞察:
+   *    "关于在产品初期是相对重要的环节 · 需要快速告诉用户产品是什么"
+   *  改动:
+   *    · 关于 从 secondary 升回主 nav (第 4 项)
+   *    · 关于 加 dotted 常态 underline · 区别于普通主 nav · 暗示"参见说明"
+   *    · 找 从副行移到 dateline 行最右 · mono 跟 dateline 同档
+   *    · 副行整个删除 · masthead 从 3 行收到 2 行
+   *    · 节奏: 主行(饱) → dateline(中带功能) · 干净
+   *  ================================================================ */
+
+  /* —— 关于 · 主 nav 第 4 项 · 加 dotted 暗示"参见" —— */
+  .masthead .masthead-nav-primary .nav-about {
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5) !important;
+    padding-bottom: 1px;
+  }
+  .masthead .masthead-nav-primary .nav-about:hover {
+    border-bottom: 1px solid var(--ink) !important;
+  }
+
+  /* —— 主 nav 4 项后内部 gap 微收 · 避免回拥挤 —— */
+  .masthead .masthead-nav-primary {
+    gap: 22px !important;
+  }
+
+  /* —— dateline 行右侧组合 · 日期 + 找 —— */
+  .masthead .masthead-dateline .dateline-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .masthead .masthead-dateline .dateline-sep {
+    color: var(--sepia);
+    opacity: 0.35;
+  }
+  .masthead .masthead-dateline .dateline-find {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    padding-bottom: 1px;
+    cursor: pointer;
+    background: transparent;
+    transition: color 0.18s ease, border-bottom-color 0.18s ease, border-bottom-style 0.18s ease;
+  }
+  .masthead .masthead-dateline .dateline-find:hover {
+    color: var(--ink);
+    border-bottom: 1px solid var(--sepia);
+  }
+
+  /* —— 小屏响应 —— */
+  @media (max-width: 720px) {
+    .masthead .masthead-nav-primary { gap: 14px !important; }
+    .masthead .masthead-dateline .dateline-right { gap: 9px; }
+  }
+  @media (max-width: 480px) {
+    .masthead .masthead-dateline .dateline-find { font-size: 10.5px; }
+  }
+
+  /* ===============================================================
+     END v0.49.2 关于回主 nav · 找沉 dateline
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -4056,21 +4156,19 @@
         <button onclick="showScreen('feed')">动静</button>
         <button onclick="navMyWorkshop()">我的工作室</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+        <button onclick="showScreen('about')" class="nav-about">关于</button>
       </nav>
       <button class="masthead-cta serif" onclick="navAddUpdate()">+ 记一笔</button>
     </div>
   </div>
-  <!-- v0.49 dateline · 卷期号化 · 紧贴主行 -->
+  <!-- v0.49.2 dateline · 卷期号 + 找沉到右末 · 副行已删 -->
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono masthead-dateline" style="color: var(--sepia);">
     <span>卷一 · 第 <span id="masthead-issue-num">002</span> 期 · 试运行 · <span id="masthead-handle-area"></span></span>
-    <span id="masthead-date">2026 / 06 / 05</span>
-  </div>
-  <!-- v0.49 secondary nav · 沉到最底 · 右对齐 · tagline 已删 -->
-  <div class="max-w-3xl mx-auto px-8 masthead-sub-row">
-    <nav class="masthead-nav-secondary">
-      <button onclick="openSearch()" title="搜索 (⌘K)">找</button>
-      <button onclick="showScreen('about')">关于</button>
-    </nav>
+    <span class="dateline-right">
+      <span id="masthead-date">2026 / 06 / 05</span>
+      <span class="dateline-sep">·</span>
+      <button class="dateline-find" onclick="openSearch()" title="搜索 (⌘K)">找</button>
+    </span>
   </div>
 </header>
 
@@ -4431,11 +4529,25 @@
     <div id="new-token-revealed" class="hidden mt-6 pt-5" style="border-top: 1px dashed var(--vermilion);">
       <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.15em;">这把钥匙只显示一次</div>
       <p class="serif" style="font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.5;">
-        关掉这个窗口就再也看不到了 · 复制下来存好。丢了就生成新的。
+        关掉窗口就再也看不到了 · 现在复制下来存好。丢了就生成新的。
       </p>
       <div class="tl-prompt-box" style="margin-top: 0;">
         <div id="new-token-value" class="tl-prompt-text" style="font-size: 13px; user-select: all; word-break: break-all; margin-bottom: 8px;"></div>
-        <span class="react-action serif" id="new-token-copy" onclick="copyText(this, document.getElementById('new-token-value').textContent)" style="font-size: 14px; display: inline-flex; align-items: center; gap: 5px;">复制</span>
+        <div class="flex gap-5 items-center flex-wrap">
+          <span class="react-action serif" onclick="copyText(this, document.getElementById('new-token-value').textContent)" style="font-size: 14px; display: inline-flex; align-items: center; gap: 5px;">复制钥匙</span>
+          <span class="react-action serif" onclick="copyAiPrompt(this, true)" style="font-size: 14px; color: var(--vermilion); border-bottom-color: var(--vermilion); display: inline-flex; align-items: center; gap: 5px;">复制成 AI 接入指南 (含钥匙)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-8 pt-6" style="border-top: 1px dotted var(--rule);">
+      <div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">用 AI 接入 · 不装 CLI</div>
+      <p class="serif" style="font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.55;">
+        把接入指南粘进 Cursor / Claude Code / 任意 AI 对话 · 配上自己的钥匙 · AI 就能直接帮你把 vibe coding 进展发到 Tinker。<strong>不用装 node · 不用装 CLI · 复制粘贴就能用</strong>。
+      </p>
+      <div class="flex gap-5 items-center flex-wrap">
+        <span class="react-action serif" onclick="copyAiPrompt(this, false)" style="font-size: 14px; color: var(--vermilion); border-bottom-color: var(--vermilion); display: inline-flex; align-items: center; gap: 5px;">复制接入指南(空钥匙占位)</span>
+        <span class="react-action serif" onclick="window.open('https://github.com/Hldao/tinker/blob/main/docs/07-tinker-with-ai.md', '_blank')" style="font-size: 13px; display: inline-flex; align-items: center; gap: 5px;">看完整文档 →</span>
       </div>
     </div>
 
@@ -4542,10 +4654,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.49 · 23 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.49.2 · 24 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.49</span>
+  <span class="bb-ver">v0.49.2</span>
 </div>
 
 <script>
@@ -5985,6 +6097,112 @@ async function confirmRevokeToken(tokenId, labelDesc) {
     await refreshApiTokensList();
     showToast('撤销了');
   } catch (e) { showToast(e.message); }
+}
+
+// 复制"用 AI 接入"指南到剪贴板 · withToken=true 时用刚生成的钥匙 · 否则空占位
+function copyAiPrompt(el, withToken) {
+  const serverUrl = window.location.origin;
+  const handle = currentUser.handle || '你的_handle';
+  let token;
+  if (withToken) {
+    token = (document.getElementById('new-token-value') || {}).textContent || '';
+    if (!token) {
+      showToast('找不到刚生成的钥匙 · 先生成一把');
+      return;
+    }
+  } else {
+    token = 'tk_这里粘上你在工作室生成的钥匙';
+  }
+  const prompt = `你是 Tinker / 捣鼓(给 vibe coder 的工作室社区)的 AI 助手。
+帮我把 coding 进展按 Tinker 的 voice 发到我的工作室。
+
+## 协议
+
+- API base: ${serverUrl}
+- 鉴权: 所有 POST/GET 都加 header \`Authorization: Bearer <我的钥匙>\`
+- Content-Type: application/json
+- 我的钥匙: ${token}
+
+## 我的身份
+
+- handle: ${handle}
+- 我的项目 id: 不用先填 · 你需要时调 GET /api/state · 找 owner = ${handle} 的项目 · 取 id
+
+## 三个核心动作
+
+### 1) 发一条进展 (addUpdate)
+POST /api/action
+{
+  "type": "addUpdate",
+  "payload": {
+    "projectId": "<我某个项目的 id>",
+    "text": "<进展正文 · 支持 **粗体** 和 \\\`代码\\\` markdown>",
+    "feedbackAsk": "<可选 · 如果我求反馈 · 写具体想知道什么>",
+    "alsoStuck": false,
+    "notifyTinkered": false
+  }
+}
+
+### 2) 留便签 · 可关联具体进展
+POST /api/action
+{
+  "type": "addNote",
+  "payload": {
+    "projectId": "<...>",
+    "updateId": "<可选 · 指向某条 update id · 让便签'说的是哪条进展'>",
+    "text": "<便签内容>"
+  }
+}
+
+### 3) 改项目状态
+POST /api/action
+{ "type": "changeProjectStatus", "payload": { "projectId": "...", "newStatus": "done" } }
+状态: active / stuck / done / paused / archive
+
+## 找我的项目 + update id
+
+GET /api/state · 返回 JSON。
+- projects[] 数组里找 owner === ${handle}
+- 每个 project 有 id (=projectId)、slug、name、desc、status
+- 每个 project 的 updates[] 里每条有 id (=updateId)
+
+## Tinker voice(没特别说明就用这个)
+
+工艺人日志气质 · 反 changelog · 反 AI 装大佬。
+
+- 像跟朋友说"我刚做了 X" · 不像产品发布会
+- 用"跑通了 / 卡在 / 试了 / 接通了"这种动作动词 · 不用 "feature add / bug fix" 这种 changelog 词
+- 短句优先 · 一条进展 200-400 字 · 不需要排版
+- 不写"今天 / 最近"开头(平台已显示时间)
+- 支持 inline markdown:**粗体** 和 \\\`代码\\\` · 不要 # 标题 / - 列表 / 块级元素
+- 反"AI 装大佬" · 反"看着像产品宣传"
+
+## 工作流
+
+当我说"总结一下 / 发到 Tinker / 这段值得记一笔"时:
+
+1. 看 git 历史:\\\`git log --since="<合适的时间窗>" --oneline\\\`
+2. 看未 commit 改动:\\\`git diff --shortstat\\\`
+3. 起草 1-3 条候选进展(每条 200-400 字 · Tinker voice)
+4. 给我看候选 + 每条"自评"(为什么这条值得发)·我挑
+5. 我挑了 · 调 addUpdate POST 出去
+6. 报告:成功 + web URL
+
+## 硬规则
+
+- 永远别主动把我的钥匙复制到任何可见的地方
+- 永远别替我决定"该不该发" · 只能起草 + 等我确认
+- 不要凑数:git 历史全是 typo / 格式时 · 直接说"这段没什么值得发的"
+- 不要写 changelog 体 · 用 Tinker voice 重新组织
+- 不要写"在做 / 正在 / 努力中" · 进展是已经发生的事
+- 不要把"自评"行带进 POST 的 text 字段里
+`;
+  navigator.clipboard.writeText(prompt).then(() => {
+    if (el) { const orig = el.textContent; el.textContent = '复制了 ✓'; setTimeout(() => el.textContent = orig, 1800); }
+    showToast(withToken ? '复制了 · 粘到 AI 对话里就能用 · 注意保护钥匙' : '复制了模板 · 钥匙位置需要你手动填');
+  }).catch(() => {
+    showToast('剪贴板拒绝了 · 试试手动复制');
+  });
 }
 
 function openStatusPicker(projectId) {
