@@ -5496,9 +5496,14 @@
 <div id="modal-edit-workshop" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
     <h3 class="modal-title">编辑工作室</h3>
-    <p class="modal-sub">路过的人会看到 · @handle 不能改 (那是你的地址)</p>
+    <p class="modal-sub">handle 和 tagline 都能改 · 路过的人会看到</p>
     <div class="mb-5">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">我在做的事</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">handle · 你的地址</label>
+      <input id="ew-handle" class="input-bare" placeholder="字母 / 数字 / 下划线 / 中文 · 1-20 位">
+      <div class="field-hint" id="ew-handle-hint" style="color: var(--sepia);">改了之后 · 工作室 URL 会变 (旧链接失效) · 别人 @你 用旧名字会变普通文字 · 邮箱和 CLI 钥匙不动</div>
+    </div>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">tagline · 我在做的事</label>
       <input id="ew-tagline" class="input-bare" placeholder="一句话说明你的工作室">
     </div>
     <div class="flex justify-end gap-4 mt-6">
@@ -7529,18 +7534,30 @@ const STATUS_HINTS = {
 function openEditWorkshop() {
   const u = state.users[currentUser.handle];
   if (!u) return;
+  document.getElementById('ew-handle').value = currentUser.handle || '';
   document.getElementById('ew-tagline').value = u.tagline || '';
   document.getElementById('modal-edit-workshop').classList.remove('hidden');
   setTimeout(() => document.getElementById('ew-tagline').focus(), 50);
 }
 async function submitEditWorkshop() {
+  const newHandle = document.getElementById('ew-handle').value.trim();
   const tagline = document.getElementById('ew-tagline').value.trim();
+  if (!newHandle) { showToast('handle 不能空 · 那是你的地址'); return; }
   if (!tagline) { showToast('一句话总不能空着'); return; }
+  const oldHandle = currentUser.handle;
   try {
+    // handle 变了就先 rename · 失败的话不会动 tagline · 让用户知道哪里错
+    if (newHandle !== oldHandle) {
+      await apiAction('renameHandle', { handle: newHandle });
+      currentUser.handle = newHandle;
+    }
     await apiAction('editTagline', { tagline });
     closeModal('modal-edit-workshop');
+    // 全屏刷一遍 state · 把 mention / workshop URL 等同步
+    state = await fetchState();
+    refreshMastheadHandle();
     renderWorkshop(currentUser.handle);
-    showToast('改好了');
+    showToast(newHandle !== oldHandle ? `改好了 · 新地址 @${newHandle}` : '改好了');
   } catch (e) { showToast(e.message); }
 }
 
