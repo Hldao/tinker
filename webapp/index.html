@@ -22,6 +22,18 @@
   body { background: var(--bg); color: var(--ink); font-family: 'Inter', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
   .serif { font-family: 'Newsreader', 'Source Serif Pro', Georgia, serif; }
   .mono  { font-family: 'JetBrains Mono', ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
+  /* 极简 inline markdown 渲染 · 进展/便签/feed entry 里 **粗体** + `代码` · 不喧宾夺主 */
+  strong { font-weight: 600; }
+  .inline-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88em;
+    background: var(--paper);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--vermilion);
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
   /* Fraunces — 大字号 hero 专用 · variable opsz 144 让大字渲染最优雅 */
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
 
@@ -3720,6 +3732,36 @@
   /* ===============================================================
      END v0.45 冷静米白
      =============================================================== */
+
+
+  /* ===============================================================
+     v0.46 · 微调 · main 加一点点黄色
+     ▍ 反馈: "稍微再多一点点黄色"
+     ▍ v0.45: #f7f5ef (RGB 247,245,239 · R-B=8 偏冷)
+     ▍ v0.46: #f8f5ec (RGB 248,245,236 · R-B=12 多一点黄 · 仍克制)
+     ▍ masthead 同步: #efeae1 → #ede6d4
+     =============================================================== */
+
+  body {
+    background-color: #f8f5ec !important;
+  }
+  .masthead {
+    background: #ede6d4 !important;
+  }
+  .tl-prompt-box,
+  .quote-block {
+    background: #efe9d8 !important;
+  }
+  #workshop-content .py-10.text-center[style*="dashed"] {
+    background: #f8f5ec !important;
+  }
+  .ui-build-badge {
+    background: rgba(248, 245, 236, 0.88) !important;
+  }
+
+  /* ===============================================================
+     END v0.46 加一点黄
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -3891,7 +3933,7 @@
   <div class="modal-paper w-full">
     <h3 class="modal-title">留个便签</h3>
     <p class="modal-sub">独立显示 · 不能盖楼 · 可以加截图说明</p>
-    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句..." style="font-size: 17px; resize: vertical;"></textarea>
+    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句... (**粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="note-upload-list"></div>
@@ -3933,7 +3975,7 @@
   <div class="modal-paper w-full">
     <h3 class="modal-title">记一笔</h3>
     <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
-    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
+    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天... (短句就好 · **粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="upload-list"></div>
@@ -4380,15 +4422,23 @@ const ICONS = {
 };
 
 // @username 渲染成可点击链接 (要求 user 存在)
+// 渲染富文本 · 仅 inline markdown · 不支持 headers / lists / 块级元素
+// 故意小:这是"工作现场"·不是"博客"。**粗体** 和 `代码` 够用
 function renderMentions(text) {
   if (!text) return '';
-  const escaped = escapeHtml(text);
-  return escaped.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
+  let s = escapeHtml(text);
+  // **粗体** · 不跨行 · 不贪心
+  s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  // `内联代码` · 不跨行
+  s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
+  // @username · 用户存在才变可点击
+  s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
     if (state.users && state.users[username]) {
       return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${username}')">@${username}</span>`;
     }
     return match;
   });
+  return s;
 }
 
 function extractMentions(text) {
