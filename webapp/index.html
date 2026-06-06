@@ -504,13 +504,18 @@
       <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
       <button onclick="navMyWorkshop()">我的工作室</button>
       <button onclick="openSearch()" title="搜索 (⌘K)">找<span class="kbd">⌘K</span></button>
-      <button onclick="showScreen('about')" class="text-xs" style="color: var(--sepia);">关于</button>
+      <button onclick="showScreen('about')">关于</button>
       <button onclick="navAddUpdate()" class="serif" style="color: var(--vermilion);">+ 记一笔</button>
     </nav>
   </div>
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
     <span>第 1 期 · 试运行 · <span id="masthead-handle-area"></span></span>
     <span id="masthead-date">2026 / 06 / 05</span>
+  </div>
+  <div class="max-w-3xl mx-auto px-8 pb-3 pt-1 border-t" style="border-color: var(--rule);">
+    <p class="serif" style="font-size: 14px; color: var(--sepia); line-height: 1.5; margin: 0; padding-top: 6px;">
+      给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台
+    </p>
   </div>
 </header>
 
@@ -538,25 +543,14 @@
   <section class="screen" id="screen-about">
     <div class="max-w-2xl mx-auto">
 
-      <div class="mb-8" style="background: var(--paper); padding: 16px 20px; border-left: 3px solid var(--vermilion);">
-        <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.1em;">ALPHA · 试运行</div>
-        <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.65;">
-          这是非常早期的 alpha · 跑在自有服务器 (阿里云大陆 · 暂用 IP 访问 · daogu.cc 备案中) · 数据有原子写入 + backup · 但还没接数据库 · 也没有真实认证。
-          适合<strong>团队内部互相测试 + 真实反馈</strong> · 不建议放重要私密数据。
-        </p>
-        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px; font-style: italic;">
-          感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
-        </p>
-      </div>
-
       <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">关 于</div>
 
       <h1 class="display" style="font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); margin-bottom: 18px;">
         捣鼓 <span style="color: var(--sepia-light); font-size: 38px;">/</span> Tinker
       </h1>
 
-      <p class="serif italic" style="font-size: 22px; color: var(--sepia); line-height: 1.4; margin-bottom: 40px;">
-        给"用 AI 创造但不必懂代码"的人的工作室
+      <p class="serif" style="font-size: 22px; color: var(--sepia); line-height: 1.45; margin-bottom: 40px;">
+        给用 AI 做东西但不必会写代码的人的工作室
       </p>
 
       <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 48px;">
@@ -567,10 +561,11 @@
       <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
         <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em; text-transform: uppercase;">我们不做什么</div>
         <ul class="serif" style="font-size: 16px; line-height: 1.9; color: var(--ink); list-style: none; padding: 0;">
-          <li>· 不做推荐算法 / 热门 / trending</li>
-          <li>· 不做点赞总数 / 粉丝数 / 浏览量 这些"数字游戏"</li>
-          <li>· 不做等级 / 守护者 / verified 这些"身份证书"</li>
-          <li>· 不做 "X 天月入 $Y" 焦虑营销</li>
+          <li>· 不做推荐算法 · 不做热门排名</li>
+          <li>· 不做点赞总数 · 不做粉丝数 · 不做浏览量这些数字游戏</li>
+          <li>· 不做等级 · 不做守护者 · 不做认证徽章这些身份证书</li>
+          <li>· 不做 X 天月入多少 这类焦虑营销</li>
+          <li>· 不做嵌套盖楼评论 · 不做战场化讨论区</li>
         </ul>
       </div>
 
@@ -579,17 +574,17 @@
 
         <div style="margin-bottom: 28px;">
           <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 给"在做但没做完"的人留主舞台</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">卡住、试错、放弃,都是 first-class 内容。不是只有"成功"才能展示。</p>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">卡住、试错、放弃,都是一等内容。不是只有"成功"才能展示。</p>
         </div>
 
         <div style="margin-bottom: 28px;">
-          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 真实复用反馈链</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">不是点赞,是「我用了你的方法 · 跑通了」。有人真的把你的东西接走用了,比 1000 个赞重要。</p>
+          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 反馈是真去试 · 不是点赞</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">不是点赞,是「我用了你的方法 · 跑通了」。有人真的把你的东西接走用了 · 比一千个赞重要。</p>
         </div>
 
         <div>
           <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 作品必须挂可访问产物</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">截图 + AI 文案 ≠ 作品。陌生人不联系你就能玩到的,才叫作品。这是反「AI 装大佬」的硬边界。</p>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">截图加 AI 文案不算作品。陌生人不联系你就能玩到的 · 才叫作品。这是反「AI 装大佬」的硬边界。</p>
         </div>
       </div>
 
@@ -597,28 +592,39 @@
         <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.15em; text-transform: uppercase;">关 于 产 品 本 身</div>
 
         <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 24px;">
-          <p>Tinker 用 Claude Code + Node.js + Docker 做的。</p>
+          <p>Tinker 这个产品自己就是它的第一篇内容。</p>
           <p style="margin-top: 14px;">
-            我们的开发过程本身就<strong>公开在这个产品里</strong> —
-            <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 工作室的「Tinker / 捣鼓」项目能看到每一次 commit、每一次卡住、每一次跑通。
+            我们的开发过程<strong>公开在产品里</strong> —
+            <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 工作室的「Tinker / 捣鼓」项目 · 能看到每一次卡住、每一次跑通、每一次为什么这么决定。
           </p>
-          <p style="margin-top: 14px; color: var(--sepia); font-style: italic;">
-            这是产品的第一篇内容 · 也是它的第一个广告。
+          <p style="margin-top: 14px; color: var(--sepia);">
+            这是它的第一篇内容 · 也是它的第一个广告。
           </p>
         </div>
 
         <div class="flex gap-4 mt-8 items-center flex-wrap">
           <button onclick="showScreen('workshop','daodao')" class="btn-act-primary">看 @daodao 的工作室 →</button>
-          <span class="react-action serif italic" onclick="showScreen('onboard')" style="color: var(--sepia);">还是先去入场仪式做个小东西</span>
+          <span class="react-action serif" onclick="showScreen('onboard')" style="color: var(--sepia);">先去入场仪式做个小东西</span>
         </div>
       </div>
 
       <div class="mt-16 pt-8 text-center" style="border-top: 1px solid var(--rule);">
-        <p class="serif italic" style="color: var(--sepia); font-size: 14px;">
-          "在这个产品里,做减法比做加法需要更多勇气。"
+        <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.5;">
+          在这个产品里 · 做减法比做加法需要更多勇气。
         </p>
         <p class="mono text-xs mt-2" style="color: var(--sepia-light); letter-spacing: 0.1em;">
           — 给团队新人的一句话总结
+        </p>
+      </div>
+
+      <div class="mt-16" style="background: var(--paper); padding: 16px 20px; border-left: 3px solid var(--sepia-light);">
+        <div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">ALPHA · 试运行</div>
+        <p class="serif" style="font-size: 13px; color: var(--ink-soft); line-height: 1.65;">
+          这是非常早期的 alpha · 跑在自有服务器 (阿里云大陆 · 暂用 IP 访问 · daogu.cc 备案中) · 用 SQLite 存数据 · 用邮件链接登录 · 数据有自动备份 · 但还在小范围测试。
+          适合朋友间互相测试 + 真实反馈 · 不建议放重要私密数据。
+        </p>
+        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px;">
+          感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
         </p>
       </div>
 
@@ -1071,7 +1077,15 @@ function buildHash(name, args) {
 
 function navigateFromHash() {
   const h = location.hash || '';
-  if (!h || h === '#/' || h === '#') return showScreen('feed');
+  if (!h || h === '#/' || h === '#') {
+    // 第一次访问 · 没登录 · 落到 daodao 工作室作为产品门户
+    // Tinker 自己就是它的第一篇内容 · 让产品演示产品 · 比空 feed 更说得清这里是什么
+    if (!localStorage.getItem('tinker_visited') && !currentUser.handle && state.users && state.users.daodao) {
+      localStorage.setItem('tinker_visited', '1');
+      return showScreen('workshop', 'daodao');
+    }
+    return showScreen('feed');
+  }
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
   if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
@@ -1325,7 +1339,17 @@ function renderWorkshop(handle) {
     </div>
   `).join('');
 
+  const isDaodaoPortal = handle === 'daodao' && !isMe;
   root.innerHTML = `
+    ${isDaodaoPortal ? `
+      <div class="mb-6" style="background: var(--paper); padding: 14px 18px; border-left: 3px solid var(--vermilion);">
+        <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.12em;">产 品 自 己 的 工 作 室</div>
+        <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin: 0;">
+          你正在看的就是 Tinker 这个产品自己的工作室。我们把开发过程公开在这里 · 每一次卡住、每一次跑通、每一次为什么这么决定 · 都记在「Tinker / 捣鼓」这个项目里。
+          <span class="react-action" onclick="showScreen('about')" style="color: var(--vermilion);">关于 Tinker →</span>
+        </p>
+      </div>
+    ` : ''}
     <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.1em;">${isMe ? '你 的 工 作 室' : '一 间 工 作 室'}</div>
       <h1 class="workshop-name mb-3">@${handle}</h1>
@@ -1566,6 +1590,9 @@ function renderProject(owner, slug) {
     ` : ''}
 
     <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
+      <div class="serif mb-2" style="color: var(--ink-soft); font-size: 13px; line-height: 1.6;">
+        在 Tinker · 反馈是真去试 · 不是点赞 · <span class="react-action" onclick="showScreen('about')" style="color: var(--vermilion);">关于 Tinker →</span>
+      </div>
       <div class="serif mb-3" style="color: var(--sepia); font-size: 14px;">把这个项目带走 · 离开社区也行,你的东西永远在</div>
       <div class="flex flex-wrap gap-4 text-base">
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('x')">${ICONS.x}分享到 X</span>
