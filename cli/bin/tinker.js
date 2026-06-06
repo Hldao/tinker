@@ -332,6 +332,23 @@ async function llmDraft(cfg, gitContext) {
   return parsed.candidates;
 }
 
+// v0.64 · prompt 流程里用的简版 · 拿单条草稿当 input 默认值
+// 没配 LLM / 调用失败 都返回 null · 调用方走原本的空 input 路径
+// 默认时间窗 1 小时 · UI session 时传 session 起始时间更精准
+async function llmQuickDraft(cfg, opts = {}) {
+  if (!cfg || !cfg.llm || !cfg.llm.apiKey) return null;
+  try {
+    const sinceSpec = opts.sinceMinutes ? `${opts.sinceMinutes}m` : '1h';
+    const gitCtx = gitHistorySince(sinceSpec);
+    if (!gitCtx || !gitCtx.log) return null;
+    const candidates = await llmDraft(cfg, gitCtx);
+    if (!candidates || candidates.length === 0) return null;
+    return candidates[0].text || null;
+  } catch (e) {
+    return null;  // 静默失败 · 不打断 prompt 流程
+  }
+}
+
 // =============================================
 // commands
 // =============================================
@@ -1563,6 +1580,19 @@ async function cmdCheck(opts) {
   state.lastPromptedAt = now;
 
   const cfg = mustHaveConfig();
+
+  // 起草助手 · 有 LLM 就预填一句 · 没 LLM 直接走原本的空 input
+  async function promptForText(message, sinceMinutes) {
+    let draft = null;
+    if (cfg.llm && cfg.llm.apiKey) {
+      log(sepia('  起草中...'));
+      draft = await llmQuickDraft(cfg, { sinceMinutes });
+      if (draft) log(sepia('  ✦ LLM 起草了一句 · 改改或直接回车'));
+      else log(sepia('  (LLM 没给出草稿 · 自己写吧)'));
+    }
+    return (await input({ message, default: draft || undefined })).trim();
+  }
+
   if (choice === 'ui-push') {
     // UI session 结束 + 想要对比图
     // 1. 用户写一句总结
@@ -1572,7 +1602,8 @@ async function cmdCheck(opts) {
     const session = result.session;
     state.uiSession = null;  // 清掉 · 让下一波 UI 启动新 session
     savePromptState(state);
-    const text = (await input({ message: '一句话总结这波 UI 改动' })).trim();
+    const sinceMin = Math.max(60, Math.round((Date.now() - session.startedAt) / 60000) + 10);
+    const text = await promptForText('一句话总结这波 UI 改动', sinceMin);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
     const pushResult = await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
     const updateId = pushResult && (pushResult.result?.id || pushResult.id);
@@ -1598,7 +1629,7 @@ async function cmdCheck(opts) {
     }
   } else if (choice === 'push') {
     savePromptState(state);
-    const text = (await input({ message: '一句话进展 (会发到 ' + repoCfg.projectName + ')' })).trim();
+    const text = await promptForText('一句话进展 (会发到 ' + repoCfg.projectName + ')', 60);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
     await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
     state.lastPushAtByProject = state.lastPushAtByProject || {};
@@ -1608,7 +1639,7 @@ async function cmdCheck(opts) {
   } else if (choice === 'ship' || choice === 'prototype') {
     savePromptState(state);
     const verb = choice === 'ship' ? '完工感想' : '原型说明';
-    const text = (await input({ message: verb + ' (会进陈列馆代表 ' + repoCfg.projectName + ')' })).trim();
+    const text = await promptForText(verb + ' (会进陈列馆代表 ' + repoCfg.projectName + ')', 60);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
     await apiAction(cfg, 'exhibitProject', {
       projectId: repoCfg.projectId,
@@ -1622,7 +1653,7 @@ async function cmdCheck(opts) {
     ok((choice === 'ship' ? '✦ 完工 · 已进陈列馆' : '◐ 原型 · 已进陈列馆'));
   } else if (choice === 'stuck') {
     savePromptState(state);
-    const text = (await input({ message: '卡在哪 (会标项目 stuck + 通知关心你的人)' })).trim();
+    const text = await promptForText('卡在哪 (会标项目 stuck + 通知关心你的人)', 60);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
     await apiAction(cfg, 'changeProjectStatus', { projectId: repoCfg.projectId, newStatus: 'stuck' });
     await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
@@ -1662,6 +1693,46 @@ async function cmdCheck(opts) {
     savePromptState(state);
     log(sepia('  静音 24 小时 · 用 ') + vermilion('tinker mute off') + sepia(' 解除'));
   }
+}
+
+// `tinker session status | end` · 看 / 强制结束 当前 UI session
+async function cmdSession(sub) {
+  const state = loadPromptState();
+  const session = state.uiSession;
+  if (sub === 'status' || !sub) {
+    if (!session) {
+      log(sepia('  当前没有 UI session 进行中'));
+      log(sepia('  会在下一次改 webapp/* / *.html / *.css / .tsx 之类的文件时启动'));
+      return;
+    }
+    const elapsed = Math.round((Date.now() - session.startedAt) / 60000);
+    log('');
+    log(sepia('  UI session 进行中:'));
+    log(sepia('    起点  ') + new Date(session.startedAt).toLocaleString() + sepia(' · ') + bold(elapsed + ' 分钟前'));
+    log(sepia('    起始 commit ') + sepia(session.startCommitHash.slice(0, 8)));
+    log(sepia('    累积 ') + bold(session.commitCount + ' 个 UI commit'));
+    log(sepia('    before 快照 ') + (session.beforeSnapshotPath ? sepia(session.beforeSnapshotPath) : sepia('(没存上)')));
+    log('');
+    log(sepia('  结束条件 (满足任一):'));
+    log(sepia('    · 60 min 时间窗') + (elapsed >= 60 ? bold(' (已超 · 下次 commit 会触发)') : sepia(` · 还剩 ${60 - elapsed} 分钟`)));
+    log(sepia('    · 累 6 commit') + (session.commitCount >= 6 ? bold(' (已超 · 下次 commit 会触发)') : sepia(` · 还差 ${6 - session.commitCount}`)));
+    log(sepia('    · commit msg 写 ship/done/完工'));
+    log('');
+    log(sepia('  强制结束: ') + vermilion('tinker session end'));
+    return;
+  }
+  if (sub === 'end') {
+    if (!session) { log(sepia('  没有 session 在进行 · 没事可结束')); return; }
+    // 直接把 session 时间往回拨 · 让下一次 check 评估为已结束
+    session.startedAt = Date.now() - 61 * 60 * 1000;
+    state.uiSession = session;
+    savePromptState(state);
+    ok('session 标记为结束 · 下次 commit 时会触发 prompt');
+    log(sepia('  想立刻看到 prompt 不等下次 commit · 跑 ') + vermilion('tinker check'));
+    return;
+  }
+  err('用法: tinker session [status|end]');
+  process.exit(1);
 }
 
 function cmdMute(args) {
@@ -1729,10 +1800,11 @@ function help() {
   log('  ' + vermilion('tinker ship -m "..." --no-screenshot') + sepia('       · 不带封面'));
   log('');
   log(sepia('  ') + vermilion('主动 prompt · 让 CLI 在合适的时间问你 (默认 opt-in)'));
-  log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook · 触发器是 60min 内累 3 commit'));
+  log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook · 9 个触发器分优先级'));
   log('  ' + vermilion('tinker hook uninstall') + sepia('              卸 hook'));
   log('  ' + vermilion('tinker check') + sepia('                       手动跑一次触发器评估 (hook 自动调这个)'));
   log('  ' + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('today') + sepia(' / ') + vermilion('forever') + sepia(' / ') + vermilion('off') + sepia('   静音控制'));
+  log('  ' + vermilion('tinker session status') + sepia(' / ') + vermilion('end') + sepia('     看 UI session 状态 / 手动结束'));
   log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
@@ -1795,6 +1867,7 @@ async function main() {
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook || args.includes('--from-hook') }); break;
       case 'mute': cmdMute(args[1]); break;
+      case 'session': await cmdSession(args[1]); break;
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default: err('未知命令: ' + cmd); help(); process.exit(1);
