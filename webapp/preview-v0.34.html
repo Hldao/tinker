@@ -4996,6 +4996,51 @@
   /* ===============================================================
      END v0.57 陈列馆工具筛选 → 阶段筛选
      =============================================================== */
+
+  /* ================================================================
+   *  v0.58 · 系统级集体性 + 通知页升级
+   *  --------------------------------------------------------------
+   *  A · feed 顶部加 mini-stats
+   *    今天 N 条，来自 K 位，跨 M 个项目
+   *    跟陈列馆 v0.55 / 工作室 v0.56 mini-stats 形成系统呼应
+   *
+   *  B · 工作室 mini-stats 加被动信号
+   *    被接走过 K · 方法被用 M
+   *    让"我的手艺被认可"显式 · 仅有数据才显示
+   *    workshop-mini-stats CSS 复用 v0.56 · 这里无需新增
+   *
+   *  C · 通知页按 type 分组筛选
+   *    type chip 按数量降序 · 仅显示有数据的 type
+   *    chip label 用 NOTIF_TYPE_LABELS 简短版
+   *    复用 .filter-row 样式 · 跟 feed/showcase 视觉一致
+   *  ================================================================ */
+
+  /* —— A · feed 顶部 mini-stats —— */
+  .feed-stats {
+    margin-top: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.18em;
+  }
+  .feed-stats .num {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    padding: 0 2px;
+  }
+
+  /* —— C · 通知页类型筛选 row —— */
+  .notif-type-filter {
+    margin-bottom: 16px;
+  }
+  .notif-type-filter .filter-pill {
+    margin-right: 18px;
+  }
+
+  /* ===============================================================
+     END v0.58 系统级集体性 + 通知页升级
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5036,6 +5081,7 @@
       <h1 class="feed-title mb-3">今天有动静</h1>
       <p class="feed-sub mb-2">路过看一眼别人在做什么 — 时间倒序,不是热门排名</p>
       <span class="feed-cta-line" onclick="openPickProject()">或者你今天也来记一笔 →</span>
+      <div id="feed-stats" class="feed-stats"></div>
     </div>
     <div class="filter-row mb-4">
       <div id="tool-filters" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
@@ -5577,9 +5623,9 @@
     </div>
 
     <div class="mb-5">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">可访问产物链接 *</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">可访问产物链接 (可选)</label>
       <input id="np-link" class="input-bare" placeholder="https://...">
-      <div class="field-hint">v0 / Bolt / Lovable / Replit / GitHub / 自部署都行 — 陌生人不联系你就能玩到 = 合格</div>
+      <div class="field-hint">v0 / Bolt / Lovable / Replit / GitHub / 自部署都行 — 陌生人不联系你就能玩到 = 合格。微信小程序 / 桌面应用 / 还在审核, 可以暂时空着, 之后再补</div>
     </div>
 
     <div class="mb-5">
@@ -5607,10 +5653,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.57 · 33 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.58 · 34 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.57</span>
+  <span class="bb-ver">v0.58</span>
 </div>
 
 <script>
@@ -5719,6 +5765,20 @@ const NOTIF_TEMPLATES = {
   ownerUpdate:  (n) => ({ verb:'记了一笔新进展 ·', verbColor:'var(--moss)' }),
   wantToTry:    (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
   noted:        (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
+};
+
+// v0.58 通知 type chip 简短 label · 跨 type 一致排版
+const NOTIF_TYPE_LABELS = {
+  tinkered: '接走',
+  methodUsed: '用了方法',
+  mentioned: '提到了我',
+  projectDone: '跑通了',
+  projectStuck: '卡住了',
+  projectUnstuck: '又动起来',
+  projectMoved: '换链接',
+  ownerUpdate: '新进展',
+  wantToTry: '想试试',
+  noted: '留便签',
 };
 
 let state;
@@ -5982,6 +6042,25 @@ function renderFeed() {
   }
 
   let events = getFeedEvents();
+
+  // v0.58 今日集体统计 · 跟陈列馆/工作室 mini-stats 系统呼应
+  // 算在所有筛选之前 · 反映"今天本站真实活跃度"
+  const todayKey = makeDateKey(new Date());
+  const todayEvents = events.filter(e => makeDateKey(new Date(e.at)) === todayKey);
+  const feedStatsEl = document.getElementById('feed-stats');
+  if (feedStatsEl) {
+    if (todayEvents.length === 0) {
+      feedStatsEl.innerHTML = '';
+    } else {
+      const todayAuthors = new Set(todayEvents.map(e => e.owner)).size;
+      const todayProjects = new Set(todayEvents.map(e => e.projectId)).size;
+      const parts = [`今天 <span class="num">${todayEvents.length}</span> 条`];
+      if (todayAuthors >= 2) parts.push(`来自 <span class="num">${todayAuthors}</span> 位`);
+      if (todayProjects >= 2) parts.push(`跨 <span class="num">${todayProjects}</span> 个项目`);
+      feedStatsEl.innerHTML = parts.join('，');
+    }
+  }
+
   if (currentStatusFilter !== 'all') {
     events = events.filter(e => e.status === currentStatusFilter);
   }
@@ -6142,9 +6221,18 @@ function renderWorkshop(handle) {
   });
 
   // v0.56 工作室小档案 · 让别人秒识"这是谁"
+  // v0.58 加被接走 / 方法被用 反向信号 · 让"我的手艺被认可"可见
   const activeCount = recent.length;
   const doneCount = done.length;
   const trackingCount = trackingPublic.length;
+  let receivedTinkered = 0;
+  let receivedMethodUsed = 0;
+  projects.forEach(p => {
+    receivedTinkered += (p.reactions && p.reactions.tinkered ? p.reactions.tinkered.length : 0);
+    (p.updates || []).forEach(u => {
+      receivedMethodUsed += (u.usedBy || []).length;
+    });
+  });
   const toolFreq = new Map();
   projects.forEach(p => (p.tools || []).forEach(t => {
     toolFreq.set(t, (toolFreq.get(t) || 0) + 1);
@@ -6156,6 +6244,8 @@ function renderWorkshop(handle) {
   const statsParts = [];
   if (activeCount > 0) statsParts.push(`在做 <span class="num">${activeCount}</span>`);
   if (doneCount > 0) statsParts.push(`跑通 <span class="num">${doneCount}</span>`);
+  if (receivedTinkered > 0) statsParts.push(`被接走过 <span class="num">${receivedTinkered}</span>`);
+  if (receivedMethodUsed > 0) statsParts.push(`方法被用 <span class="num">${receivedMethodUsed}</span>`);
   if (trackingCount > 0) statsParts.push(`跟进过 <span class="num">${trackingCount}</span>`);
   if (topTools.length > 0) statsParts.push(`常用 <span class="ws-tools">${topTools.join(' · ')}</span>`);
   const miniStatsHtml = statsParts.length > 0
@@ -6328,13 +6418,14 @@ function renderProject(owner, slug) {
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
       <p class="pdesc">${escapeHtml(p.desc)}</p>
+      ${p.productLink ? `
       <div class="pheader-action-row" style="justify-content: flex-end;">
         <a href="${p.productLink}" target="_blank" class="try-cta">
           <span>去试试</span>
           <span class="try-cta-arrow">→</span>
           <span class="try-cta-url">${p.productLink}</span>
         </a>
-      </div>
+      </div>` : ''}
     </div>
 
     <div class="mb-12">
@@ -6508,7 +6599,7 @@ function renderProject(owner, slug) {
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('xhs')">${ICONS.xhs}分享到小红书</span>
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('wechat')">${ICONS.wechat}分享到微信</span>
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('copy')">${ICONS.link}复制项目链接</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.external}只复制产物 URL</span>
+        ${p.productLink ? `<span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.external}只复制产物 URL</span>` : ''}
       </div>
     </div>
   `;
@@ -6679,6 +6770,10 @@ function renderShowcase(focusId) {
 }
 
 /* ============ NOTIFICATIONS ============ */
+// v0.58 通知类型筛选 state
+let notifTypeFilter = 'all';
+function setNotifTypeFilter(t) { notifTypeFilter = t; renderNotifications(); }
+
 function renderNotifications() {
   const root = document.getElementById('notif-list');
   const me = currentUser.handle;
@@ -6698,7 +6793,20 @@ function renderNotifications() {
     return;
   }
 
-  const unreadCount = list.filter(n => !n.read).length;
+  // v0.58 按类型分组筛选 · 跨 type 集中浏览
+  const typeCounts = {};
+  list.forEach(n => { typeCounts[n.type] = (typeCounts[n.type] || 0) + 1; });
+  const typeFilterPills = `<div class="filter-row notif-type-filter">
+    <span class="filter-pill ${notifTypeFilter === 'all' ? 'active' : ''}" onclick="setNotifTypeFilter('all')">全部 · ${list.length}</span>
+    ${Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).map(([type, count]) => `
+      <span class="filter-pill ${notifTypeFilter === type ? 'active' : ''}" onclick="setNotifTypeFilter('${type}')">${NOTIF_TYPE_LABELS[type] || type} · ${count}</span>
+    `).join('')}
+  </div>`;
+
+  // 按筛选过滤
+  const filtered = notifTypeFilter === 'all' ? list : list.filter(n => n.type === notifTypeFilter);
+
+  const unreadCount = filtered.filter(n => !n.read).length;
   const header = unreadCount > 0 ? `
     <div class="notif-bulk-row">
       <span style="color: var(--sepia); font-family: 'JetBrains Mono', monospace; font-size: 11px;">
@@ -6708,7 +6816,12 @@ function renderNotifications() {
     </div>
   ` : '';
 
-  root.innerHTML = header + list.map(n => {
+  if (filtered.length === 0) {
+    root.innerHTML = typeFilterPills + '<p class="serif py-12 text-center" style="color: var(--sepia);">这类通知还没有</p>';
+    return;
+  }
+
+  root.innerHTML = typeFilterPills + header + filtered.map(n => {
     const tmpl = NOTIF_TEMPLATES[n.type] ? NOTIF_TEMPLATES[n.type](n) : { verb: n.type, verbColor: 'var(--sepia)' };
     const argAnchor = n.anchor ? n.anchor.replace(/'/g, "\\'") : '';
     const argOwner = (n.projectOwner || '').replace(/'/g, "\\'");
@@ -6915,7 +7028,8 @@ async function submitNewProject() {
 
   if (!name) { showToast('项目得有个名字'); return; }
   if (!desc) { showToast('一句话描述能让别人知道这是什么'); return; }
-  if (!isValidUrl(link)) { showToast('需要一个 https:// 的可访问产物链接 — 反 "AI 装大佬"'); return; }
+  // 链接可选(微信小程序 / 桌面应用 / 审核中的作品可以暂时空着) · 但填了就得是合法 URL
+  if (link && !isValidUrl(link)) { showToast('如果填了链接, 得是 https:// 开头的'); return; }
 
   // 编辑模式: 走 editProject · 不走 addProject
   if (editingProjectId) {
