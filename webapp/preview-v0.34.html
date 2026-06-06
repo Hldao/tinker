@@ -211,6 +211,10 @@
   .tl-prompt-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-soft); line-height: 1.55; white-space: pre-wrap; margin-bottom: 10px; }
   /* 求反馈 印章 + 想知道 文本 · 比 prompt-box 更显眼 · 让访客一眼看到"作者在求反馈" */
   .tl-feedback-ask-block { margin-bottom: 14px; padding: 10px 14px 11px; background: var(--paper); border: 1px solid var(--vermilion); border-left-width: 3px; border-radius: 2px; }
+  /* 完工 ship update · 视觉强调 · 跟普通进展区分 */
+  .tl-ship-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); letter-spacing: 0.28em; margin-bottom: 10px; font-weight: 500; }
+  .tl-entry-ship .tl-time { color: var(--vermilion); }
+  .tl-entry-ship .tl-text { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 96; font-size: 18px; line-height: 1.55; }
   .tl-feedback-ask-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.22em; font-weight: 500; }
   .tl-feedback-ask-text { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; margin-top: 6px; }
   .tl-feedback-ask-text .ask-prefix { color: var(--vermilion); font-weight: 500; }
@@ -4194,6 +4198,45 @@
   /* ===============================================================
      END v0.50 中文长文本排版修复
      =============================================================== */
+
+  /* ================================================================
+   *  v0.50.1 · inline-code 长 URL/命令溢出修复
+   *  --------------------------------------------------------------
+   *  问题: .inline-code 默认 white-space: nowrap (防短代码中断)
+   *        但当内容是长 URL/git clone 命令 · 撑爆 entry-text 容器
+   *        实例: `git clone https://github.com/.../.tinker-src && npm i -g ...`
+   *  修复:
+   *    · white-space: normal · 允许换行
+   *    · overflow-wrap: anywhere · 长 URL 在任意位置断
+   *    · entry-text / pcard-desc / tl-* 容器加 overflow-wrap: break-word 兜底
+   *    · entry > div 加 min-width: 0 · 防 flex item 不收缩导致溢出
+   *  ================================================================ */
+
+  .inline-code {
+    white-space: normal !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word;
+  }
+
+  /* 主要正文容器加 overflow-wrap 兜底 · 防止超长 mention / URL / 标识符溢出 */
+  .entry-text,
+  .entry-feedback-ask,
+  .tl-update-text,
+  .tl-note-text,
+  .pcard-desc {
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  /* entry 卡片 flex 项默认 min-width: auto · 让长内容能撑爆容器 · 这里 reset */
+  .entry,
+  .entry > div {
+    min-width: 0;
+  }
+
+  /* ===============================================================
+     END v0.50.1 inline-code 溢出修复
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -4615,7 +4658,7 @@
 <div id="modal-status-picker" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
     <h3 class="modal-title">改一下状态</h3>
-    <p class="modal-sub">「跑通了」进做过的 · 「归档」从 feed 移除</p>
+    <p class="modal-sub">「跑通了」进做过的 + 写一句完工感想 · 进陈列馆</p>
     <div class="flex gap-2 flex-wrap mb-3" id="msp-status-row">
       <span class="status-pill" data-status="active">在做</span>
       <span class="status-pill" data-status="stuck">卡住</span>
@@ -4627,6 +4670,32 @@
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-status-picker')" class="btn-act" style="border-bottom: none;">取消</button>
       <button onclick="submitStatusChange()" class="btn-act-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHIP CEREMONY modal — 完工 · 写一句感想 · 走 shipProject action -->
+<div id="modal-ship-ceremony" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 560px;">
+    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.22em;">✦ 完 工</div>
+    <h3 class="modal-title">写一句完工感想</h3>
+    <p class="modal-sub">这条感想会进时间线 · 也进陈列馆作为这件作品的代表内容 · 别凑数 · 你最想说的那句</p>
+    <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="比如:卡了三周的 cron 终于把状态对上了 · 我想知道是不是有更简单的写法" style="font-size: 16px; resize: vertical;"></textarea>
+
+    <div class="update-extras" style="margin-top: 14px;">
+      <label class="update-extra-row">
+        <input type="checkbox" id="ship-seeking-feedback" checked onchange="document.getElementById('ship-feedback-ask-wrap').classList.toggle('hidden', !this.checked)">
+        <span><span class="extra-title">求看看 · 想拿反馈</span><span class="extra-sub">完工默认勾上 · 让陈列馆里看到这个项目的人能给你反馈</span></span>
+      </label>
+      <div id="ship-feedback-ask-wrap" style="padding-left: 32px;">
+        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.04em;">想 知 道 (可选)</label>
+        <textarea id="ship-feedback-ask" class="input-bare" rows="2" placeholder="比如:5 秒内看得懂这是干嘛的吗 / 这个流程哪里不顺" style="font-size: 14px; resize: vertical;"></textarea>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-ship-ceremony')" class="btn-act" style="border-bottom: none;">先不完工</button>
+      <button onclick="submitShipCeremony()" class="btn-act-primary">✦ 完工 · 进陈列馆</button>
     </div>
   </div>
 </div>
@@ -4708,10 +4777,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.50 · 25 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.50.1 · 26 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.50</span>
+  <span class="bb-ver">v0.50.1</span>
 </div>
 
 <script>
@@ -5359,9 +5428,10 @@ function renderProject(owner, slug) {
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
         const notesAboutThis = (p.notes || []).filter(n => n.updateId === u.id);
         return `
-          <div class="tl-entry" id="update-${u.id}">
+          <div class="tl-entry ${u.kind === 'ship' ? 'tl-entry-ship' : ''}" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
+              ${u.kind === 'ship' ? `<div class="tl-ship-badge">✦ 完 工</div>` : ''}
               ${u.feedbackAsk !== undefined ? `
                 <div class="tl-feedback-ask-block">
                   <div class="tl-feedback-ask-label">求 反 馈</div>
@@ -6282,16 +6352,50 @@ async function submitStatusChange() {
   const p = projectById(mspCtx);
   if (!p) return;
   const oldStatus = p.status;
+  // 第一次进 done · 走完工 ceremony · 不直接 change status
+  if (oldStatus !== 'done' && mspStatus === 'done') {
+    closeModal('modal-status-picker');
+    openShipCeremony(p.id);
+    return;
+  }
   const wantToTryCount = (p.reactions.wantToTry || []).filter(u => u !== currentUser.handle).length;
   try {
     await apiAction('changeProjectStatus', { projectId: p.id, newStatus: mspStatus });
     closeModal('modal-status-picker');
     renderProject(p.owner, p.slug);
-    if (oldStatus !== 'done' && mspStatus === 'done' && wantToTryCount > 0) {
-      showToast('跑通了! 已通知 ' + wantToTryCount + ' 个想试试的人');
+    showToast('状态改成了 ' + statusText(mspStatus));
+  } catch (e) { showToast(e.message); }
+}
+
+// 完工 ceremony · 写感想 + 默认勾求反馈 + 提交走 shipProject
+let shipCtx = null;
+function openShipCeremony(projectId) {
+  shipCtx = projectId;
+  document.getElementById('ship-reflection').value = '';
+  document.getElementById('ship-seeking-feedback').checked = true;
+  document.getElementById('ship-feedback-ask').value = '';
+  document.getElementById('ship-feedback-ask-wrap').classList.remove('hidden');
+  document.getElementById('modal-ship-ceremony').classList.remove('hidden');
+  setTimeout(() => document.getElementById('ship-reflection').focus(), 60);
+}
+async function submitShipCeremony() {
+  if (!shipCtx) return;
+  const reflection = document.getElementById('ship-reflection').value.trim();
+  if (!reflection) { showToast('完工感想不能空 — 说一句也行'); return; }
+  const seeking = document.getElementById('ship-seeking-feedback').checked;
+  const ask = seeking ? document.getElementById('ship-feedback-ask').value.trim() : '';
+  const p = projectById(shipCtx);
+  const wantToTryCount = (p && p.reactions ? (p.reactions.wantToTry || []) : []).filter(u => u !== currentUser.handle).length;
+  try {
+    await apiAction('shipProject', { projectId: shipCtx, reflection, seekingFeedback: seeking, feedbackAsk: ask });
+    closeModal('modal-ship-ceremony');
+    if (p) renderProject(p.owner, p.slug);
+    if (wantToTryCount > 0) {
+      showToast('✦ 完工 · 已通知 ' + wantToTryCount + ' 个想试试的人 · 也进了陈列馆');
     } else {
-      showToast('状态改成了 ' + statusText(mspStatus));
+      showToast('✦ 完工 · 进了陈列馆');
     }
+    shipCtx = null;
   } catch (e) { showToast(e.message); }
 }
 

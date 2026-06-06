@@ -43,9 +43,9 @@
 ## [Unreleased] / 0.5.x · UI 体系化打磨 (进行中)
 
 > Owner: 设计线 (ui.N)
-> 进展: webapp/index.html 累积 v0.27 → v0.50 共 25 个子段
+> 进展: webapp/index.html 累积 v0.27 → v0.50.1 共 26 个子段
 > 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
-> Build badge: webapp 右下角小角标 `ui · v0.50` (hover 显示完整 patch 历史)
+> Build badge: webapp 右下角小角标 `ui · v0.50.1` (hover 显示完整 patch 历史)
 
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
@@ -75,6 +75,7 @@
 - **v0.49.1** secondary nav 加重修复 · sepia-light → sepia · 字号 11.5→12.5 · 加常态 dotted underline 暗示"参见"
 - **v0.49.2** 信息架构调整 · 关于回主 nav (alpha 期新人入口) + dotted underline 暗示"参见说明" · 找沉到 dateline 末 mono · 副行整个删除 · masthead 3 行 → 2 行
 - **v0.50** 中文长文本排版修复 · entry-text / pcard-desc / 项目页正文加 'Songti SC' 'Noto Serif SC' fallback · 撤销 v0.30 留下的负字距 · 中文用 0.005em 微正"呼吸距"
+- **v0.50.1** inline-code 长 URL 溢出修复 · 撤销 white-space: nowrap · 改 overflow-wrap: anywhere · 长 `git clone` / URL 在任意位置可断 · 卡片不再撑爆
 
 ### [ui] markup 减法记录 (累积 5 处)
 所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
