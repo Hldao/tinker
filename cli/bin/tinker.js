@@ -2588,6 +2588,33 @@ async function cmdLlm(sub) {
     return;
   }
 
+  if (sub === 'usage') {
+    // 看 Tinker 自己用 LLM 的 token 累积 · 跟 goodnight 解耦 (不混进日总结)
+    let history = [];
+    try { history = JSON.parse(fs.readFileSync(LLM_USAGE_FILE, 'utf-8')); } catch {}
+    if (!Array.isArray(history) || history.length === 0) {
+      log(sepia('  还没记录过 LLM 用量'));
+      return;
+    }
+    const today = getTodayLLMUsage();
+    const total = history.reduce((s, h) => s + (h.tokens || 0), 0);
+    const todayTokens = today.reduce((s, h) => s + (h.tokens || 0), 0);
+    const byKind = {};
+    history.forEach(h => { byKind[h.kind] = (byKind[h.kind] || 0) + h.tokens; });
+    log('');
+    log(sepia('  Tinker 自己用 LLM 的 token (起草 / 重写 / voice 分析 / narrate 等)'));
+    log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
+    log(sepia('    今日: ') + bold(todayTokens.toLocaleString() + ' tokens') + sepia(' · ') + sepia(today.length + ' 次调用'));
+    log(sepia('    累计: ') + bold(total.toLocaleString() + ' tokens') + sepia(' · ') + sepia(history.length + ' 次调用'));
+    log(sepia('  按 kind 分:'));
+    Object.entries(byKind).sort((a, b) => b[1] - a[1]).forEach(([k, n]) => {
+      log(sepia('    · ' + k.padEnd(15)) + bold(n.toLocaleString().padStart(8)));
+    });
+    log('');
+    log(sepia('  说明: 这是 Tinker 自己消耗的 token (起草 / 总结自己用) · 不包含你在 Cursor / Claude Code 等编程工具里的 token'));
+    return;
+  }
+
   if (sub === 'status' || (sub === undefined && cfg.llm && cfg.llm.apiKey)) {
     if (!cfg.llm || !cfg.llm.apiKey) {
       log(sepia('  LLM 没配置 · 跑 ') + vermilion('tinker llm set') + sepia(' 来配'));
@@ -2709,21 +2736,11 @@ async function cmdGoodnight(opts = {}) {
   }
   log('');
 
-  log('  ' + bold('AI 帮你写'));
-  if (totalTokens === 0) {
-    log(sepia('    今天没用 LLM'));
-  } else {
-    log(sepia('    用了 ') + bold(totalTokens.toLocaleString() + ' 个 token') + sepia(' · ') + sepia(usage.length + ' 次调用'));
-    Object.entries(usageByKind).forEach(([kind, n]) => log(sepia('      · ') + kind + sepia(' ×') + bold(n.toLocaleString())));
-    // DeepSeek 价格估算 (输入 0.27¥ / 1M · 输出 1.1¥ / 1M · 平均按 0.7¥/1M)
-    const ynEst = (totalTokens * 0.7 / 1000000).toFixed(3);
-    log(sepia('    DeepSeek 估算成本: 约 ¥') + sepia(ynEst));
-  }
-  log('');
+  // Tinker 自己用 LLM 帮起草 / 分析 / narrate 的 token 用量是自指 · 不在晚安里显示
+  // 想看就跑 tinker llm usage (单独命令)
 
-  // LLM 总结 (可选)
-  if (cfg.llm && cfg.llm.apiKey && (gitCommits.length > 0 || todayUpdates.length > 0)) {
-    log(sepia('  让 AI 帮你 narrate 一下? 想要就跑 ') + vermilion('tinker goodnight --narrate') + sepia(' (会用一点 token)'));
+  if (cfg.llm && cfg.llm.apiKey && (gitCommits.length > 0 || todayUpdates.length > 0) && !opts.narrate) {
+    log(sepia('  让 AI 帮你 narrate 一下? 想要就跑 ') + vermilion('tinker goodnight --narrate'));
     log('');
   }
 
