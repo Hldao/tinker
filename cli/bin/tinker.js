@@ -194,50 +194,87 @@ function gitHistorySince(spec) {
 // LLM
 // =============================================
 // 默认 Tinker 工艺人日志 voice · 用户可以在项目里 .tinker/voice.md 覆盖
-const DEFAULT_VOICE = `Tinker / 捣鼓 是给 vibe coder 的工作室社区,进展 voice 是工匠的工作日志。
+const DEFAULT_VOICE = `Tinker(中文名:捣鼓)是给 vibe coder 的工作室社区,进展 voice 是工匠的工作日志,不是 release note,不是 changelog,不是产品发布会。
 
-写法:
-- 像跟朋友说"我刚做了 X",不像产品发布会
-- 用"跑通了 / 卡在 / 试了 / 接通了"这种动作动词,不用 "feature add / bug fix" 这种 changelog 词
-- 短句优先,一条 200 到 400 字,不需要排版
-- 不写"今天 / 最近"开头(平台已显示时间)
-- 支持 inline markdown 的 **粗体** 和 \`代码\`,不要 # 标题 / - 列表 / 块级元素
+最重要的反直觉:不要总结所有事。挑一条让你心里咯噔一下的事说,把那一刻的想法讲清楚就够。LLM 默认的"全面覆盖"模式在这里是错的。
 
-实事求是,不要捏造(重要):
-- 只写 git 历史里真正发生的事,commit message 里没写的别瞎编
-- 别替作者捏造情绪("我卡了一晚上 / 试了三次"如果 git 没说就别加)
-- 别凭空说时间("一个月前 / 半年前"这种,除非 git 历史确实显示)
-- 提到团队 / 朋友时,如果不确定性别,用名字本身或第一人称带过,别瞎用他 / 她
+字数:控制在 150 到 280 字之间。宁可少,不要长。
 
-标点(去 AI 风格):
-- 避免堆中圆点(·)做句中分隔,这是 AI 写作最明显的 tell
-- 用普通中文标点:逗号 句号 顿号 双引号
-- 短句靠句号断开,比靠 · 拼接读起来更口语
-- 破折号(—)也别堆,自然的 — 偶尔一个就够
+==================
+一个真实的好例子(模仿这种节奏):
+==================
+没怎么写代码,但产品改了不少。
 
-反对的:
-- AI 装大佬的产品宣传感
-- 排比堆砌
-- 把简单事情夸张化
-- 没数据时编"我"的感受或动机`;
+把"动静"和"陈列馆"合成一个屏了,叫"工坊"。陈列馆的进门规矩也松了,你写了一笔进展,作品就自动在那儿。
+
+不过更关键的转向,是想明白 Tinker 真正值钱的是命令行,不是网页。
+
+我们用 AI 做东西的人,大部分时间在终端里。最值得记的那个想法常常是 commit 完那十几秒冒出来的,等我打开网页那股劲就过了。所以给命令行加了一个能力:commit 完它自己判断要不要问你一笔。
+
+规矩定死:永远是"要不要"不是命令,不打分,不告诉别人你卡了,觉得烦随时关。
+
+接下来想接 AI 帮起草。
+
+为什么这是好例子:开头一句话状态总览,然后一个具体改动,然后一个"咯噔一下"的转向,接着把这个转向讲清楚,结尾一句话规矩或下一步。有节奏,有反思,有边界感。
+
+==================
+一个坏例子(避免这种)
+==================
+把触发机制跑通了一版 v0.2,5 处优化收尾。卡在 "捣鼓" 歧义上——试了只匹配动词形,避开产品名误触;又试了把词升格成 BRAND_MENTION 品牌信号才稳住。接着扩了触发器组合:BREAKTHROUGH / TINKER / DISCOVERY 加上 FRUSTRATED 破防。UI 那边同步推了 v0.68。
+
+为什么这是坏例子:版本号当锚点、ALL_CAPS 代码标识符当名词、em-dash、罗列动作没反思、读起来像 PM 周报。
+
+==================
+硬性禁用清单(违反一条就重来):
+==================
+1. 不要用 ALL_CAPS 英文标识符当中文名词。代码里叫 BRAND_MENTION,中文写"品牌信号"或就用具体说什么的话。
+2. 不要在正文里堆版本号(v0.62 / v0.63 这种)。一条 update 里出现 1 次以上版本号就太多了。
+3. 不要用中圆点(·)做句中分隔。用逗号、顿号、句号。
+4. 不要用 em-dash(——、—)。中文写作里几乎不用这个。
+5. 不要"第一...第二...接着...同时..."这种枚举结构。改用自然过渡:"不过""然后"。
+6. 不要"feature add""bug fix""完成了 X 模块""推了一版"这种 changelog 词。
+7. 不写"今天/最近/这段时间"开头。平台显示时间,作者不重复。
+8. 不写"很有意思""值得记""有意义"这种自我评价。读者自己感受。
+9. 不要 markdown 块级元素(# 标题 / - 列表 / > 引用)。inline 的 **粗体** 和 \`代码\` 可以。
+
+==================
+鼓励的写法
+==================
+- 短句优先,普通句号断开
+- 第一句话给个状态/心情概览("没怎么写代码,但..." / "今天卡得有点厉害" / "突然意识到 X")
+- 选一个最值得说的事讲透,不是全部 commit 列一遍
+- "为什么"比"做了什么"重要
+- 实事求是。git 没说的别替作者编
+
+==================
+实事求是规则
+==================
+- 只写 git history 里真正发生的事,commit message 里没写的别瞎编
+- 别替作者捏造情绪("卡了一晚上""试了三次")
+- 别凭空说时间("一个月前""半年前")
+- 提团队/朋友时不确定性别用名字带过`;
 
 const DRAFT_PROMPT_TEMPLATE = `${'$'}{voice}
 
-任务:看下面的 git 历史和当前未 commit 改动,帮作者起草 1 到 3 条候选进展。
+==================
+任务
+==================
+看下面的 git 历史和当前未 commit 改动,挑一个最值得说的角度,起草一条进展。
 
-每条候选两部分:
-1. text 是进展正文(Tinker voice)
-2. rationale 是一两句话说为什么这条值得发(给作者筛选用,不会发布)
+注意:
+- 只起草 1 条,不是 1-3 条。LLM 写多了反而都平庸。
+- 这一条要符合上面所有规则,尤其是字数(150-280 字)和硬性禁用清单。
+- 如果 git 全是 typo / 格式调整 / 自动 lint / 没真实信号,返回 { "candidates": [] }。
+- 写完之前自检一遍:有没有 ALL_CAPS 标识符?有没有版本号?有没有中圆点(·)?有没有 em-dash?有没有"接着...然后..."?有的话重写。
 
-如果 git 历史全是 typo,格式调整,没意义的小修补,返回空数组 { "candidates": [] }。宁可少,不要凑数。
-
-输出严格 JSON 格式(只输出 JSON 本体,不要 markdown 代码块):
+输出严格 JSON(只输出 JSON 本体,不要 markdown 代码块):
 {
   "candidates": [
-    { "text": "...", "rationale": "..." }
+    { "text": "...", "rationale": "一句话说为什么挑这个角度,不会发布" }
   ]
 }
 
+==================
 Git 时间窗:${'$'}{since}
 
 Git commits:
@@ -343,10 +380,32 @@ async function llmQuickDraft(cfg, opts = {}) {
     if (!gitCtx || !gitCtx.log) return null;
     const candidates = await llmDraft(cfg, gitCtx);
     if (!candidates || candidates.length === 0) return null;
-    return candidates[0].text || null;
+    return sanitizeDraft(candidates[0].text || null);
   } catch (e) {
     return null;  // 静默失败 · 不打断 prompt 流程
   }
+}
+
+// 草稿后处理 · 抹掉最常见的 LLM tell
+// 设计原则:只动那些 99% 是 AI 写作 tell 的东西 (em-dash · 堆中圆点)
+// 不动正常的中文标点 · 不擅自重写句子
+function sanitizeDraft(text) {
+  if (!text) return null;
+  let t = text;
+  // em-dash 几乎全是 AI tell · 转成逗号
+  t = t.replace(/——+/g, '，');
+  t = t.replace(/[­‐‑‒–—―]+/g, '，');
+  // 句中堆 · 的兜底:正文里超过 2 次 · 间隔分隔的全换成逗号
+  const midDotCount = (t.match(/(?<=[^\s])·(?=[^\s])/g) || []).length;
+  if (midDotCount > 2) {
+    t = t.replace(/(?<=[^\s])·(?=[^\s])/g, '，');
+  }
+  // 多个连续标点折叠
+  t = t.replace(/，{2,}/g, '，');
+  t = t.replace(/。{2,}/g, '。');
+  // trim 末尾的标点
+  t = t.replace(/[，、；]\s*$/, '。');
+  return t.trim();
 }
 
 // =============================================
@@ -1601,6 +1660,40 @@ async function cmdCheck(opts) {
     choices.push({ name: '静音 24 小时', value: 'mute' });
   }
 
+  // v0.3 --json mode · 给 AI agent 用 · 不弹 select · 输出 JSON + 写 pending
+  // 让 Claude Code / Cursor 等无 TTY 的环境也能驱动 tinker
+  if (opts.json) {
+    // 持久化触发上下文 · 供后续 tinker resolve 用
+    const pending = {
+      at: now,
+      kind: result.kind,
+      priority: result.priority,
+      msg: stripAnsi(result.msg),
+      suggestion: result.suggestion || '',
+      projectId: repoCfg.projectId,
+      projectName: repoCfg.projectName,
+      commitTitle: (() => { try { return execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim(); } catch { return ''; } })(),
+      session: result.session || null,  // ui-session 时携带 before snapshot path 等
+    };
+    savePending(pending);
+    // 写 state · 标记已 prompt · 防重复触发
+    state.lastPromptedAt = now;
+    if (result.priority < 70) state.lowFiredTodayKey = todayKey();
+    savePromptState(state);
+    // 输出结构化 JSON 给调用方解析
+    const out = {
+      fired: true,
+      kind: result.kind,
+      priority: result.priority,
+      msg: stripAnsi(result.msg),
+      suggestion: result.suggestion || '',
+      context: repoCfg.projectName,
+      choices: choices.map(c => ({ id: c.value, label: stripAnsi(c.name) })),
+    };
+    process.stdout.write(JSON.stringify(out) + '\n');
+    return;
+  }
+
   const { select, input } = require('@inquirer/prompts');
   let choice;
   try {
@@ -1831,6 +1924,108 @@ async function cmdSession(sub) {
   process.exit(1);
 }
 
+// v0.3 pending file · 给 --json 模式持久化 prompt 状态 · 后续 tinker resolve 用
+function pendingPath() { return path.join(CONFIG_DIR, 'pending.json'); }
+function savePending(p) {
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.writeFileSync(pendingPath(), JSON.stringify(p, null, 2));
+}
+function loadPending() {
+  if (!fs.existsSync(pendingPath())) return null;
+  try { return JSON.parse(fs.readFileSync(pendingPath(), 'utf-8')); } catch { return null; }
+}
+function clearPending() {
+  if (fs.existsSync(pendingPath())) { try { fs.unlinkSync(pendingPath()); } catch {} }
+}
+// strip ANSI 颜色码 · JSON 里不该带终端控制符
+function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, ''); }
+
+// v0.3 cmdResolve · 接受外部 (AI agent) 决定的 choice + 可选 text · 执行 pending 动作
+// 用法:
+//   tinker resolve push-decision --message "装了 fnm 替代 nvm · 启动快多了"
+//   tinker resolve ship -m "..."
+//   tinker resolve stuck -m "..."
+//   tinker resolve later        # 不需要 text
+//   tinker resolve skip-today
+//   tinker resolve mute
+//   tinker resolve mute-30m
+//   tinker resolve skip-once
+async function cmdResolve(choice, opts) {
+  if (!choice) { err('用法: tinker resolve <choice-id> [-m "文本"]'); process.exit(1); }
+  const pending = loadPending();
+  if (!pending) { err('没有待处理的提示 (pending.json) · 先跑 tinker check --json'); process.exit(1); }
+  const text = (opts && opts.text || '').trim();
+  const state = loadPromptState();
+  const now = Date.now();
+  state.lastPromptedAt = now;
+
+  // 文本类动作:需要 -m "..."
+  const needsText = ['push', 'push-brand-self', 'push-brand-meta', 'push-decision', 'ship', 'prototype', 'stuck', 'stuck-quiet'];
+  if (needsText.includes(choice) && !text) {
+    err('这个动作需要文本: tinker resolve ' + choice + ' -m "一句话"');
+    process.exit(1);
+  }
+
+  try {
+    if (choice === 'push' || choice === 'push-brand-self' || choice === 'push-brand-meta' || choice === 'push-decision') {
+      const cfg = mustHaveConfig();
+      await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
+      state.lastPushAtByProject = state.lastPushAtByProject || {};
+      state.lastPushAtByProject[pending.projectId] = now;
+      const okMsg = choice === 'push-decision' ? '✓ 决策记下来了' : '发出去了';
+      ok(okMsg);
+    } else if (choice === 'ship' || choice === 'prototype') {
+      const cfg = mustHaveConfig();
+      await apiAction(cfg, 'exhibitProject', {
+        projectId: pending.projectId,
+        kind: choice,
+        statement: text,
+        seekingFeedback: true,
+      });
+      state.lastPushAtByProject = state.lastPushAtByProject || {};
+      state.lastPushAtByProject[pending.projectId] = now;
+      ok(choice === 'ship' ? '✦ 完工 · 已进陈列馆' : '◐ 原型 · 已进陈列馆');
+    } else if (choice === 'stuck' || choice === 'stuck-quiet') {
+      const cfg = mustHaveConfig();
+      await apiAction(cfg, 'changeProjectStatus', { projectId: pending.projectId, newStatus: 'stuck' });
+      await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
+      state.lastPushAtByProject = state.lastPushAtByProject || {};
+      state.lastPushAtByProject[pending.projectId] = now;
+      ok('⚠ 卡住了 · 已通知关心你的人');
+    } else if (choice === 'later') {
+      state.laterUntil = now + 60 * 60 * 1000;
+      ok('1 小时后再问');
+    } else if (choice === 'skip-today') {
+      state.dismissedTodayKey = todayKey();
+      ok('今天不再问 · 明天见');
+    } else if (choice === 'skip-once') {
+      ok('好 · 接着搞');
+    } else if (choice === 'mute') {
+      state.mutedUntil = now + 24 * 60 * 60 * 1000;
+      ok('静音 24 小时');
+    } else if (choice === 'mute-30m') {
+      state.mutedUntil = now + 30 * 60 * 1000;
+      ok('暂停 30 分钟 · 出去走走');
+    } else if (choice === 'ui-push') {
+      // UI session 的对比图流程比较复杂 · alpha 期 AI 模式先不支持
+      // 降级成普通 push · 不贴对比图
+      const cfg = mustHaveConfig();
+      await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
+      state.lastPushAtByProject = state.lastPushAtByProject || {};
+      state.lastPushAtByProject[pending.projectId] = now;
+      ok('发出去了 · (AI 模式暂不支持对比图)');
+    } else {
+      err('未知 choice: ' + choice);
+      process.exit(1);
+    }
+    savePromptState(state);
+    clearPending();
+  } catch (e) {
+    err(e.message);
+    process.exit(1);
+  }
+}
+
 function cmdMute(args) {
   const arg = (args || '').trim();
   const state = loadPromptState();
@@ -1931,6 +2126,8 @@ function parseArgs(args) {
     else if (a === '--image') opts.image = args[++i];
     else if (a.startsWith('--image=')) opts.image = a.slice('--image='.length);
     else if (a === '--no-screenshot') opts.noScreenshot = true;
+    else if (a === '--json') opts.json = true;
+    else if (a === '--from-hook') opts.fromHook = true;
     // 不以 - 开头的第一个 positional 当成草稿文件路径
     else if (!a.startsWith('-') && !opts.draftFile) {
       // 必须是已存在的文件 / 以 .md 结尾
@@ -1962,7 +2159,8 @@ async function main() {
         else if (args[1] === 'uninstall') cmdHookUninstall();
         else { err('用法: tinker hook install | uninstall'); process.exit(1); }
         break;
-      case 'check': await cmdCheck({ fromHook: opts.fromHook || args.includes('--from-hook') }); break;
+      case 'check': await cmdCheck({ fromHook: opts.fromHook, json: opts.json }); break;
+      case 'resolve': await cmdResolve(args[1], opts); break;
       case 'mute': cmdMute(args[1]); break;
       case 'session': await cmdSession(args[1]); break;
       case 'llm': await cmdLlm(args[1]); break;
