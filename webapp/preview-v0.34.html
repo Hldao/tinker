@@ -34,6 +34,26 @@
     border: 1px solid var(--rule);
     white-space: nowrap;
   }
+  /* renderRichText 自动识别 URL · 让粘在正文里的预览链接一点就走
+     mono 字号收一档 · vermilion + 虚线下划线 · 安静不吵 · hover 时实线
+     ↗ 后缀跟陈列馆 / 项目页的 → 箭头形成箭头家族 · 行内 ↗=跳出去, 块级 →=动作 */
+  .inline-link {
+    color: var(--vermilion);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--vermilion);
+    word-break: break-all;
+    transition: border-bottom-style 0.2s ease;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.92em;
+  }
+  .inline-link:hover {
+    border-bottom-style: solid;
+  }
+  .inline-link::after {
+    /* \00a0 = 不可断空格 · 让 ↗ 永远跟 URL 末尾贴在一起, 不会被 word-break 折下行 */
+    content: '\00a0↗';
+    font-size: 0.85em;
+  }
   /* Fraunces — 大字号 hero 专用 · variable opsz 144 让大字渲染最优雅 */
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
 
@@ -129,6 +149,63 @@
   }
   .feed-cta-line { font-family: 'Newsreader', serif; font-size: 14px; color: var(--vermilion); cursor: pointer; border-bottom: 1px solid var(--vermilion); padding-bottom: 1px; transition: all 0.15s; display: inline-block; }
   .feed-cta-line:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+  /* v0.61 编辑性 / 工具性分层 · 主屏顶部从"竖叠 5 行"改成"编辑 header + control ribbon"
+     灵感: 周刊电子版的 section opener (NYT / FT) · 但用 Tinker 自己的 vermilion + mono / serif 双轨
+     编辑部分 (serif): 标题 + 副标 + CTA 合一句 · 像杂志开篇
+     ribbon 部分 (mono): 视图切换 + 状态数据 · 一行 mono 横排 · 上下细线夹 */
+  .workshop-ribbon {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    padding: 14px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .workshop-ribbon-left { display: inline-flex; align-items: center; gap: 28px; }
+  .workshop-ribbon-right { color: var(--sepia); font-size: 11px; letter-spacing: 0.12em; }
+  .workshop-ribbon-right .num { color: var(--ink); font-weight: 500; padding: 0 2px; font-variant-numeric: tabular-nums; }
+  .ribbon-stats:not(:empty)::before {
+    content: '';
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--vermilion); margin-right: 8px;
+    vertical-align: 1px;
+    animation: live-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1); }
+  }
+
+  .view-pill {
+    color: var(--sepia);
+    cursor: pointer;
+    padding: 4px 0;
+    border-bottom: 1px solid transparent;
+    transition: color 0.22s ease, border-color 0.22s ease, transform 0.18s ease;
+    position: relative;
+  }
+  .view-pill:hover { color: var(--ink); transform: translateY(-1px); }
+  .view-pill.active {
+    color: var(--vermilion);
+    border-bottom-color: var(--vermilion);
+  }
+  .view-pill .view-icon {
+    display: inline-block;
+    width: 14px; height: 14px;
+    vertical-align: -2px;
+    margin-right: 6px;
+    opacity: 0.75;
+    transition: opacity 0.22s ease;
+  }
+  .view-pill.active .view-icon { opacity: 1; }
+  .view-pill:hover .view-icon { opacity: 1; }
 
   .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
   .entry:hover { background: rgba(194, 65, 12, 0.04); }
@@ -2351,13 +2428,11 @@
 
   /* ───────────────────────────────────────────────────────────────
      B · feed-title 前加 EYEBROW 视觉锚点
-     原 feed-head: 大标题 "今天有动静" + 副标 + cta · 缺乏顶部视觉抓手
-     加: mono uppercase "DISPATCHES · 今日工房" + 右侧延伸 thin bar
-     是关于页 eyebrow 系统在主屏的延伸
+     v0.60 革命:动静 + 陈列馆合并为"工坊" · 两屏共用同一 eyebrow
      ─────────────────────────────────────────────────────────────── */
-  /* 用 feed-head 容器的 ::before 加 eyebrow · CSS 文本 hardcode (不动 markup) */
-  #screen-feed > .mb-8::before {
-    content: '今日工房';
+  #screen-feed > .mb-8::before,
+  #screen-showcase > .mb-6::before {
+    content: '工 坊';
     display: flex;
     align-items: center;
     gap: 14px;
@@ -4482,6 +4557,17 @@
     object-fit: cover;
     display: block;
   }
+  /* —— 竖屏适配 (手机小程序 / 移动应用截图) ——
+     JS 在 img onload 时探测自然比例 · w/h < 0.85 加 .is-portrait
+     封面框换 4:5 · 图换 contain · 两边纸色留白 · 完整呈现 · 不切边 */
+  .showcase-card-figure.is-portrait {
+    aspect-ratio: 4 / 5;
+  }
+  .showcase-card-figure.is-portrait img {
+    object-fit: contain;
+    padding: 14px;
+    box-sizing: border-box;
+  }
 
   /* —— 描述 —— */
   .showcase-card .showcase-card-desc {
@@ -5041,6 +5127,127 @@
   /* ===============================================================
      END v0.58 系统级集体性 + 通知页升级
      =============================================================== */
+
+  /* ================================================================
+   *  v0.62 · exhibit ceremony modal 可读性增强
+   *  --------------------------------------------------------------
+   *  用户反馈: "ship/exhibit modal 文字颜色和背景颜色太接近"
+   *
+   *  诊断 (5 处对比度问题):
+   *    ① modal-sub / upload-hint / extra-sub 全用 italic + sepia · 多处弱化叠加
+   *    ② exhibit-kind-pill 非 active 时 rule 色边框几乎看不见
+   *    ③ ekind-sub 字间空格 "还在打磨 · 但可以玩" 10.5px sepia 看着模糊
+   *    ④ statement-label "完工感想" mono 11px sepia 隐没在 paper 底
+   *    ⑤ upload-area 无边界 · 用户看不出"加截图"按钮在哪
+   *
+   *  另外清: EXHIBIT_KIND_COPY 表里 statementLabel/quoteLabel
+   *  4 处字间空格 (完工感想/原型说明/设计想法/近一笔) v0.51 漏的
+   *  ================================================================ */
+
+  /* —— 弱文字三联击全部加深 + 去 italic —— */
+  .modal-paper .modal-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 14.5px !important;
+    line-height: 1.6;
+    letter-spacing: 0.005em;
+  }
+  .modal-paper .upload-hint {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    line-height: 1.5;
+    letter-spacing: 0.005em;
+  }
+  .modal-paper .update-extras .extra-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    line-height: 1.55;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— exhibit-kind-pill 三件套加强 —— */
+  .modal-paper .exhibit-kind-pill {
+    border: 1px solid var(--sepia-light) !important;
+    background: rgba(245, 241, 232, 0.45) !important;
+  }
+  .modal-paper .exhibit-kind-pill:hover {
+    border-color: var(--ink-soft) !important;
+    background: rgba(245, 241, 232, 0.75) !important;
+  }
+  .modal-paper .exhibit-kind-pill.active {
+    background: rgba(194, 65, 12, 0.05) !important;
+    border-color: var(--vermilion) !important;
+    box-shadow: 0 0 0 1px var(--vermilion);
+  }
+  .modal-paper .exhibit-kind-pill[data-kind="prototype"].active {
+    background: rgba(184, 134, 11, 0.06) !important;
+    box-shadow: 0 0 0 1px #b8860b;
+  }
+  .modal-paper .exhibit-kind-pill[data-kind="design"].active {
+    background: rgba(77, 124, 15, 0.05) !important;
+    box-shadow: 0 0 0 1px var(--moss);
+  }
+  /* 非 active 的 glyph 也加深 (不只 sepia) */
+  .modal-paper .exhibit-kind-pill .ekind-glyph {
+    color: var(--ink-soft) !important;
+  }
+  /* ekind-sub 加深 + 字号 + letter-spacing 适配 */
+  .modal-paper .exhibit-kind-pill .ekind-sub {
+    color: var(--ink-soft) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+  }
+
+  /* —— statement-label / 「想知道」等 mono small caps 加深 —— */
+  #exhibit-statement-label,
+  .modal-paper label.mono.text-xs {
+    color: var(--ink-soft) !important;
+    font-weight: 500;
+  }
+
+  /* —— upload-area 明确边界 + paper bg —— */
+  .modal-paper .upload-area {
+    border: 1px dashed var(--sepia-light);
+    background: rgba(245, 241, 232, 0.4);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-top: 16px;
+  }
+  .modal-paper .upload-trigger {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid var(--sepia-light);
+    background: var(--bg);
+    color: var(--ink) !important;
+    font-family: 'Newsreader', serif;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    font-style: normal !important;
+  }
+  .modal-paper .upload-trigger:hover {
+    background: rgba(194, 65, 12, 0.04);
+    border-color: var(--vermilion);
+    color: var(--vermilion) !important;
+  }
+
+  /* —— textarea / input-bare 边界更明确 —— */
+  .modal-paper .input-bare {
+    border-bottom: 1px solid var(--sepia-light) !important;
+    padding-bottom: 8px;
+    transition: border-color 0.18s ease;
+  }
+  .modal-paper .input-bare:focus {
+    border-bottom-color: var(--vermilion) !important;
+    outline: none;
+  }
+
+  /* ===============================================================
+     END v0.62 exhibit ceremony modal 可读性增强
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5048,14 +5255,13 @@
 <header class="masthead">
   <!-- v0.48 主行 · logo + 主 nav 3 项 + 独立 CTA -->
   <div class="max-w-3xl mx-auto px-8 py-5 masthead-main-row">
-    <div class="masthead-brand cursor-pointer" onclick="showScreen('feed')">
+    <div class="masthead-brand cursor-pointer" onclick="goHome()">
       <span class="title">Tinker</span>
       <span class="title-cn">捣鼓</span>
     </div>
     <div class="masthead-actions">
       <nav class="masthead-nav-primary">
-        <button onclick="showScreen('feed')">动静</button>
-        <button onclick="showScreen('showcase')">陈列馆</button>
+        <button onclick="goHome()">工坊</button>
         <button onclick="navMyWorkshop()">我的工作室</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
@@ -5077,18 +5283,40 @@
 <main class="max-w-3xl mx-auto px-8 py-12">
 
   <section class="screen active" id="screen-feed">
+    <!-- v0.61 编辑性 header · serif · 副标 + CTA 合一句 -->
     <div class="mb-8">
       <h1 class="feed-title mb-3">今天有动静</h1>
-      <p class="feed-sub mb-2">路过看一眼别人在做什么 — 时间倒序,不是热门排名</p>
-      <span class="feed-cta-line" onclick="openPickProject()">或者你今天也来记一笔 →</span>
-      <div id="feed-stats" class="feed-stats"></div>
+      <p class="feed-sub mb-2">
+        大家在做的、做出来的 — 路过看一眼别人在捣鼓什么。
+        <span class="feed-cta-line" onclick="openPickProject()">或者也来记一笔 →</span>
+      </p>
+    </div>
+    <!-- v0.61 control ribbon · mono · 视图切换 + 状态 -->
+    <div class="workshop-ribbon">
+      <div class="workshop-ribbon-left">
+        <span class="view-pill active" data-view="stream" onclick="switchMainView('stream')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+          时序看进展
+        </span>
+        <span class="view-pill" data-view="gallery" onclick="switchMainView('gallery')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          项目分组看积累
+        </span>
+      </div>
+      <div class="workshop-ribbon-right">
+        <span id="feed-stats" class="ribbon-stats"></span>
+      </div>
     </div>
     <div class="filter-row mb-4">
       <div id="tool-filters" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
       <div id="tracking-toggle-wrap"></div>
     </div>
-    <div id="feed-list"></div>
-    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
+    <div id="feed-list">
+      <div class="loading-initial text-center py-16 serif italic" style="color: var(--sepia);">
+        在拉取动静 ·
+      </div>
+    </div>
+    <div id="feed-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
       — 就这些了。我们刚起步,宁可这里空,也不刷数据 —
     </div>
   </section>
@@ -5192,21 +5420,37 @@
   </section>
 
   <section class="screen" id="screen-showcase">
+    <!-- v0.61 编辑性 header -->
     <div class="mb-6">
-      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">陈列馆</div>
       <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">Tinker 上所有人做完的、还能玩到的小作品都在这。时间倒序，<strong>不投票，不排行，看到喜欢的就去试用一下</strong>。</p>
-      <div id="showcase-stats" class="showcase-stats"></div>
-      <div class="showcase-publish-row">
-        <button class="showcase-publish-cta" onclick="openShipPick()">✦ 让你的作品也入馆</button>
+      <p class="feed-sub">大家在做的、做出来的 — 按项目分组,看每个作品的积累。</p>
+    </div>
+    <!-- v0.61 control ribbon · 跟动静屏共享样式 -->
+    <div class="workshop-ribbon">
+      <div class="workshop-ribbon-left">
+        <span class="view-pill" data-view="stream" onclick="switchMainView('stream')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+          时序看进展
+        </span>
+        <span class="view-pill active" data-view="gallery" onclick="switchMainView('gallery')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          项目分组看积累
+        </span>
+      </div>
+      <div class="workshop-ribbon-right">
+        <span id="showcase-stats" class="ribbon-stats"></span>
       </div>
     </div>
     <div class="filter-row mb-4">
       <div id="showcase-kind-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
     </div>
-    <div id="showcase-list"></div>
-    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
-      — 陈列馆收三类:跑通的、还在打磨的原型、设计稿。在做的过程在主屏「动静」看 —
+    <div id="showcase-list">
+      <div class="loading-initial text-center py-16 serif italic" style="color: var(--sepia);">
+        在拉取陈列馆 ·
+      </div>
+    </div>
+    <div id="showcase-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
+      — 工坊里所有能玩到的项目都在这。时序看进展那一面在隔壁视图 —
     </div>
   </section>
 
@@ -5426,9 +5670,14 @@
 <div id="modal-edit-workshop" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
     <h3 class="modal-title">编辑工作室</h3>
-    <p class="modal-sub">路过的人会看到 · @handle 不能改 (那是你的地址)</p>
+    <p class="modal-sub">handle 和 tagline 都能改 · 路过的人会看到</p>
     <div class="mb-5">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">我在做的事</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">handle · 你的地址</label>
+      <input id="ew-handle" class="input-bare" placeholder="字母 / 数字 / 下划线 / 中文 · 1-20 位">
+      <div class="field-hint" id="ew-handle-hint" style="color: var(--sepia);">改了之后 · 工作室 URL 会变 (旧链接失效) · 别人 @你 用旧名字会变普通文字 · 邮箱和 CLI 钥匙不动</div>
+    </div>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">tagline · 我在做的事</label>
       <input id="ew-tagline" class="input-bare" placeholder="一句话说明你的工作室">
     </div>
     <div class="flex justify-end gap-4 mt-6">
@@ -5533,7 +5782,7 @@
       </label>
     </div>
 
-    <label class="mono text-xs block mb-1 mt-5" id="exhibit-statement-label" style="color: var(--sepia); letter-spacing: 0.15em;">完 工 感 想</label>
+    <label class="mono text-xs block mb-1 mt-5" id="exhibit-statement-label" style="color: var(--sepia); letter-spacing: 0.15em;">完工感想</label>
     <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="" style="font-size: 16px; resize: vertical;"></textarea>
 
     <div class="upload-area">
@@ -5653,10 +5902,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.58 · 34 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.62 · 38 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.58</span>
+  <span class="bb-ver">v0.62</span>
 </div>
 
 <script>
@@ -5817,6 +6066,30 @@ async function refreshState() {
   state = await fetchState();
 }
 
+// v0.60 革命:主屏 (工坊) 两个视图 · feed=时序流 · showcase=项目分组
+// 用 localStorage stick 用户上一次的选择 · 让 home 按钮 / 入站 hash 都能回到对的视图
+function getStoredMainView() {
+  try { return localStorage.getItem('tinker_main_view') === 'gallery' ? 'gallery' : 'stream'; }
+  catch { return 'stream'; }
+}
+function setStoredMainView(v) {
+  try { localStorage.setItem('tinker_main_view', v); } catch {}
+}
+
+// 主屏入口 (顶 nav 的 "工坊" 按钮 + brand logo 点击)
+function goHome() {
+  const v = getStoredMainView();
+  if (v === 'gallery') showScreen('showcase');
+  else showScreen('feed');
+}
+
+// 视图切换 pill 点了走这里 · 切到对应屏 + 记忆
+function switchMainView(v) {
+  setStoredMainView(v);
+  if (v === 'gallery') showScreen('showcase');
+  else showScreen('feed');
+}
+
 function showScreen(name, ...args) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const t = document.getElementById('screen-' + name);
@@ -5834,6 +6107,9 @@ function showScreen(name, ...args) {
   if (location.hash !== newHash) {
     history.replaceState(null, '', newHash);
   }
+  // feed/showcase 是同一个"工坊"的两个视图 · 进任一屏都记忆
+  if (name === 'feed') setStoredMainView('stream');
+  else if (name === 'showcase') setStoredMainView('gallery');
 }
 
 // hash 路由 — 让项目页 / 工作室页有可分享 URL
@@ -5843,21 +6119,24 @@ function buildHash(name, args) {
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
-  if (name === 'showcase') return args && args[0] ? '#/showcase/' + encodeURIComponent(args[0]) : '#/showcase';
+  if (name === 'feed') return '#/';
+  // 项目分组视图 · 用短 hash /g · 老链接 /showcase 也兼容 (navigateFromHash 处)
+  if (name === 'showcase') return args && args[0] ? '#/g/' + encodeURIComponent(args[0]) : '#/g';
   return '#/';
 }
 
 function navigateFromHash() {
   const h = location.hash || '';
-  if (!h || h === '#/' || h === '#') return showScreen('feed');
+  if (!h || h === '#/' || h === '#') return goHome();  // 入站默认走记忆里的视图
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
   if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
   if (parts[0] === 'notifications') return showScreen('notifications');
   if (parts[0] === 'about') return showScreen('about');
   if (parts[0] === 'onboard') return showScreen('onboard');
-  if (parts[0] === 'showcase') return showScreen('showcase', parts[1]);
-  return showScreen('feed');
+  if (parts[0] === 'g') return showScreen('showcase', parts[1]);       // 新短 hash
+  if (parts[0] === 'showcase') return showScreen('showcase', parts[1]); // 老链接兼容
+  return goHome();
 }
 
 window.addEventListener('hashchange', navigateFromHash);
@@ -5936,6 +6215,14 @@ function renderRichText(text) {
   const paragraphs = String(text).split(/\n{2,}/);
   return paragraphs.map(para => {
     let s = escapeHtml(para);
+    // URL 自动链接 (放最前 · 在 markdown 之前 · 让 URL 里的 *` 之类不被误判)
+    // 尾巴上的 .,;:!?)] 不算 URL 一部分 · 算句末标点
+    s = s.replace(/(https?:\/\/[^\s<>"]+)/g, (match) => {
+      let url = match, suffix = '';
+      const m = match.match(/^(.+?)([.,;:!?\)\]]+)$/);
+      if (m) { url = m[1]; suffix = m[2]; }
+      return `<a href="${url}" target="_blank" rel="noopener" class="inline-link" onclick="event.stopPropagation()">${url}</a>${suffix}`;
+    });
     s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
     s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
@@ -6097,8 +6384,8 @@ function renderFeed() {
   }
   // v0.37: day-label 退化为"换天信号" · 默认上下文是今天 (masthead 已有日期)
   // 只在"从今天 → 昨天" 等跨越时间边界时插入 label · 第一个"今天"group 不出现 label
+  // (todayKey 在上面 v0.58 stats 段已经声明 · 直接复用 · 否则同 scope 重复 const 会语法错)
   const groups = groupEventsByDay(events);
-  const todayKey = makeDateKey(new Date());
   groups.forEach(({ day, items, dateKey }, groupIdx) => {
     const skipLabel = (groupIdx === 0 && dateKey === todayKey);
     if (!skipLabel) {
@@ -6106,6 +6393,9 @@ function renderFeed() {
     }
     items.forEach(e => list.appendChild(makeEntryEl(e)));
   });
+  // 静态 footer 跟 list 一起出场 · 初始化时是 hidden · 防止 "在拉取" + "就这些了" 同框矛盾
+  const footer = document.getElementById('feed-static-footer');
+  if (footer) footer.style.display = '';
 }
 
 // 按日 group · 返回 [{day, items, dateKey}, ...] · 保持时间倒序
@@ -6412,8 +6702,11 @@ function renderProject(owner, slug) {
               const cfg = EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship;
               return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: ${cfg.badgeColor};">${cfg.glyph} 改陈列 / 换 kind</span>`;
             }
-            return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 放进陈列馆</span>`;
+            return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 办仪式 (可选)</span>`;
           })()}
+          ${p.hiddenFromShowcase
+            ? `<span class="small-action" onclick="toggleHidden('${p.id}', false)" style="color: var(--sepia);">已隐藏 → 重新入馆</span>`
+            : `<span class="small-action" onclick="toggleHidden('${p.id}', true)" style="color: var(--sepia);">暂不入馆</span>`}
         ` : ''}
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
@@ -6639,23 +6932,42 @@ function daysSinceShip(ts) {
 }
 
 function renderShowcase(focusId) {
-  // 收集所有"陈列中"的项目 · 取决于是否有 kind in ['ship','prototype','design'] 的 update
-  // exhibit update 选最新一条 · 它的 kind / text / images 决定卡片视觉
+  // v0.59 根本路: 入馆资格 = 非归档 + 有 update + 没被作者隐藏
+  // 仪式 (ship/prototype/design) 不再是门票 · 只决定 badge kind 和 reflection 优先级
+  // representativeUpdate 选取顺序: 作者 pin > kind 仪式 update > 最新 update
   const items = [];
   state.projects.forEach(p => {
-    if (p.status === 'archive') return; // 归档项目不出现
-    const exhibitUpdate = findExhibitUpdate(p);
-    if (!exhibitUpdate) return;
-    const reflection = exhibitUpdate.text || '';
-    const shipAt = p.shippedAt || exhibitUpdate.at || 0;
+    if (p.status === 'archive') return;       // 归档不出现
+    if (p.hiddenFromShowcase) return;          // 作者主动隐藏
+    if (!p.updates || p.updates.length === 0) return; // 完全没动过的不进馆 (避免空壳)
+
+    const rep = findRepresentativeUpdate(p);
+    if (!rep) return;
+    const exhibitUpdate = findExhibitUpdate(p);  // 仪式 update (任何 kind ∈ EXHIBIT_KINDS)
+
+    // 反思文本 · 取代表 update 的 text
+    const reflection = rep.text || '';
+
+    // kind 决定 badge · 优先用仪式 kind · 否则:
+    //   project.status === 'done' → ship (虽然没办仪式 · 但项目状态是 done · 给"完工" badge)
+    //   其他 → progress (在做)
+    let kind;
+    if (exhibitUpdate) kind = exhibitUpdate.kind;
+    else if (p.status === 'done') kind = 'ship';
+    else kind = 'progress';
+
+    // 上馆 / 近动 时间
+    const shipAt = p.shippedAt || (exhibitUpdate && exhibitUpdate.at) || rep.at || 0;
+
+    // 封面图: 代表 update 的图 > 项目任何 update 的图
     let coverImage = null;
-    if (exhibitUpdate.images && exhibitUpdate.images.length > 0) {
-      coverImage = exhibitUpdate.images[0];
+    if (rep.images && rep.images.length > 0) {
+      coverImage = rep.images[0];
     } else {
       const upWithImg = (p.updates || []).find(u => u.images && u.images.length > 0);
       if (upWithImg) coverImage = upWithImg.images[0];
     }
-    items.push({ p, reflection, shipAt, shipUpdateId: exhibitUpdate.id, kind: exhibitUpdate.kind, coverImage });
+    items.push({ p, reflection, shipAt, shipUpdateId: rep.id, kind, coverImage });
   });
   items.sort((a, b) => b.shipAt - a.shipAt);
 
@@ -6752,8 +7064,8 @@ function renderShowcase(focusId) {
           ${stamps.length > 0 ? `<div class="showcase-stamps-row">${stamps.join('')}</div>` : '<div></div>'}
           <div class="showcase-card-actions">
             ${currentUser.handle === p.owner ? `
-              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改 / 补图</span>
-              <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">让它出馆</span>
+              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">${kind === 'progress' ? '✦ 升格 · 办仪式' : '改 / 补图'}</span>
+              <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">暂不入馆</span>
             ` : ''}
             <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工作室 →</a>
             ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : ''}
@@ -6763,10 +7075,31 @@ function renderShowcase(focusId) {
     `;
   }).join('');
 
+  // 封面图按自然比例自动适配 · w/h < 0.85 走竖屏 (4:5 + contain · 给手机截图)
+  // 默认 16:9 cover (给 PC / 网页截图) · 在 img load 后检测并加 class
+  list.querySelectorAll('.showcase-card-figure img').forEach(adjustCoverAspect);
+
+  // 静态 footer 跟 list 一起出场 · 防止初始 "在拉取陈列馆" + footer 同框矛盾
+  const footer = document.getElementById('showcase-static-footer');
+  if (footer) footer.style.display = '';
+
   // 如果有 focusId,滚动到那张卡 + flash 高亮 (跟通知点开锚点一致体验)
   if (focusId) {
     setTimeout(() => flashAnchor('showcase-' + focusId), 80);
   }
+}
+
+// 探测图自然比例 · 给容器加 is-portrait class · CSS 接管展示
+function adjustCoverAspect(img) {
+  const apply = () => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return;
+    const aspect = w / h;
+    const fig = img.parentElement;
+    if (fig && aspect < 0.85) fig.classList.add('is-portrait');
+  };
+  if (img.complete) apply();
+  else img.addEventListener('load', apply, { once: true });
 }
 
 /* ============ NOTIFICATIONS ============ */
@@ -7375,18 +7708,30 @@ const STATUS_HINTS = {
 function openEditWorkshop() {
   const u = state.users[currentUser.handle];
   if (!u) return;
+  document.getElementById('ew-handle').value = currentUser.handle || '';
   document.getElementById('ew-tagline').value = u.tagline || '';
   document.getElementById('modal-edit-workshop').classList.remove('hidden');
   setTimeout(() => document.getElementById('ew-tagline').focus(), 50);
 }
 async function submitEditWorkshop() {
+  const newHandle = document.getElementById('ew-handle').value.trim();
   const tagline = document.getElementById('ew-tagline').value.trim();
+  if (!newHandle) { showToast('handle 不能空 · 那是你的地址'); return; }
   if (!tagline) { showToast('一句话总不能空着'); return; }
+  const oldHandle = currentUser.handle;
   try {
+    // handle 变了就先 rename · 失败的话不会动 tagline · 让用户知道哪里错
+    if (newHandle !== oldHandle) {
+      await apiAction('renameHandle', { handle: newHandle });
+      currentUser.handle = newHandle;
+    }
     await apiAction('editTagline', { tagline });
     closeModal('modal-edit-workshop');
+    // 全屏刷一遍 state · 把 mention / workshop URL 等同步
+    state = await fetchState();
+    refreshMastheadHandle();
     renderWorkshop(currentUser.handle);
-    showToast('改好了');
+    showToast(newHandle !== oldHandle ? `改好了 · 新地址 @${newHandle}` : '改好了');
   } catch (e) { showToast(e.message); }
 }
 
@@ -7684,21 +8029,35 @@ function openShipPick() {
   document.getElementById('modal-ship-pick').classList.remove('hidden');
 }
 
-// v0.54: 陈列馆"让它出馆"撤展 · 把项目从 done 改回 paused
+// 项目页 owner 入口 · 项目可见性单向 toggle (true=隐藏, false=入馆)
+async function toggleHidden(projectId, hidden) {
+  const p = projectById(projectId);
+  if (!p) return;
+  try {
+    await apiAction('toggleShowcaseVisibility', { projectId, hidden });
+    state = await fetchState();
+    renderProject(p.owner, p.slug);
+    showToast(hidden ? '已暂不入馆 · 工作室里还在' : '已重新放回陈列馆');
+  } catch (e) { showToast(e.message); }
+}
+
+// v0.59 根本路: 撤展不再改 status · 只改 hiddenFromShowcase
+// 项目状态保留 (active 还是 active, done 还是 done) · 时间线进展继续 · 只是不在陈列馆出现
 async function confirmWithdraw(ev, projectId) {
   ev.stopPropagation();
   const p = projectById(projectId);
   if (!p) return;
   const sure = confirm(
     '让「' + p.name + '」暂时撤出陈列馆？\n\n' +
-    '项目会改回「暂停」状态，留在你的工作室里。\n' +
-    '随时可以再让它入馆 — 历史感想和图都还在。'
+    '项目状态不变 · 工作室里还在 · 时间线进展继续 · 只是不在陈列馆出现。\n' +
+    '随时可以再让它入馆 — 历史一切都还在。'
   );
   if (!sure) return;
   try {
-    await apiAction('changeProjectStatus', { projectId, newStatus: 'paused' });
+    await apiAction('toggleShowcaseVisibility', { projectId, hidden: true });
+    state = await fetchState();   // 同步 hiddenFromShowcase 字段
     renderShowcase();
-    showToast('「' + p.name + '」已撤出陈列馆，回到工作室');
+    showToast('「' + p.name + '」已撤出陈列馆');
   } catch (e) { showToast(e.message); }
 }
 
@@ -7715,12 +8074,12 @@ const EXHIBIT_KIND_COPY = {
     titleReship: '改一下完工感想 / 补图',
     sub: '跑通了,可以正常用了。这条感想会进陈列馆作为这件作品的代表内容,写你最想说的那句。',
     subReship: '把感想改顺手,或者补传截图。之前的会被这版替换。',
-    statementLabel: '完 工 感 想',
+    statementLabel: '完工感想',
     placeholder: '比如,卡了三周的 cron 终于把状态对上了',
     feedbackPlaceholder: '5 秒内看得懂这是干嘛的吗 / 这个流程哪里不顺',
     cta: '✦ 完工 · 进陈列馆',
     ctaReship: '✦ 更新陈列馆',
-    quoteLabel: '完 工 感 想',
+    quoteLabel: '完工感想',
     showcaseVerb: '入馆',
     tryCtaText: '去试用 →',
   },
@@ -7732,12 +8091,12 @@ const EXHIBIT_KIND_COPY = {
     titleReship: '改一下原型说明 / 补图',
     sub: '还在打磨,但已经能玩。说一下你想试什么,或者大家可以怎么帮你。',
     subReship: '把说明改顺手,或者补传截图。之前的会被这版替换。',
-    statementLabel: '原 型 说 明',
+    statementLabel: '原型说明',
     placeholder: '比如,这个原型方向还没定 · 想看大家拿起来用会不会顺',
     feedbackPlaceholder: '操作上哪里别扭 / 你会不会接着用 / 哪一步让你愣住',
     cta: '◐ 进陈列馆作为原型',
     ctaReship: '◐ 更新原型',
-    quoteLabel: '原 型 说 明',
+    quoteLabel: '原型说明',
     showcaseVerb: '在试',
     tryCtaText: '去体验 →',
   },
@@ -7749,14 +8108,25 @@ const EXHIBIT_KIND_COPY = {
     titleReship: '改一下设计想法 / 补图',
     sub: '设计稿 / 概念 / 还没实现。说一下这是关于什么的,想要哪种反馈。',
     subReship: '把设计想法改顺手,或者补传图。之前的会被这版替换。',
-    statementLabel: '设 计 想 法',
+    statementLabel: '设计想法',
     placeholder: '比如,这是我对 X 问题的设计 · 想要方向上的反馈',
     feedbackPlaceholder: '方向对不对 / 哪里没说清楚 / 有没有想到我没想到的',
     cta: '○ 进陈列馆作为设计',
     ctaReship: '○ 更新设计',
-    quoteLabel: '设 计 想 法',
+    quoteLabel: '设计想法',
     showcaseVerb: '概念',
     tryCtaText: '去看看 →',
+  },
+  // v0.59 根本路: "进行中" 默认 kind · 没做仪式的项目自动入馆时用这个铭牌
+  // 不在 EXHIBIT_KINDS 数组里 (filter pills 不显示这个 kind 选项) · 走"全部"才看到
+  progress: {
+    glyph: '·',
+    name: '在做',
+    badgeColor: 'var(--sepia)',
+    statementLabel: '近一笔',
+    quoteLabel: '近一笔',
+    showcaseVerb: '更新于',
+    tryCtaText: '去试试 →',
   },
 };
 
@@ -7765,6 +8135,22 @@ const EXHIBIT_KINDS = ['ship', 'prototype', 'design'];
 function findExhibitUpdate(p) {
   if (!p || !p.updates) return null;
   return p.updates.find(u => EXHIBIT_KINDS.includes(u.kind)) || null;
+}
+
+// v0.59 根本路: 陈列馆解耦 ceremony 仪式跟入馆资格 · 任何有 update 的非归档
+// 项目自动入馆 · kind 仪式只决定徽章。 这个函数挑出"代表 update":
+//   1. 作者 pin 的那一条
+//   2. 否则最近一条 kind 仪式 update (ship/prototype/design)
+//   3. 否则最新一条 update (p.updates[0])
+function findRepresentativeUpdate(p) {
+  if (!p || !p.updates || p.updates.length === 0) return null;
+  if (p.pinnedUpdateId) {
+    const pinned = p.updates.find(u => u.id === p.pinnedUpdateId);
+    if (pinned) return pinned;
+  }
+  const exhibit = findExhibitUpdate(p);
+  if (exhibit) return exhibit;
+  return p.updates[0];
 }
 
 function openShipCeremony(projectId) {

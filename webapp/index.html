@@ -5127,6 +5127,127 @@
   /* ===============================================================
      END v0.58 系统级集体性 + 通知页升级
      =============================================================== */
+
+  /* ================================================================
+   *  v0.62 · exhibit ceremony modal 可读性增强
+   *  --------------------------------------------------------------
+   *  用户反馈: "ship/exhibit modal 文字颜色和背景颜色太接近"
+   *
+   *  诊断 (5 处对比度问题):
+   *    ① modal-sub / upload-hint / extra-sub 全用 italic + sepia · 多处弱化叠加
+   *    ② exhibit-kind-pill 非 active 时 rule 色边框几乎看不见
+   *    ③ ekind-sub 字间空格 "还在打磨 · 但可以玩" 10.5px sepia 看着模糊
+   *    ④ statement-label "完工感想" mono 11px sepia 隐没在 paper 底
+   *    ⑤ upload-area 无边界 · 用户看不出"加截图"按钮在哪
+   *
+   *  另外清: EXHIBIT_KIND_COPY 表里 statementLabel/quoteLabel
+   *  4 处字间空格 (完工感想/原型说明/设计想法/近一笔) v0.51 漏的
+   *  ================================================================ */
+
+  /* —— 弱文字三联击全部加深 + 去 italic —— */
+  .modal-paper .modal-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 14.5px !important;
+    line-height: 1.6;
+    letter-spacing: 0.005em;
+  }
+  .modal-paper .upload-hint {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    line-height: 1.5;
+    letter-spacing: 0.005em;
+  }
+  .modal-paper .update-extras .extra-sub {
+    color: var(--ink-soft) !important;
+    font-style: normal !important;
+    font-size: 12.5px !important;
+    line-height: 1.55;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— exhibit-kind-pill 三件套加强 —— */
+  .modal-paper .exhibit-kind-pill {
+    border: 1px solid var(--sepia-light) !important;
+    background: rgba(245, 241, 232, 0.45) !important;
+  }
+  .modal-paper .exhibit-kind-pill:hover {
+    border-color: var(--ink-soft) !important;
+    background: rgba(245, 241, 232, 0.75) !important;
+  }
+  .modal-paper .exhibit-kind-pill.active {
+    background: rgba(194, 65, 12, 0.05) !important;
+    border-color: var(--vermilion) !important;
+    box-shadow: 0 0 0 1px var(--vermilion);
+  }
+  .modal-paper .exhibit-kind-pill[data-kind="prototype"].active {
+    background: rgba(184, 134, 11, 0.06) !important;
+    box-shadow: 0 0 0 1px #b8860b;
+  }
+  .modal-paper .exhibit-kind-pill[data-kind="design"].active {
+    background: rgba(77, 124, 15, 0.05) !important;
+    box-shadow: 0 0 0 1px var(--moss);
+  }
+  /* 非 active 的 glyph 也加深 (不只 sepia) */
+  .modal-paper .exhibit-kind-pill .ekind-glyph {
+    color: var(--ink-soft) !important;
+  }
+  /* ekind-sub 加深 + 字号 + letter-spacing 适配 */
+  .modal-paper .exhibit-kind-pill .ekind-sub {
+    color: var(--ink-soft) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+  }
+
+  /* —— statement-label / 「想知道」等 mono small caps 加深 —— */
+  #exhibit-statement-label,
+  .modal-paper label.mono.text-xs {
+    color: var(--ink-soft) !important;
+    font-weight: 500;
+  }
+
+  /* —— upload-area 明确边界 + paper bg —— */
+  .modal-paper .upload-area {
+    border: 1px dashed var(--sepia-light);
+    background: rgba(245, 241, 232, 0.4);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-top: 16px;
+  }
+  .modal-paper .upload-trigger {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid var(--sepia-light);
+    background: var(--bg);
+    color: var(--ink) !important;
+    font-family: 'Newsreader', serif;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    font-style: normal !important;
+  }
+  .modal-paper .upload-trigger:hover {
+    background: rgba(194, 65, 12, 0.04);
+    border-color: var(--vermilion);
+    color: var(--vermilion) !important;
+  }
+
+  /* —— textarea / input-bare 边界更明确 —— */
+  .modal-paper .input-bare {
+    border-bottom: 1px solid var(--sepia-light) !important;
+    padding-bottom: 8px;
+    transition: border-color 0.18s ease;
+  }
+  .modal-paper .input-bare:focus {
+    border-bottom-color: var(--vermilion) !important;
+    outline: none;
+  }
+
+  /* ===============================================================
+     END v0.62 exhibit ceremony modal 可读性增强
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5661,7 +5782,7 @@
       </label>
     </div>
 
-    <label class="mono text-xs block mb-1 mt-5" id="exhibit-statement-label" style="color: var(--sepia); letter-spacing: 0.15em;">完 工 感 想</label>
+    <label class="mono text-xs block mb-1 mt-5" id="exhibit-statement-label" style="color: var(--sepia); letter-spacing: 0.15em;">完工感想</label>
     <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="" style="font-size: 16px; resize: vertical;"></textarea>
 
     <div class="upload-area">
@@ -5781,10 +5902,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.61 · 37 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.62 · 38 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.61</span>
+  <span class="bb-ver">v0.62</span>
 </div>
 
 <script>
@@ -7953,12 +8074,12 @@ const EXHIBIT_KIND_COPY = {
     titleReship: '改一下完工感想 / 补图',
     sub: '跑通了,可以正常用了。这条感想会进陈列馆作为这件作品的代表内容,写你最想说的那句。',
     subReship: '把感想改顺手,或者补传截图。之前的会被这版替换。',
-    statementLabel: '完 工 感 想',
+    statementLabel: '完工感想',
     placeholder: '比如,卡了三周的 cron 终于把状态对上了',
     feedbackPlaceholder: '5 秒内看得懂这是干嘛的吗 / 这个流程哪里不顺',
     cta: '✦ 完工 · 进陈列馆',
     ctaReship: '✦ 更新陈列馆',
-    quoteLabel: '完 工 感 想',
+    quoteLabel: '完工感想',
     showcaseVerb: '入馆',
     tryCtaText: '去试用 →',
   },
@@ -7970,12 +8091,12 @@ const EXHIBIT_KIND_COPY = {
     titleReship: '改一下原型说明 / 补图',
     sub: '还在打磨,但已经能玩。说一下你想试什么,或者大家可以怎么帮你。',
     subReship: '把说明改顺手,或者补传截图。之前的会被这版替换。',
-    statementLabel: '原 型 说 明',
+    statementLabel: '原型说明',
     placeholder: '比如,这个原型方向还没定 · 想看大家拿起来用会不会顺',
     feedbackPlaceholder: '操作上哪里别扭 / 你会不会接着用 / 哪一步让你愣住',
     cta: '◐ 进陈列馆作为原型',
     ctaReship: '◐ 更新原型',
-    quoteLabel: '原 型 说 明',
+    quoteLabel: '原型说明',
     showcaseVerb: '在试',
     tryCtaText: '去体验 →',
   },
@@ -7987,12 +8108,12 @@ const EXHIBIT_KIND_COPY = {
     titleReship: '改一下设计想法 / 补图',
     sub: '设计稿 / 概念 / 还没实现。说一下这是关于什么的,想要哪种反馈。',
     subReship: '把设计想法改顺手,或者补传图。之前的会被这版替换。',
-    statementLabel: '设 计 想 法',
+    statementLabel: '设计想法',
     placeholder: '比如,这是我对 X 问题的设计 · 想要方向上的反馈',
     feedbackPlaceholder: '方向对不对 / 哪里没说清楚 / 有没有想到我没想到的',
     cta: '○ 进陈列馆作为设计',
     ctaReship: '○ 更新设计',
-    quoteLabel: '设 计 想 法',
+    quoteLabel: '设计想法',
     showcaseVerb: '概念',
     tryCtaText: '去看看 →',
   },
@@ -8002,8 +8123,8 @@ const EXHIBIT_KIND_COPY = {
     glyph: '·',
     name: '在做',
     badgeColor: 'var(--sepia)',
-    statementLabel: '近 一 笔',
-    quoteLabel: '近 一 笔',
+    statementLabel: '近一笔',
+    quoteLabel: '近一笔',
     showcaseVerb: '更新于',
     tryCtaText: '去试试 →',
   },
