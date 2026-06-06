@@ -1090,29 +1090,74 @@ function triggerCumulativeCommits(opts = {}) {
 
 // B · 最近一条 commit 标题 (第一行) 含关键词 · 高信号
 // 只看标题不看 body · body 里提到关键词 (比如"about 页讲的是卡住") 不算作者卡住
+// 优先级:
+//   FRUSTRATED 95 · 炸毛 / 破防 · 文案和选项跟其他都不一样
+//   BREAKTHROUGH 95 · 顿悟时刻 · 最值得记
+//   SHIP/STUCK/PROTOTYPE 100 · 显式仪式信号
+//   FIX 80 · 修好了 · 说说这个坑
+//   TINKER 70 · 在捣鼓 · 一句话说一下
+//   DISCOVERY 70 · 学到 / 发现
 function triggerKeywordMatch() {
   try {
-    // %s = subject (第一行) · 不是 %B (full message)
     const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
     if (!title) return { fired: false };
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
 
-    const SHIP_WORDS = /(\bship\b|\bdone\b|完工|跑通|\blaunch(?:ed)?\b|\bdeployed?\b|发布|上线|\bfinish(?:ed)?\b)/i;
-    const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b|\bdemo\b)/i;
-    const STUCK_WORDS = /(\bstuck\b|卡住|卡了|\bhotfix\b|\bbroken\b|挂了)/i;
-    const FIX_WORDS = /(\bfix(?:ed)?\b|修好|搞定|解决了)/i;
+    // 检查顺序很重要 · 同时命中时早的先返回 · 跟 priority 不是一个概念
+    // 排序逻辑:
+    //   FRUSTRATED 第一 · 情绪信号最优先 · 不能让"跑通了"盖过"fuck 跑通了"
+    //   SHIP / STUCK / PROTOTYPE · 显式仪式词 · 信号最直接
+    //   BREAKTHROUGH · "终于明白" 不含跑通 · 没被 SHIP 吃掉才到这
+    //   FIX / TINKER / DISCOVERY · 弱信号最后
 
+    // FRUSTRATED (炸毛 / 破防) · 文案 / 选项跟其他都不一样
+    const FRUSTRATED_WORDS = /(\bfuck(?:ing|in')?\b|\bshit\b|\bdamn\b|\bwtf\b|\bhell\b|\bf+k\b|我操|卧槽|妈的|尼玛|\btmd\b|\btm\b|靠|崩了|炸了|废了|服了|醉了|无语|算了|弃了|不做了|不想做了|给爷整不会|不会了|不行了|\bgive up\b|\bdone with\b|\bover it\b|\bfed up\b|我傻|我蠢|智障|脑残|\bsb\b|我有病|累死|烦死|头大|头疼)/i;
+    if (FRUSTRATED_WORDS.test(title)) {
+      return { fired: true, priority: 95, reason: 'keyword-frustrated', kind: 'frustrated', msg: `气头上的 commit: ${dim(titleSnippet)}`, suggestion: '不打分。不告诉别人。看你想怎么处理。' };
+    }
+
+    // SHIP (仪式信号 · 完工) · 优先级 100 · 同时命中时盖过 BREAKTHROUGH
+    const SHIP_WORDS = /(\bship(?:ped|s|it)?\b|\bdone\b|\bmerged?\b|\bdeployed?\b|\breleased?\b|\blaunch(?:ed)?\b|\brolled out\b|完工|跑通|发布|上线|上架|完成|\bfinished?\b)/i;
     if (SHIP_WORDS.test(title)) {
-      return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `刚才那条 commit 像是完工: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要进陈列馆 + 写一句完工感想?' };
+      return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `像完工的 commit: ${dim(titleSnippet)}`, suggestion: '要不要进陈列馆 · 写一句感想' };
     }
-    if (PROTO_WORDS.test(title)) {
-      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `刚才那条 commit 像是原型节点: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要把原型挂上 · 顺便发一笔进展?' };
-    }
+
+    // STUCK (技术性卡住 · 不像 FRUSTRATED 那么情绪化)
+    const STUCK_WORDS = /(\bstuck\b|卡住|卡了|卡在|\bhotfix\b|\bbroken\b|挂了|不对劲|出问题|报错了|\bblocker\b)/i;
     if (STUCK_WORDS.test(title)) {
-      return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `刚才那条像是卡了: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要标卡住 · 让在意的人能看到?' };
+      return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `像卡住的 commit: ${dim(titleSnippet)}`, suggestion: '要不要标卡住 · 让在意的人看到' };
     }
+
+    // PROTOTYPE
+    const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b|\bdemo\b)/i;
+    if (PROTO_WORDS.test(title)) {
+      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `像原型节点的 commit: ${dim(titleSnippet)}`, suggestion: '要不要把原型挂上 · 顺便发一笔' };
+    }
+
+    // BREAKTHROUGH · "终于明白 / 想清楚了" · 没被 SHIP 吃掉的顿悟时刻
+    const BREAKTHROUGH_WORDS = /(终于(?:明白|搞清|搞定|想通|懂了)|搞清楚了|想清楚了|想通了|想明白了|顿悟|\baha\b|\bfinally\b(?!\s+(?:ship|done|done))|\bclicked\b|\bgot it\b)/i;
+    if (BREAKTHROUGH_WORDS.test(title)) {
+      return { fired: true, priority: 95, reason: 'keyword-breakthrough', kind: 'progress', msg: `像顿悟的 commit: ${dim(titleSnippet)}`, suggestion: '这种十秒钟很难复现 · 一笔留下来吧' };
+    }
+
+    // FIX
+    const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|修好|修了|搞定|解决了|处理了)/i;
     if (FIX_WORDS.test(title)) {
-      return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要写一笔 · 说说这个坑?' };
+      return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim(titleSnippet)}`, suggestion: '要不要写一笔 · 说说这个坑' };
     }
+
+    // TINKER (捣鼓 · 在玩 · active exploration)
+    const TINKER_WORDS = /(捣鼓|玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
+    if (TINKER_WORDS.test(title)) {
+      return { fired: true, priority: 70, reason: 'keyword-tinker', kind: 'progress', msg: `在捣鼓: ${dim(titleSnippet)}`, suggestion: '一句话说一下你在玩什么?' };
+    }
+
+    // DISCOVERY (发现 / 学到)
+    const DISCOVERY_WORDS = /(发现|意识到|原来|才知道|学到|学了|理解了|\blearned\b|\brealized?\b|\bdiscovered?\b|\bturns out\b)/i;
+    if (DISCOVERY_WORDS.test(title)) {
+      return { fired: true, priority: 70, reason: 'keyword-discovery', kind: 'progress', msg: `像学到东西的 commit: ${dim(titleSnippet)}`, suggestion: '学到 / 发现了什么? 给别人看看' };
+    }
+
     return { fired: false };
   } catch { return { fired: false }; }
 }
@@ -1219,25 +1264,40 @@ async function cmdCheck(opts) {
   log('');
 
   // 根据触发器类型 · 默认动作不一样:
+  //   keyword=frustrated → 特殊:不说"想发一笔"·三选 [标卡住 / 喘口气 / 没事接着搞]
   //   keyword=ship → "进陈列馆" (走 shipProject) 排第一
   //   keyword=stuck → "标卡住" 排第一
   //   其他 → "发一笔" 排第一
   const choices = [];
-  if (result.kind === 'ship') {
+  if (result.kind === 'frustrated') {
+    // 破防时刻 · 文案 / 选项跟其他都不一样 · 不要产品语言
+    choices.push({ name: '⚠ 标卡住 · 让在意你的人看到', value: 'stuck-quiet' });
+    choices.push({ name: '暂停 30 分钟 · 出去走走', value: 'mute-30m' });
+    choices.push({ name: '没事 · 我接着搞', value: 'skip-once' });
+  } else if (result.kind === 'ship') {
     choices.push({ name: '✦ 进陈列馆 · 写一句完工感想', value: 'ship' });
     choices.push({ name: '只发一笔普通进展', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'stuck') {
     choices.push({ name: '⚠ 标卡住 · 写在哪里卡了', value: 'stuck' });
     choices.push({ name: '只发一笔普通进展', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'prototype') {
     choices.push({ name: '◐ 进陈列馆 · 作为原型', value: 'prototype' });
     choices.push({ name: '只发一笔普通进展', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
   } else {
     choices.push({ name: '发 · 现在写一句', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
   }
-  choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
-  choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
-  choices.push({ name: '静音 24 小时', value: 'mute' });
 
   const { select, input } = require('@inquirer/prompts');
   let choice;
@@ -1282,6 +1342,25 @@ async function cmdCheck(opts) {
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
     savePromptState(state);
     ok('⚠ 卡住了 · 已通知');
+  } else if (choice === 'stuck-quiet') {
+    // 破防触发后选了标卡住 · 文本默认走 commit 标题 · 不强求作者再写一句 · 那时候不该再要求
+    savePromptState(state);
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const fallback = '卡住了 · 这条 commit 没顺下来: ' + title;
+    const text = (await input({ message: '写一句 · 或回车用 commit 标题', default: fallback })).trim() || fallback;
+    await apiAction(cfg, 'changeProjectStatus', { projectId: repoCfg.projectId, newStatus: 'stuck' });
+    await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
+    recordPushAt(repoCfg.projectId);
+    ok('⚠ 卡住了 · 已通知关心你的人');
+  } else if (choice === 'mute-30m') {
+    state.mutedUntil = now + 30 * 60 * 1000;
+    savePromptState(state);
+    log(sepia('  30 分钟不再问 · 出去走走'));
+  } else if (choice === 'skip-once') {
+    // 这一次不动 · 不静音不延后 · 让作者继续 · 但下个触发器还是能问
+    state.lastPromptedAt = now;
+    savePromptState(state);
+    log(sepia('  好 · 接着搞'));
   } else if (choice === 'later') {
     state.laterUntil = now + 60 * 60 * 1000;
     savePromptState(state);
