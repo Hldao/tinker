@@ -6258,10 +6258,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.64 · 40 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.65 · 41 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.64</span>
+  <span class="bb-ver">v0.65</span>
 </div>
 
 <script>
@@ -9037,6 +9037,16 @@ document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault();
     openSearch();
+  }
+});
+
+// v0.65 backdrop click 关闭 modal · 跟 ESC 行为一致
+// 利用 event delegation: click 落在 modal-paper 内部时 e.target 不是 modal-back · 不会触发
+// 仅当 click 直接落在 modal-back 遮罩区域 (e.target === modal-back 自身) 才关闭
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t && t.classList && t.classList.contains('modal-back') && !t.classList.contains('hidden')) {
+    t.classList.add('hidden');
   }
 });
 
