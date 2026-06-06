@@ -1146,12 +1146,20 @@ function triggerKeywordMatch() {
       return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim(titleSnippet)}`, suggestion: '要不要写一笔 · 说说这个坑' };
     }
 
-    // TINKER (捣鼓 · 在玩 · active exploration)
-    // 重要:"捣鼓" 在 Tinker 自己的 repo 里指产品本身 ("feat(捣鼓): ...")
-    // 所以只匹配动词形 · 不匹配光秃秃 "捣鼓" 这种名词指代
-    //   ✓ 在捣鼓 / 捣鼓了 / 捣鼓一下 / 捣鼓一波 / 捣鼓着
-    //   ✗ feat(捣鼓): ... · 更新捣鼓首页 · @捣鼓项目
-    const TINKER_WORDS = /(在捣鼓|捣鼓了|捣鼓一下|捣鼓一波|捣鼓着|玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
+    // BRAND_MENTION · "捣鼓" / "Tinker" 出现 = 品牌 engagement 信号
+    // 设计:全世界除了 Tinker 社区谁会写"捣鼓" · 一旦出现就大概率关于我们:
+    //   - 贡献者在改 Tinker 代码 (feat(捣鼓): ...)
+    //   - 用户在用 Tinker 视角做事 ("捣鼓 X" 描述工作)
+    //   - 引用 Tinker 文化 ("跟捣鼓上的 X 一样")
+    // 所以不过滤 · 不只匹配动词形 · 任何"捣鼓"出现都触发 · prompt 主动认歧义
+    // 优先级 75 比泛 TINKER 高一档 · 但低于 100 不抢仪式
+    const BRAND_WORDS = /(捣鼓|\btinker\b)/i;
+    if (BRAND_WORDS.test(title)) {
+      return { fired: true, priority: 75, reason: 'keyword-brand', kind: 'brand', msg: `commit 里有"捣鼓": ${dim(titleSnippet)}`, suggestion: '这是关于 Tinker 的什么?' };
+    }
+
+    // TINKER (泛 · 在玩 · active exploration) · 不含"捣鼓"·已经被上一段抓走
+    const TINKER_WORDS = /(玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
     if (TINKER_WORDS.test(title)) {
       return { fired: true, priority: 70, reason: 'keyword-tinker', kind: 'progress', msg: `在捣鼓: ${dim(titleSnippet)}`, suggestion: '一句话说一下你在玩什么?' };
     }
@@ -1278,6 +1286,13 @@ async function cmdCheck(opts) {
     choices.push({ name: '⚠ 标卡住 · 让在意你的人看到', value: 'stuck-quiet' });
     choices.push({ name: '暂停 30 分钟 · 出去走走', value: 'mute-30m' });
     choices.push({ name: '没事 · 我接着搞', value: 'skip-once' });
+  } else if (result.kind === 'brand') {
+    // 品牌信号 · "捣鼓" / Tinker 出现 · 主动认歧义 · 让用户挑哪种意思
+    choices.push({ name: '是 Tinker 项目本身的进展 · 发一笔', value: 'push' });
+    choices.push({ name: '是用 Tinker 做事情的反思 · 发一笔', value: 'push' });
+    choices.push({ name: '巧合 · 跟 Tinker 没关系 · 跳过', value: 'skip-once' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
   } else if (result.kind === 'ship') {
     choices.push({ name: '✦ 进陈列馆 · 写一句完工感想', value: 'ship' });
     choices.push({ name: '只发一笔普通进展', value: 'push' });
