@@ -587,6 +587,9 @@ ${violations.map(v => '- ' + v).join('\n')}
 
 // 检测草稿里的"伪数据论断" · 返违规清单
 // 设计:这些 pattern 100% 需要数据才能说 · git 里没数据 = LLM 在编
+// v2 修正了两处假阳性:
+//   - "比之前" "比过去" 是合理设计观察 · 不挡
+//   - 单独 % 是合理进度数 (完成度 70% 之类) · 不挡 · 只挡靠近效果性动词的
 function validateDraft(text) {
   if (!text) return [];
   const violations = [];
@@ -596,8 +599,9 @@ function validateDraft(text) {
     violations.push('"用户喜欢/反映/觉得 X" — 没问过用户');
   }
 
-  // 跟"真人 / 之前 / 别的"做对比类
-  if (/(比|超过|远胜|低于|高于|不如)\s*(真人|人工|手动|之前|过去|普通|原来)/.test(text)) {
+  // 跟"真人 / 人工 / 手动" 做对比类 · 这三个真的需要 benchmark
+  // 把"之前 / 过去 / 普通 / 原来" 去掉 · 那些是合理设计观察 ("比之前简化了")
+  if (/(比|超过|远胜|低于|高于|不如)\s*(真人|人工|手动)/.test(text)) {
     violations.push('"X 比 Y 好/差" 对比 — 没 benchmark');
   }
 
@@ -611,21 +615,19 @@ function validateDraft(text) {
     violations.push('"成功率/准确率" — 没指标');
   }
 
-  // 百分比 / 数字效果
-  if (/[减少|增加|提升|降低|快|慢|多|少]\s*了?\s*\d+\s*%/.test(text)) {
-    violations.push('"X 了 Y%" — 没 benchmark');
+  // 效果性数字 · 只挡靠近评估动词的 %
+  // 命中条件:前 8 字 / 后 8 字内有效果词 · 单独的 "完成度 70%" 不挡
+  const EFFECT_WORDS = '快|慢|提升|降低|减少|增加|多|少|增长|下降|上升';
+  const effectPctRe = new RegExp(`(${EFFECT_WORDS})\\s*了?\\s*\\d+\\s*%|\\d+\\s*%\\s*(${EFFECT_WORDS})`, 'g');
+  if (effectPctRe.test(text)) {
+    violations.push('"X 了 Y%" — 效果论断没 benchmark');
   }
-  if (/\d+\s*%(?!.*(已配|完成|目标|完工率|进度))/.test(text)) {
-    violations.push('"X%" — 没数据出处');
-  }
+  // 单独 % 不再挡 · "完成度 70%" / "10% 改了 a 文件" 之类是合理的
 
   // 结果发现 / 出乎意料 / 数据显示 (经典 LLM 收尾)
   if (/结果发现|出乎意料|数据显示|意外发现/.test(text)) {
     violations.push('"结果发现/出乎意料/数据显示" — 这种事后观察 LLM 不该写');
   }
-
-  // 已完成的不能说成"接下来想做" — git history 里出现的全是已完成
-  // 这个比较难检测 · 留到下次
 
   return violations;
 }
@@ -2104,6 +2106,7 @@ async function cmdCheck(opts) {
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
     savePromptState(state);
     ok('发出去了 → ' + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
+    savePoolSample(buildPendingForSample(repoCfg, result), 'ui-push', text, cfg.handle);
 
     // 启动后台 watcher · 等 deploy 后抓 after + editUpdate 贴图
     if (updateId && session && session.beforeSnapshotPath) {
@@ -2137,6 +2140,7 @@ async function cmdCheck(opts) {
     state.lastPushAtByProject = state.lastPushAtByProject || {};
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
     savePromptState(state);
+    savePoolSample(buildPendingForSample(repoCfg, result), choice, text, cfg.handle);
     const okMsg = choice === 'push-decision' ? '✓ 决策记下来了 → ' : '发出去了 → ';
     ok(okMsg + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
   } else if (choice === 'ship' || choice === 'prototype') {
@@ -2153,6 +2157,7 @@ async function cmdCheck(opts) {
     state.lastPushAtByProject = state.lastPushAtByProject || {};
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
     savePromptState(state);
+    savePoolSample(buildPendingForSample(repoCfg, result), choice, text, cfg.handle);
     ok((choice === 'ship' ? '✦ 完工 · 已进陈列馆' : '◐ 原型 · 已进陈列馆'));
   } else if (choice === 'stuck') {
     savePromptState(state);
@@ -2163,6 +2168,7 @@ async function cmdCheck(opts) {
     state.lastPushAtByProject = state.lastPushAtByProject || {};
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
     savePromptState(state);
+    savePoolSample(buildPendingForSample(repoCfg, result), choice, text, cfg.handle);
     ok('⚠ 卡住了 · 已通知');
   } else if (choice === 'stuck-quiet') {
     // 破防触发后选了标卡住 · 文本默认走 commit 标题 · 不强求作者再写一句 · 那时候不该再要求
@@ -2173,6 +2179,7 @@ async function cmdCheck(opts) {
     await apiAction(cfg, 'changeProjectStatus', { projectId: repoCfg.projectId, newStatus: 'stuck' });
     await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
     recordPushAt(repoCfg.projectId);
+    savePoolSample(buildPendingForSample(repoCfg, result), choice, text, cfg.handle);
     ok('⚠ 卡住了 · 已通知关心你的人');
   } else if (choice === 'mute-30m') {
     state.mutedUntil = now + 30 * 60 * 1000;
@@ -2340,8 +2347,21 @@ function saveRejectDiffIfChanged(pending, choice, finalText) {
   } catch {}
 }
 
+// 给 cmdCheck (interactive mode) 用 · 构造一个 pending-like 对象给 savePoolSample
+// 让交互模式手敲的 update 也进 style-pool · 跟 cmdResolve (AI 模式) 的样本平等收集
+function buildPendingForSample(repoCfg, result) {
+  let commitTitle = '';
+  try { commitTitle = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim(); } catch {}
+  return {
+    projectId: repoCfg && repoCfg.projectId,
+    projectName: repoCfg && repoCfg.projectName,
+    kind: result && result.kind,
+    commitTitle,
+  };
+}
+
 // v0.4 Phase 1 · 静默收集 voice sample 到 ~/.tinker/style-pool/good/
-// 每次成功 push (从 cmdResolve) 时调一次 · 累积作者真实风格样本
+// 每次成功 push (从 cmdResolve 或 cmdCheck) 时调一次 · 累积作者真实风格样本
 // 之后 tinker voice analyze 会读这个池子总结 fingerprint
 function savePoolSample(pending, choice, text, handle) {
   if (!text || !text.trim()) return;
