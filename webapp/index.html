@@ -325,15 +325,32 @@
     color: var(--sepia);
     letter-spacing: 0.02em;
   }
-  .tl-used-list {
-    margin-top: 8px;
-    font-family: 'Newsreader', serif;
-    font-size: 13px;
-    color: var(--sepia);
-    font-style: italic;
-    line-height: 1.6;
+  .tl-used-block {
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px dotted var(--rule);
   }
-  .tl-used-list .nh { color: var(--ink); font-weight: 600; font-style: normal; }
+  .method-used-entry {
+    padding: 18px 0 16px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .method-used-entry:hover { background: var(--paper); }
+  .tl-used-header {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--vermilion);
+    letter-spacing: 0.15em;
+    margin-bottom: 8px;
+  }
+  .tl-used-list {
+    font-family: 'Newsreader', serif;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    line-height: 1.65;
+  }
+  .tl-used-list .nh { color: var(--ink); font-weight: 600; }
   .tl-used-list .nh:hover { color: var(--vermilion); cursor: pointer; }
   .quote-block {
     border-left: 2px solid var(--rule);
@@ -1884,6 +1901,436 @@
   /* ===============================================================
      END v0.31.1 final touches
      =============================================================== */
+
+  /* ===============================================================
+     v0.32 BORROWED FROM WEEKLY BRIEF — 借鉴朋友的周报设计
+     ▍ 5 块新增 · 都是 CSS-only · 不动 markup/JS/文案
+     ▍ A · eyebrow 系统 · mono labels 右侧延伸 thin bar
+     ▍ B · status dot + halo · 圆点带 wash 光环
+     ▍ C · 5 种项目状态彩色 tag tint
+     ▍ D · body 极淡光晕 + SVG 颗粒纹理
+     ▍ E · 关于页首字下沉 (lead-cap drop cap) + 底部引语装饰
+     =============================================================== */
+
+  /* ───────────────────────────────────────────────────────────────
+     A · EYEBROW · mono labels 右侧延伸 thin bar
+     v0.29 给 #screen-about / #screen-onboard 加了左侧 2px vermilion 竖线
+     v0.32 在右侧再加 60px 延伸横线 · "印刷栏头" 完整气质
+     ─────────────────────────────────────────────────────────────── */
+  #screen-about .mono.text-xs[style*="letter-spacing"],
+  #screen-onboard > .mb-12 > .mono.text-xs,
+  #workshop-content > div > .mono.text-xs[style*="text-transform"] {
+    display: flex !important;
+    align-items: center;
+    gap: 14px;
+  }
+  #screen-about .mono.text-xs[style*="letter-spacing"]::after,
+  #screen-onboard > .mb-12 > .mono.text-xs::after,
+  #workshop-content > div > .mono.text-xs[style*="text-transform"]::after {
+    content: '';
+    height: 1px;
+    width: 60px;
+    background: var(--vermilion);
+    opacity: 0.55;
+    flex-shrink: 0;
+  }
+  /* 工作室页 mono label 已经在 v0.29 加了左侧竖线 · 取消让右侧延伸独立 */
+  #workshop-content > div > .mono.text-xs[style*="text-transform"] {
+    padding-left: 0 !important;
+  }
+  #workshop-content > div > .mono.text-xs[style*="text-transform"]::before {
+    display: none;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     B · STATUS DOT + HALO · 圆点带光环
+     v0.31 项目页头部 dot 是纯色实心 · v0.32 加 box-shadow halo
+     ─────────────────────────────────────────────────────────────── */
+  #project-content .pheader > .mb-3 > .mono.text-xs[style*="uppercase"]::before {
+    width: 6px;
+    height: 6px;
+    box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.18);
+    background: var(--amber);
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     C · 5 种项目状态 · 彩色 tag tint
+     active=moss · stuck=amber · done=sage深绿 · paused=slate · archive=ink-faint
+     ─────────────────────────────────────────────────────────────── */
+  .entry-status,
+  .pcard-meta .active,
+  .pcard-meta .stuck,
+  .pcard-meta .done,
+  .pcard-meta .paused,
+  .pcard-meta .archive {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    font-weight: 500;
+    text-transform: lowercase;
+    border-radius: 0;
+    line-height: 1.4;
+  }
+
+  /* active = 在做 · moss 绿 */
+  .entry-status.active,
+  .pcard-meta .active {
+    background: rgba(21, 128, 61, 0.08);
+    color: var(--moss);
+  }
+  /* stuck = 卡住 · amber 琥珀 */
+  .entry-status.stuck,
+  .pcard-meta .stuck {
+    background: rgba(180, 83, 9, 0.10);
+    color: var(--amber);
+  }
+  /* done = 跑通了 · sage 深绿低饱和 (跟 active 区分) */
+  .entry-status.done,
+  .pcard-meta .done {
+    background: rgba(90, 122, 94, 0.14);
+    color: #5a7a5e;
+  }
+  /* paused = 暂停 · slate 灰蓝 */
+  .entry-status.paused,
+  .pcard-meta .paused {
+    background: rgba(74, 85, 102, 0.10);
+    color: #4a5566;
+  }
+  /* archive = 归档 · ink-faint */
+  .entry-status.archive,
+  .pcard-meta .archive {
+    background: rgba(120, 113, 108, 0.06);
+    color: var(--sepia);
+  }
+
+  /* feed entry-status 在 grid 末尾 · 保留 margin-left: auto */
+  .entry-status { margin-left: auto; }
+
+  /* status-pill (modal 状态选择) active 状态也享用 tag tint */
+  .status-pill.active[data-status="active"] {
+    background: rgba(21, 128, 61, 0.08); color: var(--moss); border-color: var(--moss);
+  }
+  .status-pill.active[data-status="stuck"] {
+    background: rgba(180, 83, 9, 0.10); color: var(--amber); border-color: var(--amber);
+  }
+  .status-pill.active[data-status="done"] {
+    background: rgba(90, 122, 94, 0.14); color: #5a7a5e; border-color: #5a7a5e;
+  }
+  .status-pill.active[data-status="paused"] {
+    background: rgba(74, 85, 102, 0.10); color: #4a5566; border-color: #4a5566;
+  }
+  .status-pill.active[data-status="archive"] {
+    background: rgba(120, 113, 108, 0.06); color: var(--sepia); border-color: var(--sepia);
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     D · BODY 极淡光晕 + SVG 颗粒纹理
+     给 cream paper 加微温度 (左上 vermilion / 右下 sepia 双光晕)
+     + 整页 SVG turbulence 颗粒 (0.03 opacity · multiply blend)
+     强度比周报再克制 (周报 noise 0.07 → 我们 0.03)
+     ─────────────────────────────────────────────────────────────── */
+  body {
+    background-image:
+      radial-gradient(at 18% 24%, rgba(194, 65, 12, 0.025) 0px, transparent 50%),
+      radial-gradient(at 82% 76%, rgba(120, 113, 108, 0.04) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.03;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     E · 关于页首字下沉 + 底部引语装饰
+     "GitHub 是给写代码的人..." 段首字 Fraunces 大斜体 vermilion 下沉
+     + 底部引语前加巨大半透明 " 装饰
+     ─────────────────────────────────────────────────────────────── */
+  /* 选关于页正文区两段 <p> · ::first-letter 选首字符 (G / 我) */
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:first-of-type::first-letter,
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:nth-of-type(2)::first-letter {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 500;
+    font-size: 58px;
+    line-height: 0.85;
+    float: left;
+    color: var(--vermilion);
+    padding-right: 12px;
+    padding-top: 6px;
+    margin-bottom: -4px;
+  }
+  /* 底部引语 · "在这个产品里,做减法比做加法需要更多勇气" 上方加 ¶ 装饰 */
+  #screen-about .mt-16.pt-8.text-center {
+    position: relative;
+    padding-top: 64px !important;
+  }
+  #screen-about .mt-16.pt-8.text-center::before {
+    content: '"';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'Fraunces', serif;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 400;
+    font-size: 80px;
+    line-height: 0.8;
+    color: var(--vermilion);
+    opacity: 0.18;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     额外 · 微调
+     ─────────────────────────────────────────────────────────────── */
+
+  /* 项目页头部 tag tint 跟 mono label dot 配合 · 让两个 amber 视觉一致 */
+  /* (已在 B 段处理 · 这里加 fallback 颜色匹配 markup) */
+
+  /* feed entry 卡片 hover 时 status tag 微微变亮 */
+  .entry:hover .entry-status { opacity: 1; }
+  .entry-status { opacity: 0.92; transition: opacity 0.18s; }
+
+  /* status-pill (modal) hover 时也走 tint 色 */
+  .status-pill:hover[data-status="active"] { color: var(--moss); border-color: var(--moss); }
+  .status-pill:hover[data-status="stuck"] { color: var(--amber); border-color: var(--amber); }
+  .status-pill:hover[data-status="done"] { color: #5a7a5e; border-color: #5a7a5e; }
+  .status-pill:hover[data-status="paused"] { color: #4a5566; border-color: #4a5566; }
+  .status-pill:hover[data-status="archive"] { color: var(--sepia); border-color: var(--sepia); }
+
+  /* ===============================================================
+     END v0.32 borrowed from weekly brief
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.32.1 强化视觉差异 · 让"用户看不出变化"问题修复
+     ▍ wash 强度 0.10 → 0.18 (chip 在 cream paper 上能看出)
+     ▍ chip 加 1px border 边 · 跟 status-pill 一致
+     ▍ body 颗粒 0.03 → 0.05 · 仍极克制但能看出印刷感
+     ▍ section eyebrow 横线长度 60 → 80px
+     =============================================================== */
+
+  /* 强化 chip · wash 加深 + 加边 */
+  .entry-status.active,
+  .pcard-meta .active {
+    background: rgba(21, 128, 61, 0.13);
+    border: 1px solid rgba(21, 128, 61, 0.35);
+  }
+  .entry-status.stuck,
+  .pcard-meta .stuck {
+    background: rgba(180, 83, 9, 0.15);
+    border: 1px solid rgba(180, 83, 9, 0.40);
+  }
+  .entry-status.done,
+  .pcard-meta .done {
+    background: rgba(90, 122, 94, 0.18);
+    border: 1px solid rgba(90, 122, 94, 0.45);
+  }
+  .entry-status.paused,
+  .pcard-meta .paused {
+    background: rgba(74, 85, 102, 0.14);
+    border: 1px solid rgba(74, 85, 102, 0.40);
+  }
+  .entry-status.archive,
+  .pcard-meta .archive {
+    background: rgba(120, 113, 108, 0.10);
+    border: 1px solid rgba(120, 113, 108, 0.30);
+  }
+
+  /* body 颗粒 + 光晕强化 (仍克制 · 但能看出) */
+  body {
+    background-image:
+      radial-gradient(at 18% 24%, rgba(194, 65, 12, 0.045) 0px, transparent 50%),
+      radial-gradient(at 82% 76%, rgba(120, 113, 108, 0.06) 0px, transparent 50%);
+  }
+  body::before {
+    opacity: 0.05;
+  }
+
+  /* eyebrow 横线变长 + 不透明 */
+  #screen-about .mono.text-xs[style*="letter-spacing"]::after,
+  #screen-onboard > .mb-12 > .mono.text-xs::after,
+  #workshop-content > div > .mono.text-xs[style*="text-transform"]::after {
+    width: 80px;
+    opacity: 0.8;
+  }
+
+  /* 项目页头部 dot halo 加深 · 让大家看出来 */
+  #project-content .pheader > .mb-3 > .mono.text-xs[style*="uppercase"]::before {
+    box-shadow: 0 0 0 4px rgba(180, 83, 9, 0.25);
+  }
+
+  /* 关于页首字下沉强化 · 字号加大 · 颜色更饱和 */
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:first-of-type::first-letter,
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:nth-of-type(2)::first-letter {
+    font-size: 64px;
+  }
+
+  /* ===============================================================
+     END v0.32.1 visual amplification
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.33 关于页首字下沉收一档 + 首页视觉锚点
+     ▍ 反馈 1: 两段都首字下沉显得冗余 · 只保留一段
+     ▍ 反馈 2: 首页缺视觉锚点 · 给 feed 加 eyebrow + 时间戳强化 + filter
+     =============================================================== */
+
+  /* ───────────────────────────────────────────────────────────────
+     A · 首字下沉只保留第二段 ("我们是给捣鼓东西的人...")
+     第一段 "GitHub 是给写代码的人" 是参照系 · setup
+     第二段 "我们是给捣鼓东西的人" 是品牌主语 · punchline
+     punchline 段下沉视觉更对劲 · 中文"我"字下沉比"G"更有重量
+     ─────────────────────────────────────────────────────────────── */
+  /* 取消第一段的首字下沉 */
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:first-of-type::first-letter {
+    font-family: inherit !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    line-height: inherit !important;
+    float: none !important;
+    color: inherit !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  /* 第二段下沉保留 · 但收一档字号 (从 64 → 54) · 跟"我"字字形协调 */
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:nth-of-type(2)::first-letter {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-weight: 500;
+    font-size: 54px;
+    line-height: 0.88;
+    float: left;
+    color: var(--vermilion);
+    padding-right: 14px;
+    padding-top: 4px;
+    margin-bottom: -2px;
+  }
+  /* 第二段顶部 margin (markup 里 style="margin-top: 12px") 加大让两段有呼吸 */
+  #screen-about > div > div.serif[style*="font-size: 17px"] > p:nth-of-type(2) {
+    margin-top: 20px !important;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     B · feed-title 前加 EYEBROW 视觉锚点
+     原 feed-head: 大标题 "今天有动静" + 副标 + cta · 缺乏顶部视觉抓手
+     加: mono uppercase "DISPATCHES · 今日工房" + 右侧延伸 thin bar
+     是关于页 eyebrow 系统在主屏的延伸
+     ─────────────────────────────────────────────────────────────── */
+  /* 用 feed-head 容器的 ::before 加 eyebrow · CSS 文本 hardcode (不动 markup) */
+  #screen-feed > .mb-8::before {
+    content: 'Dispatches · 今 日 工 房';
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--vermilion);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    padding-left: 14px;
+    position: relative;
+  }
+  /* eyebrow 左侧 vermilion 短竖线 · 跟关于页系统一致 */
+  #screen-feed > .mb-8 {
+    position: relative;
+  }
+  /* 右侧延伸 thin bar · 60px vermilion */
+  #screen-feed > .mb-8::after {
+    content: '';
+    position: absolute;
+    top: 17px;
+    left: 168px;
+    height: 1px;
+    width: 80px;
+    background: var(--vermilion);
+    opacity: 0.7;
+  }
+  /* feed-title 跟 eyebrow 之间间距收一档 */
+  #screen-feed .feed-title.mb-3 { margin-bottom: 12px; }
+
+  /* ───────────────────────────────────────────────────────────────
+     C · entry-time 时间戳强化 · 让左侧时间成为视觉锚点
+     现 mono 13px sepia · 收敛但缺乏抓手
+     新: 相对时间 (3h / 12h) 用 Fraunces 大斜体 vermilion · 像周报 day-num 缩小版
+     ─────────────────────────────────────────────────────────────── */
+  .entry .entry-time {
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-size: 22px;
+    font-weight: 400;
+    font-style: italic;
+    color: var(--vermilion);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    padding-top: 3px;
+    text-align: right;
+  }
+  /* hover 时时间戳稍微变化 · 让交互反馈更强 */
+  .entry:hover .entry-time {
+    color: var(--ink);
+    transition: color 0.18s;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     D · filter-row · active 状态加 wash 背景 + 视觉强化
+     现在: active 是 vermilion 文字 + vermilion 下划线
+     新: + 加微 wash 背景让 active 状态成为视觉锚点
+     ─────────────────────────────────────────────────────────────── */
+  .filter-pill {
+    padding: 4px 10px;
+    border-bottom: none !important;
+    transition: color 0.18s, background 0.18s;
+    margin-right: 4px;
+    border-radius: 0;
+  }
+  .filter-pill:hover {
+    background: rgba(28, 25, 23, 0.04);
+    color: var(--ink);
+    border-bottom-color: transparent !important;
+  }
+  .filter-pill.active {
+    background: rgba(194, 65, 12, 0.10);
+    color: var(--vermilion);
+    border-bottom-color: transparent !important;
+    font-weight: 500;
+  }
+  /* filter-row 整体上下边界 strong 一档 + 留白 */
+  .filter-row {
+    padding: 14px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     E · feed-cta-line "或者你今天也来记一笔" 微调
+     现: vermilion italic 14px · OK 但跟 eyebrow 重复 vermilion
+     退一档: 改 ink-soft + dotted underline · 让 eyebrow 独享 vermilion 视觉锚点
+     ─────────────────────────────────────────────────────────────── */
+  .feed-cta-line {
+    color: var(--ink-soft) !important;
+    border-bottom: 1px dotted var(--sepia-light) !important;
+  }
+  .feed-cta-line:hover {
+    color: var(--vermilion) !important;
+    border-bottom-color: var(--vermilion) !important;
+    border-bottom-style: solid !important;
+  }
+
+  /* ===============================================================
+     END v0.33 about drop-cap + feed anchors
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -1974,8 +2421,8 @@
         </div>
 
         <div style="margin-bottom: 28px;">
-          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 反馈是真去试 · 不是点赞</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">不是点赞,是「我用了你的方法 · 跑通了」。有人真的把你的东西接走用了 · 比一千个赞重要。</p>
+          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 手艺是硬通货 · 不是配方</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">「我用了你的方法 · 跑通了」是这里最有分量的反馈。在图片生成的社区里 · 提示词是配方;在 vibe coding 的社区里 · 真正可传承的是"怎么搞定 X"的手艺 —— 怎么扭过 AI 的弯、怎么绕过那个反复出错的地方、怎么把一个坏的回答救回来。提示词只是开场。</p>
         </div>
 
         <div>
@@ -2055,7 +2502,8 @@
           <p>不是热门排行。不是算法挑的。是编辑一个人坐下来挑的。每期不超过五个项目。</p>
           <p style="margin-top: 14px;">挑选标准没有打分 · 没有 KPI · 就一个问题:看到这个 · 会让我也想做一个吗?</p>
           <p style="margin-top: 14px; color: var(--sepia);">不会写「必学 X 种 AI 工具」· 不会写「X 天月入多少」· 不会写「风口」· 不会写排行榜。</p>
-          <p style="margin-top: 14px;">会写谁卡在哪 · 卡了为什么 · 一个意外把谁带到了哪 · 谁的小东西被另一个人接走又做出了什么。</p>
+          <p style="margin-top: 14px;">在 vibe coding 这件事上 · 真正珍贵的是手艺 · 不是配方。</p>
+          <p style="margin-top: 14px;">所以会写谁卡在哪 · 卡了为什么 · 谁怎么把 AI 反复出错的地方扭过来 · 一个意外把谁带到了哪 · 谁的小东西被另一个人接走又做出了什么。</p>
         </div>
       </div>
 
@@ -2810,6 +3258,21 @@ function renderWorkshop(handle) {
       if (role) trackingProjects.push({ p, role, roleLabel });
     });
   }
+
+  // 我的方法被用过的 — 我所有项目里 · update 有 usedBy 的 · 按最近一次被用排序 (只在自己工作室显示)
+  // 这是 Tinker 给作者的累积反馈 · 体现"手艺被复用"是这里的硬通货
+  const methodsUsed = [];
+  if (isMe) {
+    projects.forEach(p => {
+      p.updates.forEach((u, uIdx) => {
+        if (u.usedBy && u.usedBy.length > 0) {
+          const lastUsedAt = Math.max(...u.usedBy.map(x => x.at));
+          methodsUsed.push({ project: p, update: u, uIdx, lastUsedAt });
+        }
+      });
+    });
+    methodsUsed.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
+  }
   const renderPcards = (list) => list.map(p => `
     <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
       <div class="pcard-name">${escapeHtml(p.name)}</div>
@@ -2858,6 +3321,30 @@ function renderWorkshop(handle) {
     </div>
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
     ${done.length > 0 ? `<div class="mb-12"><div class="section-label">做过的 (${done.length})</div>${renderPcards(done)}</div>` : ''}
+
+    ${isMe && methodsUsed.length > 0 ? `
+      <div class="mb-12">
+        <div class="section-label" style="color: var(--vermilion);">你的方法被用过 (${methodsUsed.length})</div>
+        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-bottom: 16px; line-height: 1.5;">
+          有人真的用了你这条进展的方法 · 跑通了。每一条都是手艺被复用的真实信号。
+        </p>
+        ${methodsUsed.map(({project, update, uIdx}) => `
+          <div class="method-used-entry" onclick="showScreen('project','${handle}','${project.slug}')">
+            <div class="mono text-xs mb-1" style="color: var(--sepia); letter-spacing: 0.05em;">
+              在「${escapeHtml(project.name)}」 · ${update.usedBy.length} 人用过 · ${timeAgo(Math.max(...update.usedBy.map(x => x.at)))}
+            </div>
+            <div class="serif" style="font-size: 15px; color: var(--ink); line-height: 1.55; margin-bottom: 8px;">
+              ${escapeHtml(update.text.length > 140 ? update.text.slice(0, 140) + '…' : update.text)}
+            </div>
+            <div class="tl-used-list" style="margin-top: 4px;">
+              ${update.usedBy.map(used => `
+                <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + escapeHtml(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
 
     ${isMe && trackingProjects.length > 0 ? `
       <div class="mb-12">
@@ -2954,9 +3441,9 @@ function renderProject(owner, slug) {
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
                 <div class="tl-prompt-box">
-                  <div class="tl-prompt-label">prompt</div>
+                  <div class="tl-prompt-label">开 场</div>
                   <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
-                  <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制提示词</span>
+                  <span class="react-action" style="font-family: Newsreader, serif; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制</span>
                 </div>
               ` : ''}
               ${imagesHtml}
@@ -2966,13 +3453,15 @@ function renderProject(owner, slug) {
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
-                ${usedByList.length > 0 ? `<span class="tl-used-count">${usedByList.length} 人用过这个方法</span>` : ''}
               </div>
               ${usedByList.length > 0 ? `
-                <div class="tl-used-list">
-                  ${usedByList.map(used => `
-                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
-                  `).join('')}
+                <div class="tl-used-block">
+                  <div class="tl-used-header">被 用 过 · ${usedByList.length}</div>
+                  <div class="tl-used-list">
+                    ${usedByList.map(used => `
+                      <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + escapeHtml(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+                    `).join('')}
+                  </div>
                 </div>
               ` : ''}
             </div>
@@ -3093,7 +3582,7 @@ function renderOnboard() {
         <h3 class="starter-title">${escapeHtml(s.title)}</h3>
         <div class="starter-prompt">"${escapeHtml(s.prompt)}"</div>
         <div class="flex gap-5 items-center">
-          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
+          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制开场</span>
           <a href="${s.toolUrl}" target="_blank" class="react-action serif" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">打开 ${s.toolName} →</a>
         </div>
       </div>
