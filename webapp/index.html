@@ -3762,6 +3762,30 @@
   /* ===============================================================
      END v0.46 加一点黄
      =============================================================== */
+
+
+  /* ===============================================================
+     v0.47 · masthead 回原 cream · 只动 main
+     ▍ 反馈: "顶部导航栏保持原有颜色 · 不需要跟着 main 加深"
+     ▍ 撤销 v0.45/v0.46 对 masthead 改动
+     ▍ masthead 回到 var(--bg) #faf8f3 (原 webapp 最初的 cream)
+     ▍ main 保留 v0.46 的 #f8f5ec (微黄米色)
+     ▍ 效果: masthead 比 main 浅一档 · 顶部轻 + 内容区微暖
+     =============================================================== */
+
+  .masthead {
+    background: var(--bg) !important;     /* 撤回 paper 改动 · 用原 cream #faf8f3 */
+  }
+
+  /* prompt-box / quote-block 用更浅一档跟 main 区分 (paper 偏粉撤销) */
+  .tl-prompt-box,
+  .quote-block {
+    background: rgba(28, 25, 23, 0.025) !important;   /* 极淡墨色 wash · 不偏粉 */
+  }
+
+  /* ===============================================================
+     END v0.47 masthead 回原 cream
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -4215,10 +4239,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.45 · 19 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.47 · 21 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.45</span>
+  <span class="bb-ver">v0.47</span>
 </div>
 
 <script>

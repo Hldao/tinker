@@ -67,6 +67,9 @@
 - **v0.40** 主从重构 · 撤销 v0.39 卡片 · 主日历视觉锚点转移到 masthead-date · feed day-label 简化为横向 inline
 - **v0.41** 颜色对换实验 · 深色 masthead + cream main · 反差太重被撤销
 - **v0.42-v0.44** 温和 cream/paper 对换迭代 · 最终: main = cream (用户喜欢) · masthead = paper 偏粉做区分
+- **v0.45** 冷静米白 · 日系配色 · main #faf8f3 → #f7f5ef (R=G 接近 · 不偏粉) · body 光晕降一档 · 装饰大字 vermilion 深一档
+- **v0.46** main 加一点黄 · #f7f5ef → #f8f5ec (R-B=8→12)
+- **v0.47** masthead 回原 cream · 只动 main · 反向对比 (顶部 #faf8f3 浅 · main #f8f5ec 微暖一档"实")
 
 ### [ui] markup 减法记录 (累积 5 处)
 所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
