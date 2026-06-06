@@ -5118,8 +5118,12 @@
       <div id="tool-filters" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
       <div id="tracking-toggle-wrap"></div>
     </div>
-    <div id="feed-list"></div>
-    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
+    <div id="feed-list">
+      <div class="loading-initial text-center py-16 serif italic" style="color: var(--sepia);">
+        在拉取动静 ·
+      </div>
+    </div>
+    <div id="feed-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
       — 就这些了。我们刚起步,宁可这里空,也不刷数据 —
     </div>
   </section>
@@ -5235,8 +5239,12 @@
     <div class="filter-row mb-4">
       <div id="showcase-kind-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
     </div>
-    <div id="showcase-list"></div>
-    <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
+    <div id="showcase-list">
+      <div class="loading-initial text-center py-16 serif italic" style="color: var(--sepia);">
+        在拉取陈列馆 ·
+      </div>
+    </div>
+    <div id="showcase-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
       — 陈列馆收三类:跑通的、还在打磨的原型、设计稿。在做的过程在主屏「动静」看 —
     </div>
   </section>
@@ -6145,6 +6153,9 @@ function renderFeed() {
     }
     items.forEach(e => list.appendChild(makeEntryEl(e)));
   });
+  // 静态 footer 跟 list 一起出场 · 初始化时是 hidden · 防止 "在拉取" + "就这些了" 同框矛盾
+  const footer = document.getElementById('feed-static-footer');
+  if (footer) footer.style.display = '';
 }
 
 // 按日 group · 返回 [{day, items, dateKey}, ...] · 保持时间倒序
@@ -6805,6 +6816,10 @@ function renderShowcase(focusId) {
   // 封面图按自然比例自动适配 · w/h < 0.85 走竖屏 (4:5 + contain · 给手机截图)
   // 默认 16:9 cover (给 PC / 网页截图) · 在 img load 后检测并加 class
   list.querySelectorAll('.showcase-card-figure img').forEach(adjustCoverAspect);
+
+  // 静态 footer 跟 list 一起出场 · 防止初始 "在拉取陈列馆" + footer 同框矛盾
+  const footer = document.getElementById('showcase-static-footer');
+  if (footer) footer.style.display = '';
 
   // 如果有 focusId,滚动到那张卡 + flash 高亮 (跟通知点开锚点一致体验)
   if (focusId) {
