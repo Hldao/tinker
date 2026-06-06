@@ -225,33 +225,41 @@ function changeProjectStatus({ projectId, newStatus }, { currentUserId }) {
 // ============================================
 // SHIP CEREMONY (完工)
 // ============================================
-// 原子操作:status → done · 记 shipped_at · 创建 kind='ship' 的 update · 通知 wantToTry
-// 跟普通 changeProjectStatus + addUpdate 的区别:这一刻是仪式 · 必须写感想
-// 感想会进时间线 · 同时显示在陈列馆作为该项目的代表内容
-function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk, images }, { currentUserId }) {
-  if (!reflection || !reflection.trim()) throw new Error('完工感想不能空,说一句也行');
+// 通用陈列动作 · 三种 kind:
+//   ship      = 完工(跑通了 · 可以正常用了)· 顺手改 status 成 done · 通知 wantToTry
+//   prototype = 原型(还在打磨 · 但已经可以玩)· 不动 status
+//   design    = 设计(设计稿 / 概念 · 不一定能跑)· 不动 status
+// 共同:创建对应 kind 的 update · 第一次进陈列馆记 shipped_at
+// shipped_at 这个字段保留旧名 · 语义其实是"作品第一次进陈列馆的时刻"
+const EXHIBIT_KINDS = new Set(['ship', 'prototype', 'design']);
+function exhibitProject({ projectId, kind, statement, seekingFeedback, feedbackAsk, images }, { currentUserId }) {
+  if (!kind || !EXHIBIT_KINDS.has(kind)) throw new Error('kind 必须是 ship / prototype / design 之一');
+  if (!statement || !statement.trim()) throw new Error('陈列说明不能空,写一句也行');
   const p = db.prepare('SELECT owner_id, name, status, shipped_at FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
-  if (p.owner_id !== currentUserId) throw new Error('只能给自己的项目完工');
+  if (p.owner_id !== currentUserId) throw new Error('只能给自己的项目做陈列');
 
   const updateId = 'u-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
   const wasDone = p.status === 'done';
+  const isShipKind = kind === 'ship';
 
   const txn = db.transaction(() => {
-    // 第一次完工时改 status 并记 shipped_at
-    // 已经 done 时再次"完工"(比如换感想 / 补图)允许,只创建新 ship update,不动 shipped_at
-    if (!wasDone) {
+    // 第一次进陈列馆 · 记 shipped_at (用作"首次陈列时间")
+    // ship kind 额外把 status 改成 done
+    if (isShipKind && !wasDone) {
       db.prepare('UPDATE projects SET status = ?, shipped_at = ?, updated_at = ? WHERE id = ?')
         .run('done', p.shipped_at || now, now, projectId);
+    } else if (!p.shipped_at) {
+      db.prepare('UPDATE projects SET shipped_at = ?, updated_at = ? WHERE id = ?').run(now, now, projectId);
     } else {
       db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectId);
     }
-    // 创建 ship update
+    // 创建对应 kind 的 update
     db.prepare(`
       INSERT INTO updates (id, project_id, text, at, feedback_ask, kind) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(updateId, projectId, reflection.trim(), now, feedbackVal, 'ship');
+    `).run(updateId, projectId, statement.trim(), now, feedbackVal, kind);
 
     // 图片 (跟 addUpdate 一致的存储方式,第一张作为陈列馆封面)
     if (Array.isArray(images)) {
@@ -269,20 +277,30 @@ function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk, imag
 
   const anchor = 'update-' + updateId;
 
-  // 通知"想试试"的人 · 跟 changeProjectStatus → done 一致
-  if (!wasDone) {
+  // 只有 ship kind 完工时通知"想试试"的人 (跟原来 shipProject 行为一致)
+  if (isShipKind && !wasDone) {
     const wantToTryRows = db.prepare(`
       SELECT user_id FROM reactions WHERE project_id = ? AND type = 'wantToTry' AND user_id != ?
     `).all(projectId, currentUserId);
     for (const r of wantToTryRows) {
       notify({
         targetUserId: r.user_id, fromUserId: currentUserId, type: 'projectDone',
-        projectId, extra: reflection.trim().slice(0, 200), anchor,
+        projectId, extra: statement.trim().slice(0, 200), anchor,
       });
     }
   }
 
-  return { ok: true, updateId };
+  return { ok: true, updateId, kind };
+}
+
+// 兼容老 shipProject 调用 (CLI / AI agent / 老 webapp 代码) · 转发到 exhibitProject
+function shipProject({ projectId, reflection, seekingFeedback, feedbackAsk, images }, ctx) {
+  return exhibitProject({
+    projectId,
+    kind: 'ship',
+    statement: reflection,
+    seekingFeedback, feedbackAsk, images,
+  }, ctx);
 }
 
 // helper: 取项目的扁平表示 (action 返回值用)
@@ -616,7 +634,7 @@ module.exports = {
   // users
   editTagline, renameHandle,
   // projects
-  addProject, editProject, changeProjectStatus, shipProject,
+  addProject, editProject, changeProjectStatus, shipProject, exhibitProject,
   // updates
   addUpdate, editUpdate, deleteUpdate,
   // reactions

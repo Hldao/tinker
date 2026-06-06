@@ -489,6 +489,51 @@
   .update-extras .disabled-row { opacity: 0.4; cursor: not-allowed; }
   .update-extras .disabled-row input { pointer-events: none; }
 
+  /* 陈列三类选择器 · 三个 radio pill 横向铺开 · 选中态用边框 + 浅底色强调 */
+  .exhibit-kind-row { display: flex; gap: 12px; margin-top: 8px; }
+  .exhibit-kind-pill {
+    flex: 1;
+    display: block;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 12px 12px;
+    cursor: pointer;
+    background: var(--bg);
+    transition: border-color 0.15s, background 0.15s;
+    text-align: center;
+    position: relative;
+  }
+  .exhibit-kind-pill:hover { border-color: var(--ink-soft); }
+  .exhibit-kind-pill input { position: absolute; opacity: 0; pointer-events: none; }
+  .exhibit-kind-pill .ekind-glyph {
+    font-family: 'Fraunces', serif;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--sepia);
+    margin-bottom: 6px;
+    transition: color 0.15s;
+  }
+  .exhibit-kind-pill .ekind-name {
+    font-family: 'Newsreader', serif;
+    font-size: 15px;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .exhibit-kind-pill .ekind-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--sepia);
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
+  .exhibit-kind-pill.active { border-color: var(--vermilion); background: var(--paper); }
+  .exhibit-kind-pill.active .ekind-glyph { color: var(--vermilion); }
+  .exhibit-kind-pill[data-kind="prototype"].active { border-color: #b8860b; }
+  .exhibit-kind-pill[data-kind="prototype"].active .ekind-glyph { color: #b8860b; }
+  .exhibit-kind-pill[data-kind="design"].active { border-color: var(--moss); }
+  .exhibit-kind-pill[data-kind="design"].active .ekind-glyph { color: var(--moss); }
+
   /* anchor flash — 通知点开后跳到具体 update / note / tinkered 行 · 高亮 1.6s 提示位置 */
   @keyframes anchorFlash {
     0%   { background: rgba(194, 65, 12, 0.18); box-shadow: 0 0 0 8px rgba(194, 65, 12, 0.10); }
@@ -4934,11 +4979,12 @@
       </div>
     </div>
     <div class="filter-row mb-4">
+      <div id="showcase-kind-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
       <div id="showcase-tools-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
     </div>
     <div id="showcase-list"></div>
     <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
-      — 这里只装跑通了的事，大家在做没做完的去主屏「动静」看 —
+      — 陈列馆收三类:跑通的、还在打磨的原型、设计稿。在做的过程在主屏「动静」看 —
     </div>
   </section>
 
@@ -5239,11 +5285,34 @@
 
 <!-- SHIP CEREMONY modal — 完工 · 写一句感想 · 走 shipProject action -->
 <div id="modal-ship-ceremony" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
-  <div class="modal-paper w-full" style="max-width: 560px;">
-    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.22em;">✦ 完工</div>
-    <h3 class="modal-title">写一句完工感想</h3>
-    <p class="modal-sub">这条感想会进时间线,也进陈列馆作为这件作品的代表内容,别凑数,写你最想说的那句</p>
-    <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="比如,卡了三周的 cron 终于把状态对上了,我想知道是不是有更简单的写法" style="font-size: 16px; resize: vertical;"></textarea>
+  <div class="modal-paper w-full" style="max-width: 580px;">
+    <div class="mono text-xs mb-2" id="exhibit-kind-label" style="color: var(--vermilion); letter-spacing: 0.22em;">陈 列</div>
+    <h3 class="modal-title">放进陈列馆</h3>
+    <p class="modal-sub">陈列馆收三类作品。先选这件是哪类。</p>
+
+    <div class="exhibit-kind-row" id="exhibit-kind-row">
+      <label class="exhibit-kind-pill" data-kind="ship">
+        <input type="radio" name="exhibit-kind" value="ship" checked>
+        <div class="ekind-glyph">✦</div>
+        <div class="ekind-name">完工</div>
+        <div class="ekind-sub">跑通了 · 可以正常用</div>
+      </label>
+      <label class="exhibit-kind-pill" data-kind="prototype">
+        <input type="radio" name="exhibit-kind" value="prototype">
+        <div class="ekind-glyph">◐</div>
+        <div class="ekind-name">原型</div>
+        <div class="ekind-sub">还在打磨 · 但可以玩</div>
+      </label>
+      <label class="exhibit-kind-pill" data-kind="design">
+        <input type="radio" name="exhibit-kind" value="design">
+        <div class="ekind-glyph">○</div>
+        <div class="ekind-name">设计</div>
+        <div class="ekind-sub">设计稿 / 概念 · 不一定能跑</div>
+      </label>
+    </div>
+
+    <label class="mono text-xs block mb-1 mt-5" id="exhibit-statement-label" style="color: var(--sepia); letter-spacing: 0.15em;">完 工 感 想</label>
+    <textarea id="ship-reflection" class="input-bare" rows="4" placeholder="" style="font-size: 16px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="ship-upload-list"></div>
@@ -5257,17 +5326,17 @@
     <div class="update-extras" style="margin-top: 14px;">
       <label class="update-extra-row">
         <input type="checkbox" id="ship-seeking-feedback" checked onchange="document.getElementById('ship-feedback-ask-wrap').classList.toggle('hidden', !this.checked)">
-        <span><span class="extra-title">求看看 · 想拿反馈</span><span class="extra-sub">完工默认勾上 · 让陈列馆里看到这个项目的人能给你反馈</span></span>
+        <span><span class="extra-title">求看看 · 想拿反馈</span><span class="extra-sub">默认勾上,让陈列馆里看到这个作品的人能给你反馈</span></span>
       </label>
       <div id="ship-feedback-ask-wrap" style="padding-left: 32px;">
-        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.2em;">想知道（可选）</label>
-        <textarea id="ship-feedback-ask" class="input-bare" rows="2" placeholder="比如:5 秒内看得懂这是干嘛的吗 / 这个流程哪里不顺" style="font-size: 14px; resize: vertical;"></textarea>
+        <label class="mono text-xs block mb-1" style="color: var(--vermilion); letter-spacing: 0.2em;">想知道 (可选)</label>
+        <textarea id="ship-feedback-ask" class="input-bare" rows="2" placeholder="" style="font-size: 14px; resize: vertical;"></textarea>
       </div>
     </div>
 
     <div class="flex justify-end gap-4 mt-6">
-      <button onclick="closeModal('modal-ship-ceremony')" class="btn-act" style="border-bottom: none;">先不完工</button>
-      <button onclick="submitShipCeremony()" class="btn-act-primary">✦ 完工 · 进陈列馆</button>
+      <button onclick="closeModal('modal-ship-ceremony')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitShipCeremony()" id="exhibit-submit-btn" class="btn-act-primary">✦ 进陈列馆</button>
     </div>
   </div>
 </div>
@@ -5884,25 +5953,53 @@ function renderWorkshop(handle) {
   recentEvents.sort((a,b)=>a.agoOrder-b.agoOrder);
   const isMe = handle === currentUser.handle;
 
-  // 我在跟进的 — 我反馈过 / 接走过 / 用了方法的别人的项目 (只在自己工作室显示)
-  const trackingProjects = [];
-  if (isMe) {
-    state.projects.forEach(p => {
-      if (p.owner === handle) return;
-      let role = null, roleLabel = '';
-      if (p.reactions.tinkered.find(t => t.user === handle)) { role='tinkered'; roleLabel='我接走了'; }
-      else if (p.updates.some(u => u.usedBy && u.usedBy.find(x => x.user === handle))) { role='methodUsed'; roleLabel='用了方法'; }
-      else if (p.reactions.wantToTry.includes(handle)) { role='wantToTry'; roleLabel='想试试'; }
-      if (role) trackingProjects.push({ p, role, roleLabel });
-    });
-  }
-  const renderPcards = (list) => list.map(p => `
+  // v0.56 跟进的 · 对外可见硬信号 (接走 + 方法被用) · 别人也能看
+  // 之前 isMe-only 隐藏了 vibe coder 之间的手艺谱系
+  const trackingPublic = [];
+  state.projects.forEach(p => {
+    if (p.owner === handle) return;
+    if (p.reactions.tinkered.find(t => t.user === handle)) {
+      trackingPublic.push({ p, role: 'tinkered', roleLabel: isMe ? '我接走了' : '接走了' });
+    } else if (p.updates.some(u => u.usedBy && u.usedBy.find(x => x.user === handle))) {
+      trackingPublic.push({ p, role: 'methodUsed', roleLabel: '用了方法' });
+    }
+  });
+
+  // v0.56 工作室小档案 · 让别人秒识"这是谁"
+  const activeCount = recent.length;
+  const doneCount = done.length;
+  const trackingCount = trackingPublic.length;
+  const toolFreq = new Map();
+  projects.forEach(p => (p.tools || []).forEach(t => {
+    toolFreq.set(t, (toolFreq.get(t) || 0) + 1);
+  }));
+  const topTools = Array.from(toolFreq.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([t]) => t);
+  const statsParts = [];
+  if (activeCount > 0) statsParts.push(`在做 <span class="num">${activeCount}</span>`);
+  if (doneCount > 0) statsParts.push(`跑通 <span class="num">${doneCount}</span>`);
+  if (trackingCount > 0) statsParts.push(`跟进过 <span class="num">${trackingCount}</span>`);
+  if (topTools.length > 0) statsParts.push(`常用 <span class="ws-tools">${topTools.join(' · ')}</span>`);
+  const miniStatsHtml = statsParts.length > 0
+    ? `<div class="workshop-mini-stats">${statsParts.join('，')}</div>`
+    : '';
+
+  const renderPcards = (list) => list.map(p => {
+    const ex = findExhibitUpdate(p);
+    const exCfg = ex ? (EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship) : null;
+    return `
     <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
       <div class="pcard-name">${escapeHtml(p.name)}</div>
       <div class="pcard-desc">${escapeHtml(p.desc)}</div>
-      <div class="pcard-meta"><span class="${p.status}">— ${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
+      <div class="pcard-meta">
+        <span class="${p.status}">— ${statusText(p.status)}</span>
+        ${(p.tools || []).length > 0 ? ` &nbsp;·&nbsp; ${p.tools.slice(0,2).join('、')}` : ''}
+        ${exCfg ? ` &nbsp;·&nbsp; <span class="pcard-showcase-link" style="color: ${exCfg.badgeColor}; border-bottom-color: ${exCfg.badgeColor};" onclick="event.stopPropagation(); showScreen('showcase','${p.id}')">${exCfg.glyph} 在陈列馆 · ${exCfg.name}</span>` : ''}
+      </div>
     </div>
-  `).join('');
+  `;}).join('');
   // 做过的项目 · 比普通 pcard 多展示完工日期 + 感想引语 · 让"做完的事"有该有的视觉权重
   const renderDonePcards = (list) => list.map(p => {
     const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
@@ -6026,11 +6123,23 @@ function renderProject(owner, slug) {
     <div class="pheader">
       <div class="mb-3 flex items-center gap-3 flex-wrap">
         <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">项目 · ${statusText(p.status)}</span>
-        ${p.status === 'done' ? `<span class="react-action mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; border-bottom-color: var(--vermilion);" onclick="showScreen('showcase','${p.id}')">在陈列馆里 →</span>` : ''}
+        ${(() => {
+          const ex = findExhibitUpdate(p);
+          if (!ex) return '';
+          const cfg = EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship;
+          return `<span class="react-action mono" style="color: ${cfg.badgeColor}; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; border-bottom-color: ${cfg.badgeColor};" onclick="showScreen('showcase','${p.id}')">${cfg.glyph} 在陈列馆 · ${cfg.name} →</span>`;
+        })()}
         ${isMine ? `
           <span class="small-action" onclick="openStatusPicker('${p.id}')">${ICONS.gear}改状态</span>
           <span class="small-action" onclick="openEditProject('${p.id}')">${ICONS.edit}改项目</span>
-          ${p.status === 'done' ? `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 改感想 / 补图</span>` : ''}
+          ${(() => {
+            const ex = findExhibitUpdate(p);
+            if (ex) {
+              const cfg = EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship;
+              return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: ${cfg.badgeColor};">${cfg.glyph} 改陈列 / 换 kind</span>`;
+            }
+            return `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 放进陈列馆</span>`;
+          })()}
         ` : ''}
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
@@ -6241,7 +6350,9 @@ function renderOnboard() {
 
 /* ============ SHOWCASE 陈列馆 ============ */
 let showcaseToolFilter = 'all';
+let showcaseKindFilter = 'all'; // all / ship / prototype / design
 // v0.51: 陈列馆 markup 重做 · 报纸 dateline + 工艺人铭牌 + 截图框
+// v0.6:  陈列馆扩三类 · 完工 / 原型 / 设计 · 不再绑 status==done
 function formatShipDate(ts) {
   if (!ts) return '';
   const d = new Date(ts);
@@ -6253,23 +6364,48 @@ function daysSinceShip(ts) {
 }
 
 function renderShowcase(focusId) {
-  // 收集所有已完工项目 + ship update + cover image (取自 ship update 或退化到任意 update 的第一张图)
+  // 收集所有"陈列中"的项目 · 取决于是否有 kind in ['ship','prototype','design'] 的 update
+  // exhibit update 选最新一条 · 它的 kind / text / images 决定卡片视觉
   const items = [];
   state.projects.forEach(p => {
-    if (p.status !== 'done') return;
-    const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
-    const reflection = shipUpdate ? shipUpdate.text : ((p.updates || [])[0] || {}).text || '';
-    const shipAt = p.shippedAt || (shipUpdate ? shipUpdate.at : ((p.updates || [])[0] || {}).at) || 0;
+    if (p.status === 'archive') return; // 归档项目不出现
+    const exhibitUpdate = findExhibitUpdate(p);
+    if (!exhibitUpdate) return;
+    const reflection = exhibitUpdate.text || '';
+    const shipAt = p.shippedAt || exhibitUpdate.at || 0;
     let coverImage = null;
-    if (shipUpdate && shipUpdate.images && shipUpdate.images.length > 0) {
-      coverImage = shipUpdate.images[0];
+    if (exhibitUpdate.images && exhibitUpdate.images.length > 0) {
+      coverImage = exhibitUpdate.images[0];
     } else {
       const upWithImg = (p.updates || []).find(u => u.images && u.images.length > 0);
       if (upWithImg) coverImage = upWithImg.images[0];
     }
-    items.push({ p, reflection, shipAt, shipUpdateId: shipUpdate ? shipUpdate.id : null, coverImage });
+    items.push({ p, reflection, shipAt, shipUpdateId: exhibitUpdate.id, kind: exhibitUpdate.kind, coverImage });
   });
   items.sort((a, b) => b.shipAt - a.shipAt);
+
+  // kind 筛选器 · 三类 + 全部 (馆藏里这种 kind 有内容才显示)
+  const kindFilterRow = document.getElementById('showcase-kind-filter');
+  if (kindFilterRow) {
+    const kindCounts = { ship: 0, prototype: 0, design: 0 };
+    items.forEach(it => { if (kindCounts[it.kind] !== undefined) kindCounts[it.kind]++; });
+    kindFilterRow.innerHTML = '';
+    const kindPills = [
+      { key: 'all', label: '全部 · ' + items.length },
+      { key: 'ship', label: '✦ 完工 · ' + kindCounts.ship },
+      { key: 'prototype', label: '◐ 原型 · ' + kindCounts.prototype },
+      { key: 'design', label: '○ 设计 · ' + kindCounts.design },
+    ];
+    kindPills.forEach(({ key, label }) => {
+      // 只显示有内容的 kind (all 永远显示)
+      if (key !== 'all' && kindCounts[key] === 0) return;
+      const span = document.createElement('span');
+      span.className = 'filter-pill' + (showcaseKindFilter === key ? ' active' : '');
+      span.textContent = label;
+      span.onclick = () => { showcaseKindFilter = key; renderShowcase(); };
+      kindFilterRow.appendChild(span);
+    });
+  }
 
   // tools 筛选器
   const toolSet = new Set();
@@ -6280,12 +6416,14 @@ function renderShowcase(focusId) {
   tools.forEach(t => {
     const span = document.createElement('span');
     span.className = 'filter-pill' + (showcaseToolFilter === t ? ' active' : '');
-    span.textContent = t === 'all' ? '全部' : t;
+    span.textContent = t === 'all' ? '全部工具' : t;
     span.onclick = () => { showcaseToolFilter = t; renderShowcase(); };
     filterRow.appendChild(span);
   });
 
-  const filtered = showcaseToolFilter === 'all' ? items : items.filter(it => (it.p.tools || []).includes(showcaseToolFilter));
+  let filtered = items;
+  if (showcaseKindFilter !== 'all') filtered = filtered.filter(it => it.kind === showcaseKindFilter);
+  if (showcaseToolFilter !== 'all') filtered = filtered.filter(it => (it.p.tools || []).includes(showcaseToolFilter));
 
   // 馆藏统计 · v0.55 加贡献者数 · 强调集体性 (>= 2 位才显示)
   const statsEl = document.getElementById('showcase-stats');
@@ -6308,22 +6446,30 @@ function renderShowcase(focusId) {
 
   const list = document.getElementById('showcase-list');
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">陈列馆还没东西 — 完工第一个的人在你之前，或者就是你</div>`;
+    let msg;
+    if (showcaseKindFilter !== 'all') {
+      const cfg = EXHIBIT_KIND_COPY[showcaseKindFilter];
+      msg = '这类还没东西 — 第一个放上来的人在你之前，或者就是你';
+    } else {
+      msg = '陈列馆还没东西 — 完工、原型、设计都行，第一个放上来的人在你之前';
+    }
+    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">${msg}</div>`;
     return;
   }
 
-  list.innerHTML = filtered.map(({ p, reflection, shipAt, coverImage }, idx) => {
+  list.innerHTML = filtered.map(({ p, reflection, shipAt, coverImage, kind }, idx) => {
     const tinkeredCount = (p.reactions && p.reactions.tinkered) ? p.reactions.tinkered.length : 0;
     const methodCount = (p.updates || []).reduce((acc, u) => acc + ((u.usedBy && u.usedBy.length) || 0), 0);
     const stamps = [];
     if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过<span class="num">${tinkeredCount}</span></span>`);
     if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用<span class="num">${methodCount}</span></span>`);
     const idxStr = String(idx + 1).padStart(2, '0');
+    const cfg = EXHIBIT_KIND_COPY[kind] || EXHIBIT_KIND_COPY.ship;
     return `
-      <article class="showcase-card" id="showcase-${p.id}">
+      <article class="showcase-card showcase-card-${kind}" id="showcase-${p.id}">
         <div class="showcase-index">${idxStr}</div>
         <div class="showcase-dateline">
-          <span class="dl-left"><span class="ship-mark">✦</span>入馆 ${formatShipDate(shipAt)}</span>
+          <span class="dl-left" style="color: ${cfg.badgeColor};"><span class="ship-mark" style="color: ${cfg.badgeColor};">${cfg.glyph}</span>${cfg.showcaseVerb} ${formatShipDate(shipAt)} · ${cfg.name}</span>
         </div>
         <h2 class="showcase-card-name" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</h2>
         <div class="showcase-card-plaque">
@@ -6335,19 +6481,19 @@ function renderShowcase(focusId) {
           <img src="${coverImage.src}" alt="${escapeHtml(coverImage.caption || '')}">
         </div>` : ''}
         ${p.desc ? `<div class="showcase-card-desc">${escapeHtml(p.desc)}</div>` : ''}
-        ${reflection ? `<blockquote class="showcase-card-reflection">
-          <span class="quote-label">完工感想</span>
+        ${reflection ? `<blockquote class="showcase-card-reflection" style="border-left-color: ${cfg.badgeColor};">
+          <span class="quote-label" style="color: ${cfg.badgeColor};">${cfg.quoteLabel}</span>
           ${renderRichText(reflection.length > 280 ? reflection.slice(0, 280) + '…' : reflection)}
         </blockquote>` : ''}
         <div class="showcase-card-meta">
           ${stamps.length > 0 ? `<div class="showcase-stamps-row">${stamps.join('')}</div>` : '<div></div>'}
           <div class="showcase-card-actions">
             ${currentUser.handle === p.owner ? `
-              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改感想 / 补图</span>
+              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改 / 补图</span>
               <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">让它出馆</span>
             ` : ''}
             <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工作室 →</a>
-            ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+            ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : ''}
           </div>
         </div>
       </article>
@@ -7201,15 +7347,16 @@ function openShipPick() {
     return;
   }
   const me = currentUser.handle;
-  const candidates = state.projects.filter(p => p.owner === me && p.status !== 'done' && p.status !== 'archive');
+  const candidates = state.projects.filter(p => p.owner === me && p.status !== 'archive');
   const active = candidates.filter(p => ['active','stuck'].includes(p.status));
   const paused = candidates.filter(p => p.status === 'paused');
+  const done = candidates.filter(p => p.status === 'done');
   const listRoot = document.getElementById('ship-pick-list');
 
   if (candidates.length === 0) {
     listRoot.innerHTML = `
       <p class="serif mb-4" style="color: var(--ink); font-size: 16px; line-height: 1.6;">
-        你还没有可以入馆的项目。陈列馆装的是"跑通了能玩的小作品"，得先开一个项目、记几笔、跑通它。
+        你还没有可以入馆的项目。陈列馆收三类作品:完工的、原型、设计稿。先开一个项目把链接挂上来,然后这里就能让它入馆了。
       </p>
       <div class="flex gap-4 items-center mt-5 flex-wrap">
         <button onclick="closeModal('modal-ship-pick'); openNewProject();" class="btn-act-primary">挂一个项目 →</button>
@@ -7220,26 +7367,31 @@ function openShipPick() {
     return;
   }
 
+  // 每个项目显示当前 exhibit 状态 (有 / 无)
+  const renderPickItem = (p) => {
+    const ex = findExhibitUpdate(p);
+    const cfg = ex ? (EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship) : null;
+    const lastUpdate = p.updates.length > 0 ? '上次记 ' + shortAgo(p.updates[0].at) : '还没记过';
+    const exhibitBadge = cfg ? `<span style="color: ${cfg.badgeColor}; margin-left: 8px;">· ${cfg.glyph} 已陈列为${cfg.name} · 改一下</span>` : '';
+    return `
+      <div class="pick-project-item" onclick="closeModal('modal-ship-pick'); openShipCeremony('${p.id}');">
+        <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
+        <div class="pick-project-item-meta"><span class="${p.status}">${statusText(p.status)}</span> · ${lastUpdate}${exhibitBadge}</div>
+      </div>
+    `;
+  };
+
   let html = '';
   if (active.length > 0) {
-    html += active.map(p => {
-      const lastUpdate = p.updates.length > 0 ? '上次记 ' + shortAgo(p.updates[0].at) : '还没记过';
-      return `
-        <div class="pick-project-item" onclick="closeModal('modal-ship-pick'); openShipCeremony('${p.id}');">
-          <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
-          <div class="pick-project-item-meta"><span class="${p.status}">${statusText(p.status)}</span> · ${lastUpdate}</div>
-        </div>
-      `;
-    }).join('');
+    html += active.map(renderPickItem).join('');
   }
   if (paused.length > 0) {
     html += `<div class="mt-5 mb-3 mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">也可以让"暂停"的项目入馆</div>`;
-    html += paused.map(p => `
-      <div class="pick-project-item" onclick="closeModal('modal-ship-pick'); openShipCeremony('${p.id}');">
-        <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
-        <div class="pick-project-item-meta">${statusText(p.status)}</div>
-      </div>
-    `).join('');
+    html += paused.map(renderPickItem).join('');
+  }
+  if (done.length > 0) {
+    html += `<div class="mt-5 mb-3 mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">已完工的可以改感想 / 补图</div>`;
+    html += done.map(renderPickItem).join('');
   }
 
   listRoot.innerHTML = html;
@@ -7267,20 +7419,83 @@ async function confirmWithdraw(ev, projectId) {
 // 完工 ceremony · 写感想 + 默认勾求反馈 + 提交走 shipProject
 // v0.53: 已 done 项目重开 = "补图 / 改感想"模式 · 预填最新 ship update 内容
 let shipCtx = null;
+// 陈列三类的视觉 / 文案配置 · 给 modal 用 · 给 showcase card 用 · 给 badge 用
+const EXHIBIT_KIND_COPY = {
+  ship: {
+    glyph: '✦',
+    name: '完工',
+    badgeColor: 'var(--vermilion)',
+    title: '写一句完工感想',
+    titleReship: '改一下完工感想 / 补图',
+    sub: '跑通了,可以正常用了。这条感想会进陈列馆作为这件作品的代表内容,写你最想说的那句。',
+    subReship: '把感想改顺手,或者补传截图。之前的会被这版替换。',
+    statementLabel: '完 工 感 想',
+    placeholder: '比如,卡了三周的 cron 终于把状态对上了',
+    feedbackPlaceholder: '5 秒内看得懂这是干嘛的吗 / 这个流程哪里不顺',
+    cta: '✦ 完工 · 进陈列馆',
+    ctaReship: '✦ 更新陈列馆',
+    quoteLabel: '完 工 感 想',
+    showcaseVerb: '入馆',
+    tryCtaText: '去试用 →',
+  },
+  prototype: {
+    glyph: '◐',
+    name: '原型',
+    badgeColor: '#b8860b', // 暗黄 / 琥珀色 · 在我们调色板里没有 · 用近似的 amber
+    title: '写一句原型说明',
+    titleReship: '改一下原型说明 / 补图',
+    sub: '还在打磨,但已经能玩。说一下你想试什么,或者大家可以怎么帮你。',
+    subReship: '把说明改顺手,或者补传截图。之前的会被这版替换。',
+    statementLabel: '原 型 说 明',
+    placeholder: '比如,这个原型方向还没定 · 想看大家拿起来用会不会顺',
+    feedbackPlaceholder: '操作上哪里别扭 / 你会不会接着用 / 哪一步让你愣住',
+    cta: '◐ 进陈列馆作为原型',
+    ctaReship: '◐ 更新原型',
+    quoteLabel: '原 型 说 明',
+    showcaseVerb: '在试',
+    tryCtaText: '去体验 →',
+  },
+  design: {
+    glyph: '○',
+    name: '设计',
+    badgeColor: 'var(--moss)',
+    title: '写一句设计想法',
+    titleReship: '改一下设计想法 / 补图',
+    sub: '设计稿 / 概念 / 还没实现。说一下这是关于什么的,想要哪种反馈。',
+    subReship: '把设计想法改顺手,或者补传图。之前的会被这版替换。',
+    statementLabel: '设 计 想 法',
+    placeholder: '比如,这是我对 X 问题的设计 · 想要方向上的反馈',
+    feedbackPlaceholder: '方向对不对 / 哪里没说清楚 / 有没有想到我没想到的',
+    cta: '○ 进陈列馆作为设计',
+    ctaReship: '○ 更新设计',
+    quoteLabel: '设 计 想 法',
+    showcaseVerb: '概念',
+    tryCtaText: '去看看 →',
+  },
+};
+
+const EXHIBIT_KINDS = ['ship', 'prototype', 'design'];
+
+function findExhibitUpdate(p) {
+  if (!p || !p.updates) return null;
+  return p.updates.find(u => EXHIBIT_KINDS.includes(u.kind)) || null;
+}
+
 function openShipCeremony(projectId) {
   shipCtx = projectId;
   const p = projectById(projectId);
-  const existingShip = p && p.updates ? p.updates.find(u => u.kind === 'ship') : null;
-  const isReship = p && p.status === 'done' && existingShip;
+  const existing = findExhibitUpdate(p);
+  const existingKind = existing ? existing.kind : 'ship';
+  const isReship = !!existing;
 
   // 预填或清空
-  if (isReship) {
-    document.getElementById('ship-reflection').value = existingShip.text || '';
-    const hadFeedback = existingShip.feedbackAsk !== undefined && existingShip.feedbackAsk !== null;
+  if (existing) {
+    document.getElementById('ship-reflection').value = existing.text || '';
+    const hadFeedback = existing.feedbackAsk !== undefined && existing.feedbackAsk !== null;
     document.getElementById('ship-seeking-feedback').checked = hadFeedback;
-    document.getElementById('ship-feedback-ask').value = existingShip.feedbackAsk || '';
+    document.getElementById('ship-feedback-ask').value = existing.feedbackAsk || '';
     document.getElementById('ship-feedback-ask-wrap').classList.toggle('hidden', !hadFeedback);
-    shipPendingImages = (existingShip.images || []).map(img => ({ src: img.src, caption: img.caption || '' }));
+    shipPendingImages = (existing.images || []).map(img => ({ src: img.src, caption: img.caption || '' }));
   } else {
     shipPendingImages = [];
     document.getElementById('ship-reflection').value = '';
@@ -7290,30 +7505,55 @@ function openShipCeremony(projectId) {
   }
   renderShipPendingImages();
 
-  // 文案随模式切换
-  const titleEl = document.querySelector('#modal-ship-ceremony .modal-title');
-  const subEl = document.querySelector('#modal-ship-ceremony .modal-sub');
-  const ctaEl = document.querySelector('#modal-ship-ceremony .btn-act-primary');
-  const cancelEl = document.querySelector('#modal-ship-ceremony .btn-act');
-  if (isReship) {
-    if (titleEl) titleEl.textContent = '改一下完工感想 / 补图';
-    if (subEl) subEl.textContent = '把感想改顺手，或者补传截图，之前的会被这版替换';
-    if (ctaEl) ctaEl.textContent = '✦ 更新陈列馆';
-    if (cancelEl) cancelEl.textContent = '不改了';
-  } else {
-    if (titleEl) titleEl.textContent = '写一句完工感想';
-    if (subEl) subEl.textContent = '这条感想会进时间线，也进陈列馆作为这件作品的代表内容，别凑数，写你最想说的那句';
-    if (ctaEl) ctaEl.textContent = '✦ 完工 · 进陈列馆';
-    if (cancelEl) cancelEl.textContent = '先不完工';
-  }
+  // 单选预选 + 绑定 change 监听
+  document.querySelectorAll('input[name="exhibit-kind"]').forEach(input => {
+    input.checked = input.value === existingKind;
+    input.onchange = () => updateExhibitKindUI(input.value, isReship);
+  });
+  updateExhibitKindUI(existingKind, isReship);
 
   document.getElementById('modal-ship-ceremony').classList.remove('hidden');
   setTimeout(() => document.getElementById('ship-reflection').focus(), 60);
 }
+
+function updateExhibitKindUI(kind, isReship) {
+  const cfg = EXHIBIT_KIND_COPY[kind];
+  if (!cfg) return;
+  // 顶部 kind label
+  const labelEl = document.getElementById('exhibit-kind-label');
+  if (labelEl) {
+    labelEl.textContent = cfg.glyph + ' ' + cfg.name;
+    labelEl.style.color = cfg.badgeColor;
+  }
+  // 标题 / sub
+  const titleEl = document.querySelector('#modal-ship-ceremony .modal-title');
+  const subEl = document.querySelector('#modal-ship-ceremony .modal-sub');
+  if (titleEl) titleEl.textContent = isReship ? cfg.titleReship : cfg.title;
+  if (subEl) subEl.textContent = isReship ? cfg.subReship : cfg.sub;
+  // statement label / placeholder
+  const stmtLabelEl = document.getElementById('exhibit-statement-label');
+  if (stmtLabelEl) stmtLabelEl.textContent = cfg.statementLabel;
+  const stmtEl = document.getElementById('ship-reflection');
+  if (stmtEl && !stmtEl.value) stmtEl.placeholder = cfg.placeholder;
+  // feedback placeholder
+  const askEl = document.getElementById('ship-feedback-ask');
+  if (askEl && !askEl.value) askEl.placeholder = cfg.feedbackPlaceholder;
+  // CTA
+  const ctaEl = document.getElementById('exhibit-submit-btn');
+  if (ctaEl) ctaEl.textContent = isReship ? cfg.ctaReship : cfg.cta;
+  // pill 视觉激活
+  document.querySelectorAll('.exhibit-kind-pill').forEach(pill => {
+    pill.classList.toggle('active', pill.getAttribute('data-kind') === kind);
+  });
+}
+
 async function submitShipCeremony() {
   if (!shipCtx) return;
-  const reflection = document.getElementById('ship-reflection').value.trim();
-  if (!reflection) { showToast('完工感想不能空,说一句也行'); return; }
+  const kindEl = document.querySelector('input[name="exhibit-kind"]:checked');
+  const kind = kindEl ? kindEl.value : 'ship';
+  const cfg = EXHIBIT_KIND_COPY[kind];
+  const statement = document.getElementById('ship-reflection').value.trim();
+  if (!statement) { showToast(cfg.name + '说明不能空,写一句也行'); return; }
   const seeking = document.getElementById('ship-seeking-feedback').checked;
   const ask = seeking ? document.getElementById('ship-feedback-ask').value.trim() : '';
   const images = shipPendingImages.length > 0
@@ -7321,18 +7561,19 @@ async function submitShipCeremony() {
     : undefined;
   const p = projectById(shipCtx);
   const wantToTryCount = (p && p.reactions ? (p.reactions.wantToTry || []) : []).filter(u => u !== currentUser.handle).length;
-  const isReship = p && p.status === 'done';
+  const existing = findExhibitUpdate(p);
+  const isReship = !!existing;
   try {
-    await apiAction('shipProject', { projectId: shipCtx, reflection, seekingFeedback: seeking, feedbackAsk: ask, images });
+    await apiAction('exhibitProject', { projectId: shipCtx, kind, statement, seekingFeedback: seeking, feedbackAsk: ask, images });
     closeModal('modal-ship-ceremony');
     shipPendingImages = [];
     if (p) renderProject(p.owner, p.slug);
     if (isReship) {
-      showToast('✦ 陈列馆已更新');
-    } else if (wantToTryCount > 0) {
+      showToast(cfg.glyph + ' 陈列馆已更新');
+    } else if (kind === 'ship' && wantToTryCount > 0) {
       showToast('✦ 完工,已通知 ' + wantToTryCount + ' 个想试试的人,也进了陈列馆');
     } else {
-      showToast('✦ 完工,进了陈列馆');
+      showToast(cfg.glyph + ' 进陈列馆 · ' + cfg.name);
     }
     shipCtx = null;
   } catch (e) { showToast(e.message); }
