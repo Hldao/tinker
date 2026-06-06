@@ -6024,6 +6024,171 @@
   /* ===============================================================
      END v0.67 记一笔 modal 视觉对齐 + AI 味清理
      =============================================================== */
+
+  /* ================================================================
+   *  v0.68 · 两个发布 modal 深度设计升级
+   *  --------------------------------------------------------------
+   *  ① 上下文亲密条 (top context bar)
+   *      "在 [项目名] 记 · 今天的第 N 笔" (update)
+   *      "让 [项目名] 入馆" (exhibit)
+   *
+   *  ② 纸笔质感
+   *      modal-paper 顶部 1px vermilion 装饰条 (像信纸顶头)
+   *      内边 1px dotted sepia-light 装裱框
+   *      右上 dog-ear 折角小三角 (极淡)
+   *
+   *  ③ 入场动画
+   *      paper translate+scale spring 弹入
+   *      内部 sections stagger fade 60ms 起步
+   *  ================================================================ */
+
+  /* —— ① CONTEXT BAR (顶部亲密条) —— */
+  .update-modal .modal-context-bar,
+  .exhibit-modal .modal-context-bar {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.08em;
+    padding: 0 0 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px dotted var(--rule);
+    line-height: 1.6;
+  }
+  .update-modal .modal-context-bar:empty,
+  .exhibit-modal .modal-context-bar:empty {
+    display: none;
+  }
+  .modal-context-bar .ctx-action {
+    color: var(--ink-soft);
+  }
+  .modal-context-bar .ctx-project {
+    color: var(--ink);
+    font-weight: 500;
+    font-family: 'Newsreader', 'Songti SC', serif;
+    font-size: 13px;
+    letter-spacing: 0.005em;
+    padding: 0 2px;
+  }
+  .modal-context-bar .ctx-meta {
+    margin-left: 4px;
+    color: var(--sepia);
+  }
+
+  /* —— ② 纸笔质感 —— */
+  /* 顶部 vermilion 装饰条 (像信纸顶头 / 章程封口) */
+  .update-modal,
+  .exhibit-modal {
+    position: relative;
+    overflow: visible !important;
+  }
+  .update-modal::before,
+  .exhibit-modal::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      var(--vermilion) 0%,
+      var(--vermilion) 40%,
+      transparent 100%);
+    border-radius: 1px 1px 0 0;
+    opacity: 0.85;
+  }
+
+  /* 右上 dog-ear 折角 · 极淡 · 像便签翻起 */
+  .update-modal::after,
+  .exhibit-modal::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    background: linear-gradient(225deg,
+      rgba(120, 113, 108, 0.18) 0%,
+      rgba(120, 113, 108, 0.06) 50%,
+      transparent 60%);
+    pointer-events: none;
+    border-radius: 0 0 0 4px;
+  }
+
+  /* exhibit prototype / design 的顶部装饰条变色 */
+  .exhibit-modal[data-kind="prototype"]::before {
+    background: linear-gradient(90deg, #b8860b 0%, #b8860b 40%, transparent 100%);
+  }
+  .exhibit-modal[data-kind="design"]::before {
+    background: linear-gradient(90deg, var(--moss) 0%, var(--moss) 40%, transparent 100%);
+  }
+
+  /* —— ③ 入场动画 —— */
+  /* paper spring 弹入 */
+  .modal-back:not(.hidden) .update-modal,
+  .modal-back:not(.hidden) .exhibit-modal {
+    animation: paperFlyIn 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes paperFlyIn {
+    from {
+      opacity: 0;
+      transform: translateY(18px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* 内部 sections stagger · 让每段渐次出现 */
+  .modal-back:not(.hidden) .update-modal > *,
+  .modal-back:not(.hidden) .exhibit-modal > * {
+    animation: sectionFadeIn 0.34s ease both;
+  }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(1),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(1) { animation-delay: 100ms; }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(2),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(2) { animation-delay: 160ms; }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(3),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(3) { animation-delay: 220ms; }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(4),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(4) { animation-delay: 280ms; }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(5),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(5) { animation-delay: 320ms; }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(6),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(6) { animation-delay: 360ms; }
+  .modal-back:not(.hidden) .update-modal > *:nth-child(n+7),
+  .modal-back:not(.hidden) .exhibit-modal > *:nth-child(n+7) { animation-delay: 400ms; }
+
+  @keyframes sectionFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* prefers-reduced-motion 用户跳过动画 (a11y) */
+  @media (prefers-reduced-motion: reduce) {
+    .modal-back:not(.hidden) .update-modal,
+    .modal-back:not(.hidden) .exhibit-modal,
+    .modal-back:not(.hidden) .update-modal > *,
+    .modal-back:not(.hidden) .exhibit-modal > * {
+      animation: none !important;
+    }
+  }
+
+  /* —— modal-paper 整体 paddings 调整给装饰条留位 —— */
+  .update-modal,
+  .exhibit-modal {
+    padding-top: 32px !important;   /* 留给顶部 vermilion 条呼吸 */
+  }
+
+  /* ===============================================================
+     END v0.68 两个发布 modal 深度设计升级
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -6292,6 +6457,7 @@
 <!-- UPDATE modal · 加了图片上传 -->
 <div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper update-modal w-full" style="max-width: 580px;">
+    <div class="modal-context-bar" id="update-context-bar"></div>
     <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.28em;">记 进 展</div>
     <h3 class="modal-title">今天动了什么</h3>
     <p class="modal-sub">跑通了什么、卡在哪儿、试错了什么，都行。短句就好。</p>
@@ -6515,6 +6681,7 @@
 <!-- SHIP CEREMONY modal — 完工 · 写一句感想 · 走 shipProject action -->
 <div id="modal-ship-ceremony" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper exhibit-modal w-full" data-kind="ship" style="max-width: 580px;">
+    <div class="modal-context-bar" id="exhibit-context-bar"></div>
     <div class="mono text-xs mb-2" id="exhibit-kind-label" style="letter-spacing: 0.28em;">✦ 完工</div>
     <h3 class="modal-title">放进陈列馆</h3>
     <p class="modal-sub">陈列馆收三类作品。先选这件是哪类、写一句、加张图（可选）。</p>
@@ -6660,10 +6827,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.67 · 44 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.68 · 45 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.67</span>
+  <span class="bb-ver">v0.68</span>
 </div>
 
 <script>
@@ -8424,6 +8591,21 @@ function openUpdate(projectId) {
 
   renderPendingImages();
   resetUpdateExtras(currentUpdateCtx, /* isEdit */ false);
+
+  // v0.68 顶部 context bar · "在 [项目名] 记 · 今天的第 N 笔"
+  const ctxBar = document.getElementById('update-context-bar');
+  if (ctxBar) {
+    const p = projectById(currentUpdateCtx);
+    if (p) {
+      const todayKey = makeDateKey(new Date());
+      const todayCount = (p.updates || []).filter(u => makeDateKey(new Date(u.at)) === todayKey).length;
+      const ordinal = todayCount + 1;
+      ctxBar.innerHTML = `<span class="ctx-action">在</span> <span class="ctx-project">${escapeHtml(p.name)}</span> <span class="ctx-meta">记 · 今天的第 ${ordinal} 笔</span>`;
+    } else {
+      ctxBar.innerHTML = '';
+    }
+  }
+
   document.getElementById('modal-update').classList.remove('hidden');
 
   // 输入时存草稿
@@ -8967,6 +9149,12 @@ function openShipCeremony(projectId) {
     input.onchange = () => updateExhibitKindUI(input.value, isReship);
   });
   updateExhibitKindUI(existingKind, isReship);
+
+  // v0.68 顶部 context bar · "让 [项目名] 入馆 / 改一下"
+  const ctxBar = document.getElementById('exhibit-context-bar');
+  if (ctxBar && p) {
+    ctxBar.innerHTML = `<span class="ctx-action">${isReship ? '改一下' : '让'}</span> <span class="ctx-project">${escapeHtml(p.name)}</span> <span class="ctx-meta">${isReship ? '在陈列馆的样子' : '入馆'}</span>`;
+  }
 
   document.getElementById('modal-ship-ceremony').classList.remove('hidden');
   setTimeout(() => document.getElementById('ship-reflection').focus(), 60);
