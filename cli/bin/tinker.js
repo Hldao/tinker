@@ -758,12 +758,21 @@ async function screenshotUrl(url) {
     if (!res.ok) throw new Error('microlink ' + res.status);
     json = await res.json();
   } finally { clearTimeout(timer); }
+  // 关键检查:目标页面本身的 HTTP 状态(microlink 会忠实截下 404 / 403 错误页 → 一片空白)
+  const upstreamStatus = json && json.data && json.data.statusCode;
+  if (upstreamStatus && upstreamStatus >= 400) {
+    throw new Error('productLink 返回 ' + upstreamStatus + ',八成是死链或私有页');
+  }
   const shotUrl = json && json.data && json.data.screenshot && json.data.screenshot.url;
   if (!shotUrl) throw new Error('microlink 没返回截图 URL');
   const imgRes = await fetch(shotUrl);
   if (!imgRes.ok) throw new Error('下载截图 ' + imgRes.status);
   const arrBuf = await imgRes.arrayBuffer();
   const sizeKB = Math.round(arrBuf.byteLength / 1024);
+  // 过小的截图通常是错误页或空白,< 4KB 直接拒绝
+  if (sizeKB < 4) {
+    throw new Error('截图只有 ' + sizeKB + 'KB,基本是空白页');
+  }
   const base64 = Buffer.from(arrBuf).toString('base64');
   return { images: [{ src: 'data:image/jpeg;base64,' + base64, caption: '自动抓的首页截图' }], sizeKB };
 }
