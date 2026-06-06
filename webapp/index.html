@@ -4578,6 +4578,82 @@
   /* ===============================================================
      END v0.52 长文阅读体验三件套
      =============================================================== */
+
+  /* ================================================================
+   *  v0.53 · 完工 ceremony 三处补图入口
+   *  --------------------------------------------------------------
+   *  用户反馈: "陈列馆有上传截图功能但找不到入口"
+   *
+   *  根因: 截图字段在 ship modal 里 · 但 ship modal 只在
+   *        非 done → done 状态切换时触发一次 · 已 done 项目无入口
+   *
+   *  补 3 个入口 (都仅项目主可见):
+   *    1. 陈列馆卡片 meta 区: "改感想 / 补图"
+   *    2. 项目页 pheader: "✦ 改感想 / 补图" (done 状态时显示)
+   *    3. 工作室"做过的"区 pcard: "+ 补图" 或 "改感想 / 换图"
+   *
+   *  openShipCeremony 升级:
+   *    · 检测 p.status === 'done' && existingShip → reship 模式
+   *    · 预填: reflection / feedback ask / images
+   *    · 文案切换: 标题/sub/CTA/cancel 全换
+   *  ================================================================ */
+
+  /* —— 陈列馆 owner 补图入口 —— */
+  .showcase-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+  .showcase-owner-edit {
+    font-family: 'Newsreader', serif;
+    font-size: 13px;
+    color: var(--sepia);
+    letter-spacing: 0.005em;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    padding-bottom: 1px;
+    cursor: pointer;
+    transition: color 0.18s ease, border-bottom-color 0.18s ease;
+  }
+  .showcase-owner-edit:hover {
+    color: var(--vermilion);
+    border-bottom: 1px solid var(--vermilion);
+  }
+
+  /* —— 工作室"做过的"区 pcard 补图入口 —— */
+  .pcard-done-edit {
+    margin-left: auto;
+    font-family: 'Newsreader', serif;
+    font-size: 12px;
+    color: var(--sepia);
+    letter-spacing: 0.005em;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    padding-bottom: 1px;
+    cursor: pointer;
+    transition: color 0.18s ease, border-bottom-color 0.18s ease;
+    opacity: 0.6;
+  }
+  .pcard:hover .pcard-done-edit {
+    opacity: 1;
+  }
+  .pcard-done-edit:hover {
+    color: var(--vermilion) !important;
+    border-bottom: 1px solid var(--vermilion);
+  }
+  .pcard-meta {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+
+  @media (hover: none) {
+    .pcard-done-edit { opacity: 1; }
+  }
+
+  /* ===============================================================
+     END v0.53 完工 ceremony 三处补图入口
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -5150,10 +5226,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.52 · 28 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.53 · 29 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.52</span>
+  <span class="bb-ver">v0.53</span>
 </div>
 
 <script>
@@ -5695,6 +5771,7 @@ function renderWorkshop(handle) {
     const shipUpdate = (p.updates || []).find(u => u.kind === 'ship');
     const reflection = shipUpdate ? shipUpdate.text : '';
     const shipAt = p.shippedAt || (shipUpdate ? shipUpdate.at : 0);
+    const hasCover = shipUpdate && shipUpdate.images && shipUpdate.images.length > 0;
     return `
       <div class="pcard pcard-done" onclick="showScreen('project','${handle}','${p.slug}')">
         <div class="pcard-name">${escapeHtml(p.name)}</div>
@@ -5704,6 +5781,7 @@ function renderWorkshop(handle) {
           <span class="${p.status}">— ${statusText(p.status)}</span>
           ${shipAt ? ` &nbsp;·&nbsp; <span style="color: var(--vermilion);">✦ 完工 ${shortAgo(shipAt)}</span>` : ''}
           ${(p.tools || []).length > 0 ? ` &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}` : ''}
+          ${isMe ? `<span class="pcard-done-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')" title="${hasCover ? '改感想 / 换图' : '补传陈列馆封面图'}">${hasCover ? '改感想 / 换图' : '+ 补图'}</span>` : ''}
         </div>
       </div>
     `;
@@ -5814,6 +5892,7 @@ function renderProject(owner, slug) {
         ${isMine ? `
           <span class="small-action" onclick="openStatusPicker('${p.id}')">${ICONS.gear}改状态</span>
           <span class="small-action" onclick="openEditProject('${p.id}')">${ICONS.edit}改项目</span>
+          ${p.status === 'done' ? `<span class="small-action" onclick="openShipCeremony('${p.id}')" style="color: var(--vermilion);">✦ 改感想 / 补图</span>` : ''}
         ` : ''}
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
@@ -6120,7 +6199,10 @@ function renderShowcase() {
         </blockquote>` : ''}
         <div class="showcase-card-meta">
           ${stamps.length > 0 ? `<div class="showcase-stamps-row">${stamps.join('')}</div>` : '<div></div>'}
-          ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+          <div class="showcase-card-actions">
+            ${currentUser.handle === p.owner ? `<span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改感想 / 补图</span>` : ''}
+            ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+          </div>
         </div>
       </article>
     `;
@@ -6961,15 +7043,48 @@ async function submitStatusChange() {
 }
 
 // 完工 ceremony · 写感想 + 默认勾求反馈 + 提交走 shipProject
+// v0.53: 已 done 项目重开 = "补图 / 改感想"模式 · 预填最新 ship update 内容
 let shipCtx = null;
 function openShipCeremony(projectId) {
   shipCtx = projectId;
-  shipPendingImages = [];
+  const p = projectById(projectId);
+  const existingShip = p && p.updates ? p.updates.find(u => u.kind === 'ship') : null;
+  const isReship = p && p.status === 'done' && existingShip;
+
+  // 预填或清空
+  if (isReship) {
+    document.getElementById('ship-reflection').value = existingShip.text || '';
+    const hadFeedback = existingShip.feedbackAsk !== undefined && existingShip.feedbackAsk !== null;
+    document.getElementById('ship-seeking-feedback').checked = hadFeedback;
+    document.getElementById('ship-feedback-ask').value = existingShip.feedbackAsk || '';
+    document.getElementById('ship-feedback-ask-wrap').classList.toggle('hidden', !hadFeedback);
+    shipPendingImages = (existingShip.images || []).map(img => ({ src: img.src, caption: img.caption || '' }));
+  } else {
+    shipPendingImages = [];
+    document.getElementById('ship-reflection').value = '';
+    document.getElementById('ship-seeking-feedback').checked = true;
+    document.getElementById('ship-feedback-ask').value = '';
+    document.getElementById('ship-feedback-ask-wrap').classList.remove('hidden');
+  }
   renderShipPendingImages();
-  document.getElementById('ship-reflection').value = '';
-  document.getElementById('ship-seeking-feedback').checked = true;
-  document.getElementById('ship-feedback-ask').value = '';
-  document.getElementById('ship-feedback-ask-wrap').classList.remove('hidden');
+
+  // 文案随模式切换
+  const titleEl = document.querySelector('#modal-ship-ceremony .modal-title');
+  const subEl = document.querySelector('#modal-ship-ceremony .modal-sub');
+  const ctaEl = document.querySelector('#modal-ship-ceremony .btn-act-primary');
+  const cancelEl = document.querySelector('#modal-ship-ceremony .btn-act');
+  if (isReship) {
+    if (titleEl) titleEl.textContent = '改一下完工感想 / 补图';
+    if (subEl) subEl.textContent = '把感想改顺手，或者补传截图，之前的会被这版替换';
+    if (ctaEl) ctaEl.textContent = '✦ 更新陈列馆';
+    if (cancelEl) cancelEl.textContent = '不改了';
+  } else {
+    if (titleEl) titleEl.textContent = '写一句完工感想';
+    if (subEl) subEl.textContent = '这条感想会进时间线，也进陈列馆作为这件作品的代表内容，别凑数，写你最想说的那句';
+    if (ctaEl) ctaEl.textContent = '✦ 完工 · 进陈列馆';
+    if (cancelEl) cancelEl.textContent = '先不完工';
+  }
+
   document.getElementById('modal-ship-ceremony').classList.remove('hidden');
   setTimeout(() => document.getElementById('ship-reflection').focus(), 60);
 }
@@ -6984,12 +7099,15 @@ async function submitShipCeremony() {
     : undefined;
   const p = projectById(shipCtx);
   const wantToTryCount = (p && p.reactions ? (p.reactions.wantToTry || []) : []).filter(u => u !== currentUser.handle).length;
+  const isReship = p && p.status === 'done';
   try {
     await apiAction('shipProject', { projectId: shipCtx, reflection, seekingFeedback: seeking, feedbackAsk: ask, images });
     closeModal('modal-ship-ceremony');
     shipPendingImages = [];
     if (p) renderProject(p.owner, p.slug);
-    if (wantToTryCount > 0) {
+    if (isReship) {
+      showToast('✦ 陈列馆已更新');
+    } else if (wantToTryCount > 0) {
       showToast('✦ 完工,已通知 ' + wantToTryCount + ' 个想试试的人,也进了陈列馆');
     } else {
       showToast('✦ 完工,进了陈列馆');
