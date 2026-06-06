@@ -43,9 +43,9 @@
 ## [Unreleased] / 0.5.x · UI 体系化打磨 (进行中)
 
 > Owner: 设计线 (ui.N)
-> 进展: webapp/index.html 累积 v0.27 → v0.53 共 29 个子段
+> 进展: webapp/index.html 累积 v0.27 → v0.54 共 30 个子段
 > 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
-> Build badge: webapp 右下角小角标 `ui · v0.53` (hover 显示完整 patch 历史)
+> Build badge: webapp 右下角小角标 `ui · v0.54` (hover 显示完整 patch 历史)
 
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
@@ -79,6 +79,7 @@
 - **v0.51** 陈列馆视觉升级 + 全站 AI 符号清洗 · 序号 01/02 浮左 + dateline 绝对日期 + 铭牌行 + 截图框 16:9 + 完工感想 mono 标签 + 印章 dotted 边框 + 馆藏统计 · markup 同步 renderShowcase + formatShipDate/daysSinceShip helper · 全站字间空格删 + 文案 staccato `·` 链改自然中文标点 (顿号/句号/破折号) · 保留卷期号/工具列表/时间元数据的 ·
 - **v0.52** 长文阅读体验三件套 · ① renderRichText 块级版 \n\n→`<p>` + 单 \n→`<br>` · 段间距 12px · entry-text/tl-text 行高 1.65 · ② status chip 退化成 8px 圆点 + 状态色 (active/done=moss · stuck=vermilion · paused=sepia) · 文字走 title tooltip · hover 圆点放大 · ③ entry-meta 工具栈默认 opacity 0.55 · hover 1.0 · 移动端 (hover:none) 永远 1.0 · 4 处调用切换 renderRichText (feed/workshop 最近的动静/timeline/showcase reflection)
 - **v0.53** 完工 ceremony 三处补图入口 · 闭环已 done 项目 · openShipCeremony 升级支持 reship 模式 (预填 reflection/feedbackAsk/images · 文案切换 "改一下完工感想/补图" · CTA "✦ 更新陈列馆") · 三处入口: ① 陈列馆卡片 meta 区"改感想/补图" (owner-only) · ② 项目页 pheader done 状态时"✦ 改感想/补图" small-action · ③ 工作室"做过的"区 pcard 加 "+ 补图" 或 "改感想/换图" (有无 cover image 不同文案) · 后端 shipProject 早已支持重复 ship · 仅前端补入口
+- **v0.54** 陈列馆 CRUD 闭环 · 补 Create + Delete 入口 · ① Create: 陈列馆头部 "✦ 让一个项目入馆" CTA + 新 modal-ship-pick · 列出 owner 所有非 done/archive 项目 (active/stuck/paused) · 选中 → openShipCeremony · 无候选时引导挂项目 / 入场仪式 · ② Delete: 陈列馆 owner actions 加 "让它出馆" (sepia dotted · 默认 opacity 0.65 · hover 1.0 · confirm 二次确认 · changeProjectStatus done → paused · 历史 ship update 保留 · 随时可再入馆)
 
 ### [ui] markup 减法记录 (累积 5 处)
 所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:

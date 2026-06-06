@@ -4706,6 +4706,74 @@
   /* ===============================================================
      END v0.53 完工 ceremony 三处补图入口
      =============================================================== */
+
+  /* ================================================================
+   *  v0.54 · 陈列馆 CRUD 闭环 (Create + Delete 入口)
+   *  --------------------------------------------------------------
+   *  用户反馈: "陈列馆发布入口漏做了，需要增删改查闭环"
+   *
+   *  补:
+   *    · Create: 陈列馆头部 "✦ 让一个项目入馆" CTA + modal-ship-pick
+   *      → 列出 owner 所有非 done/archive 项目 → 选 → openShipCeremony
+   *      → 无候选时引导挂项目 / 入场仪式
+   *    · Delete: 陈列馆 owner actions 加 "让它出馆"
+   *      → confirm + changeProjectStatus done → paused
+   *      → 历史 ship update 保留 · 状态回滚 · 可随时再入馆
+   *
+   *  已有 (v0.51 + v0.53):
+   *    · Read: 陈列馆浏览
+   *    · Update: 改感想 / 补图 (三处入口)
+   *  ================================================================ */
+
+  /* —— Create · 发布 CTA —— */
+  .showcase-publish-row {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+  }
+  .showcase-publish-cta {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    color: var(--vermilion);
+    padding: 6px 14px;
+    border: 1px solid rgba(194, 65, 12, 0.32);
+    background: rgba(194, 65, 12, 0.03);
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+  }
+  .showcase-publish-cta:hover {
+    background: rgba(194, 65, 12, 0.07);
+    border-color: var(--vermilion);
+    transform: translateY(-0.5px);
+  }
+
+  /* —— Delete · 撤展链接 (sepia · 不抢戏) —— */
+  .showcase-owner-withdraw {
+    font-family: 'Newsreader', serif;
+    font-size: 13px;
+    color: var(--sepia);
+    letter-spacing: 0.005em;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    padding-bottom: 1px;
+    cursor: pointer;
+    opacity: 0.65;
+    transition: opacity 0.18s ease, color 0.18s ease, border-bottom-color 0.18s ease;
+  }
+  .showcase-card:hover .showcase-owner-withdraw {
+    opacity: 1;
+  }
+  .showcase-owner-withdraw:hover {
+    color: var(--vermilion-deep, #a83a0e) !important;
+    border-bottom: 1px solid var(--vermilion);
+  }
+  @media (hover: none) {
+    .showcase-owner-withdraw { opacity: 1; }
+  }
+
+  /* ===============================================================
+     END v0.54 陈列馆 CRUD 闭环
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -4861,6 +4929,9 @@
       <h1 class="feed-title mb-3">做出来的</h1>
       <p class="feed-sub">完工了、还能玩到的小作品。时间倒序，<strong>不投票，不排行，看到喜欢的就去试用一下</strong>。</p>
       <div id="showcase-stats" class="showcase-stats"></div>
+      <div class="showcase-publish-row">
+        <button class="showcase-publish-cta" onclick="openShipPick()">✦ 让一个项目入馆</button>
+      </div>
     </div>
     <div class="filter-row mb-4">
       <div id="showcase-tools-filter" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
@@ -5231,6 +5302,19 @@
   </div>
 </div>
 
+<!-- v0.54 SHIP PICK modal · 陈列馆"让一个项目入馆"显式入口 -->
+<div id="modal-ship-pick" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 480px; max-height: 80vh; overflow-y: auto;">
+    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.22em;">✦ 入馆</div>
+    <h3 class="modal-title">让哪个项目入馆？</h3>
+    <p class="modal-sub">挑一个跑通了的小作品，写一句感想，进陈列馆</p>
+    <div id="ship-pick-list"></div>
+    <div class="flex justify-end mt-6">
+      <button onclick="closeModal('modal-ship-pick')" class="btn-act" style="border-bottom: none;">不入了</button>
+    </div>
+  </div>
+</div>
+
 <!-- NEW PROJECT modal -->
 <div id="modal-new-project" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 560px; max-height: 88vh; overflow-y: auto;">
@@ -5278,10 +5362,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.53 · 29 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.54 · 30 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.53</span>
+  <span class="bb-ver">v0.54</span>
 </div>
 
 <script>
@@ -6254,7 +6338,10 @@ function renderShowcase(focusId) {
         <div class="showcase-card-meta">
           ${stamps.length > 0 ? `<div class="showcase-stamps-row">${stamps.join('')}</div>` : '<div></div>'}
           <div class="showcase-card-actions">
-            ${currentUser.handle === p.owner ? `<span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改感想 / 补图</span>` : ''}
+            ${currentUser.handle === p.owner ? `
+              <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">改感想 / 补图</span>
+              <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">让它出馆</span>
+            ` : ''}
             <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工作室 →</a>
             ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
           </div>
@@ -7099,6 +7186,77 @@ async function submitStatusChange() {
     closeModal('modal-status-picker');
     renderProject(p.owner, p.slug);
     showToast('状态改成了 ' + statusText(mspStatus));
+  } catch (e) { showToast(e.message); }
+}
+
+// v0.54: 陈列馆显式发布入口 · "让一个项目入馆"
+function openShipPick() {
+  if (!currentUser.handle) {
+    if (typeof setPending === 'function') setPending('openShipPick', {});
+    openLogin('让作品入馆');
+    return;
+  }
+  const me = currentUser.handle;
+  const candidates = state.projects.filter(p => p.owner === me && p.status !== 'done' && p.status !== 'archive');
+  const active = candidates.filter(p => ['active','stuck'].includes(p.status));
+  const paused = candidates.filter(p => p.status === 'paused');
+  const listRoot = document.getElementById('ship-pick-list');
+
+  if (candidates.length === 0) {
+    listRoot.innerHTML = `
+      <p class="serif mb-4" style="color: var(--ink); font-size: 16px; line-height: 1.6;">
+        你还没有可以入馆的项目。陈列馆装的是"跑通了能玩的小作品"，得先开一个项目、记几笔、跑通它。
+      </p>
+      <div class="flex gap-4 items-center mt-5 flex-wrap">
+        <button onclick="closeModal('modal-ship-pick'); openNewProject();" class="btn-act-primary">挂一个项目 →</button>
+        <span class="react-action serif" onclick="closeModal('modal-ship-pick'); showScreen('onboard');" style="color: var(--sepia); font-size: 14px;">或先去入场仪式做一个</span>
+      </div>
+    `;
+    document.getElementById('modal-ship-pick').classList.remove('hidden');
+    return;
+  }
+
+  let html = '';
+  if (active.length > 0) {
+    html += active.map(p => {
+      const lastUpdate = p.updates.length > 0 ? '上次记 ' + shortAgo(p.updates[0].at) : '还没记过';
+      return `
+        <div class="pick-project-item" onclick="closeModal('modal-ship-pick'); openShipCeremony('${p.id}');">
+          <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
+          <div class="pick-project-item-meta"><span class="${p.status}">${statusText(p.status)}</span> · ${lastUpdate}</div>
+        </div>
+      `;
+    }).join('');
+  }
+  if (paused.length > 0) {
+    html += `<div class="mt-5 mb-3 mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">也可以让"暂停"的项目入馆</div>`;
+    html += paused.map(p => `
+      <div class="pick-project-item" onclick="closeModal('modal-ship-pick'); openShipCeremony('${p.id}');">
+        <div class="pick-project-item-name">${escapeHtml(p.name)}</div>
+        <div class="pick-project-item-meta">${statusText(p.status)}</div>
+      </div>
+    `).join('');
+  }
+
+  listRoot.innerHTML = html;
+  document.getElementById('modal-ship-pick').classList.remove('hidden');
+}
+
+// v0.54: 陈列馆"让它出馆"撤展 · 把项目从 done 改回 paused
+async function confirmWithdraw(ev, projectId) {
+  ev.stopPropagation();
+  const p = projectById(projectId);
+  if (!p) return;
+  const sure = confirm(
+    '让「' + p.name + '」暂时撤出陈列馆？\n\n' +
+    '项目会改回「暂停」状态，留在你的工作室里。\n' +
+    '随时可以再让它入馆 — 历史感想和图都还在。'
+  );
+  if (!sure) return;
+  try {
+    await apiAction('changeProjectStatus', { projectId, newStatus: 'paused' });
+    renderShowcase();
+    showToast('「' + p.name + '」已撤出陈列馆，回到工作室');
   } catch (e) { showToast(e.message); }
 }
 
