@@ -22,7 +22,7 @@ function buildState({ targetUserId } = {}) {
     usersOut[u.handle] = { name: u.name || u.handle, tagline: u.tagline || '' };
   }
 
-  // 抓所有项目 (排除 archive · 跟 webapp getFeedEvents 行为一致)
+  // 抓所有项目 (包括 archive) · feed 由 webapp getFeedEvents 过滤 · workshop 的"做过的"区要显示 archive
   const projectsRows = db.prepare(`
     SELECT id, owner_id, slug, name, desc, product_link, status, github_link, created_at, updated_at
     FROM projects

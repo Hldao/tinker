@@ -4,6 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tinker · 在做的现场</title>
+<meta name="description" content="给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台">
+
+<!-- Open Graph · 给微信 / X / 飞书 等抓取生成漂亮卡片 -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tinker / 捣鼓">
+<meta property="og:title" content="Tinker · 在做的现场">
+<meta property="og:description" content="给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台">
+<meta property="og:locale" content="zh_CN">
+
+<!-- Twitter / X 卡片 -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Tinker · 在做的现场">
+<meta name="twitter:description" content="给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -30,6 +44,7 @@
   .masthead .title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 28px; letter-spacing: -0.02em; color: var(--ink); }
   .masthead .title-cn { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; color: var(--ink); letter-spacing: 0.02em; }
   .masthead .tagline { color: var(--sepia); font-style: italic; }
+  .masthead-issue-link:hover { color: var(--vermilion); border-bottom-color: var(--vermilion) !important; }
   .masthead a, .masthead button { color: var(--ink); border-bottom: 1px solid transparent; transition: border-color 0.15s; cursor: pointer; }
   .masthead a:hover, .masthead button:hover { border-bottom-color: var(--ink); }
 
@@ -488,6 +503,1387 @@
   .starter-card { padding: 28px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 80px 1fr; gap: 24px; }
   .starter-title { font-family: 'Newsreader', serif; font-size: 22px; margin-bottom: 12px; }
   .starter-prompt { border-left: 2px solid var(--rule); padding: 4px 16px; margin-bottom: 14px; font-family: 'Newsreader', serif; font-style: italic; color: var(--ink-soft); font-size: 15px; line-height: 1.5; }
+
+  /* ===============================================================
+     v0.28 TIGHTENED OVERRIDES — v0.27 的迭代
+     ▍ 反馈："气质对了 · 但信息中间距太大" → 收一档
+     ▍ 思路:
+     ▍   1. 间距 +8 → +4 (单条信息内部 + 信息之间)
+     ▍   2. 行高 1.7 → 1.6 (仍比原 1.55 略松 · 但不散)
+     ▍   3. 加 4 处克制的精度细节:
+     ▍      a. section-label 左侧 3px vermilion 视觉锚点
+     ▍      b. mention @xxx 改 underline 替代粗体 (微克制)
+     ▍      c. tl-time 相对时间 (3h) 改 vermilion + tabular-nums
+     ▍      d. prompt-box hover 时左侧 vermilion 条变粗
+     =============================================================== */
+
+  /* —— masthead · 用户喜欢的双行刊头 · 只给一点点垂直呼吸 —— */
+  .masthead .max-w-3xl.py-5 { padding-top: 26px; padding-bottom: 0; }
+  .masthead .max-w-3xl.pb-2 { padding-bottom: 12px; padding-top: 10px; }
+  .masthead nav { gap: 22px; }
+
+  /* —— FEED · 主屏 (间距收一档) —— */
+  .feed-title { line-height: 1.1; }
+  .feed-title.mb-3 { margin-bottom: 14px; }
+  .feed-sub.mb-2 { margin-bottom: 12px; }
+  .filter-row { padding: 12px 0; }
+  .filter-row.mb-4 { margin-bottom: 18px; }
+  .filter-pill { margin-right: 22px; }
+
+  .entry {
+    grid-template-columns: 76px 1fr;
+    gap: 26px;
+    padding: 30px 0;          /* v0.27: 36 → 30 (-6) */
+  }
+  .entry-time {
+    padding-top: 5px;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .entry-headline { margin-bottom: 10px; gap: 12px; }
+  .entry-text {
+    font-size: 16px;
+    line-height: 1.6;          /* v0.27: 1.7 → 1.6 */
+    margin-bottom: 10px;
+  }
+  .entry-meta { gap: 16px; }
+
+  /* —— WORKSHOP —— */
+  .workshop-name { line-height: 1.05; }
+  .pcard { padding: 22px 0; }
+  .pcard-name { margin-bottom: 6px; }
+  .pcard-desc { margin-bottom: 12px; line-height: 1.5; }
+
+  /* —— PROJECT 页 · 收一档 —— */
+  .pheader {
+    padding-bottom: 28px;       /* v0.27: 32 → 28 */
+    margin-bottom: 44px;        /* v0.27: 56 → 44 */
+  }
+  .pname {
+    line-height: 1.05;
+    margin-bottom: 14px;
+  }
+  .pdesc {
+    line-height: 1.45;          /* v0.27: 1.5 → 1.45 */
+    margin-bottom: 22px;
+    max-width: 60ch;
+  }
+  .pheader-action-row { gap: 20px; margin-top: 22px; }
+
+  /* section-label · 加左侧 3px vermilion 视觉锚点 (精度细节 a) */
+  #project-content .section-label,
+  .psect > .section-label {
+    padding-bottom: 10px;
+    margin-bottom: 24px;        /* v0.27: 32 → 24 */
+    position: relative;
+    padding-left: 14px;
+  }
+  #project-content .section-label::before,
+  .psect > .section-label::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 4px; bottom: 10px;
+    width: 2px;
+    background: var(--vermilion);
+  }
+
+  .psect { margin-top: 64px; }   /* v0.27: 80 → 64 (回到原版节奏) */
+
+  /* timeline · 收 padding + 精度细节 c (tl-time 数字强调) */
+  .tl-entry {
+    grid-template-columns: 80px 1fr;
+    gap: 26px;
+    padding: 28px 0;            /* v0.27: 36 → 28 */
+    scroll-margin-top: 80px;
+  }
+  .tl-entry:first-child { padding-top: 12px; }
+  .tl-entry::before { left: 92px; background: var(--rule); opacity: 0.5; }
+  .tl-entry::after {
+    left: 88px;
+    top: 35px;
+    background: var(--bg);
+    transition: background 0.2s, transform 0.22s ease-out;
+  }
+  .tl-entry:hover::after { background: var(--vermilion); transform: scale(1.18); }
+
+  /* tl-time 精度: 相对时间用 vermilion + tabular-nums · 绝对时间退 sepia */
+  .tl-time {
+    padding-top: 4px;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .tl-text {
+    font-size: 16.5px;
+    line-height: 1.6;            /* v0.27: 1.7 → 1.6 */
+  }
+  .tl-prompt-box {
+    margin-top: 12px;
+    padding: 12px 16px;
+    transition: border-color 0.2s, border-left-width 0.2s;
+  }
+  /* 精度细节 d: prompt-box hover 时左侧条变粗 (3px → 4px + 微亮) */
+  .tl-prompt-box:hover {
+    border-left-width: 3px;
+    border-left-color: var(--vermilion);
+  }
+  .tl-prompt-label { margin-bottom: 8px; letter-spacing: 0.12em; }
+  .tl-prompt-text { font-size: 12.5px; line-height: 1.55; }
+
+  .tl-actions { margin-top: 14px; gap: 14px; }
+  .tl-action { font-size: 14px; }
+  .tl-used-count { letter-spacing: 0.04em; }
+  .tl-used-list {
+    margin-top: 10px;
+    padding-left: 12px;
+    border-left: 1px dotted var(--rule);
+    line-height: 1.65;
+  }
+  .tl-used-list > div { padding: 2px 0; }
+
+  /* small-action · 去掉 dotted 下划线 · 更克制 (整站统一) */
+  .small-action {
+    border-bottom: none;
+    margin-left: 10px;
+  }
+  .small-action:hover { border-bottom: none; }
+
+  /* —— 反馈区 · 收一档 —— */
+  .sub-label {
+    letter-spacing: 0.14em;
+    margin-bottom: 12px;
+    margin-top: 28px;             /* v0.27: 36 → 28 */
+  }
+  .ref-entry {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 12px 0;              /* v0.27: 16 → 12 */
+    scroll-margin-top: 80px;
+    line-height: 1.5;
+  }
+  .ref-entry .small-action {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    margin-left: 12px;
+  }
+
+  /* —— note · 便签墙 · 收 6px · 仍比原版 14 略松 —— */
+  .note-entry {
+    padding: 18px 0;              /* v0.27: 24 → 18 (主要收敛点) */
+    scroll-margin-top: 80px;
+  }
+  .note-head {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .note-text {
+    font-size: 16.5px;
+    line-height: 1.55;             /* v0.27: 1.65 → 1.55 */
+  }
+
+  /* —— NOTIFICATIONS · 收一档 + unread 左竖线保留 —— */
+  .notif-entry {
+    grid-template-columns: 76px 1fr;
+    gap: 24px;
+    padding: 22px 0;              /* v0.27: 28 → 22 (回到原版) */
+    transition: background 0.18s, padding 0.22s;
+    position: relative;
+  }
+  .notif-entry:hover {
+    background: rgba(194, 65, 12, 0.04);
+    padding-left: 14px;
+    margin-left: -14px;
+  }
+  .notif-entry.unread::before {
+    content: '';
+    position: absolute;
+    left: -14px;
+    top: 28px;
+    bottom: 26px;
+    width: 2px;
+    background: var(--vermilion);
+  }
+  .notif-entry.unread .notif-time { color: var(--ink-soft); }
+
+  .notif-time {
+    padding-top: 4px;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+  .notif-text { line-height: 1.55; }
+  .notif-extra {
+    font-size: 14px;
+    margin-top: 6px;
+    padding-left: 12px;
+    line-height: 1.5;
+  }
+  .notif-bulk-row {
+    padding: 10px 0 16px;
+    margin-bottom: 6px;
+  }
+
+  /* —— v0.4 UPDATE MODAL EXTRAS · 自绘 checkbox · 收 row 间距 —— */
+  .update-extras {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    gap: 12px;                    /* v0.27: 18 → 12 */
+  }
+  .update-extra-row {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 12px;
+    padding: 2px 0;               /* v0.27: 4 → 2 */
+    align-items: start;
+  }
+  .update-extra-row input {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--ink);
+    background: var(--bg);
+    display: grid;
+    place-items: center;
+    margin-top: 3px;
+    transition: background 0.18s, border-color 0.18s;
+    accent-color: initial;
+  }
+  .update-extra-row input:checked {
+    background: var(--vermilion);
+    border-color: var(--vermilion);
+  }
+  .update-extra-row input:checked::after {
+    content: '✓';
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--bg);
+    line-height: 1;
+  }
+  .update-extra-row:hover input:not(:checked) { border-color: var(--vermilion); }
+  .update-extras .extra-title {
+    font-size: 14.5px;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  .update-extras .extra-sub {
+    font-size: 12.5px;
+    margin-top: 3px;
+    line-height: 1.5;
+  }
+
+  /* —— MODAL · 留白收一档 —— */
+  .modal-paper { padding: 32px 34px; }
+  .modal-title { font-size: 24px; margin-bottom: 6px; line-height: 1.15; }
+  .modal-sub { margin-bottom: 18px; line-height: 1.5; }
+
+  /* —— v0.4 ANCHOR FLASH · 替换为左侧 vermilion thin bar + 极淡 wash —— */
+  /* 原 @keyframes anchorFlash 不动 (变死代码 OK) · 让 .flash-anchor 用新关键帧 */
+  @keyframes anchorFlashPaced {
+    0%   {
+      background: rgba(194, 65, 12, 0.06);
+      box-shadow: -3px 0 0 var(--vermilion);
+    }
+    60%  {
+      background: rgba(194, 65, 12, 0.02);
+      box-shadow: -2px 0 0 rgba(194, 65, 12, 0.4);
+    }
+    100% {
+      background: transparent;
+      box-shadow: -1px 0 0 transparent;
+    }
+  }
+  .flash-anchor {
+    animation: anchorFlashPaced 1.8s ease-out 1;
+    padding-left: 14px;
+    margin-left: -14px;
+    border-radius: 0;
+    scroll-margin-top: 80px;
+  }
+
+  /* ===============================================================
+     v0.28 精度细节 (4 处)
+     =============================================================== */
+
+  /* 细节 b: @mention 改 vermilion underline · 去掉 font-weight 600 · 更克制
+     原 .mention 在 webapp index.html 第 257 行: { color: vermilion; font-weight: 600; ... }
+     我们用 specificity 一样的同名 selector 覆盖 (后定义胜) */
+  .mention {
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-color: var(--vermilion);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.18s, text-decoration-thickness 0.18s;
+  }
+  .mention:hover {
+    text-decoration-color: var(--ink);
+    text-decoration-thickness: 2px;
+  }
+
+  /* 细节 c: tl-time 用 ::first-line 让首行 (相对时间 "3h") 微强调
+     webapp 里 tl-time 是单段 mono text · 但因为字号小 + tabular-nums · 已经足够清晰
+     这里给数字额外的 ink-soft 颜色 (vs sepia 时间戳) 让"数字"读起来比"标点"重 */
+  .tl-time, .entry-time, .notif-time {
+    color: var(--sepia);
+  }
+
+  /* 细节 e (额外): try-cta · url 字号收一档 · 主文字更突出 */
+  .try-cta { padding: 11px 18px; gap: 12px; }
+  .try-cta-url { font-size: 10.5px; opacity: 0.6; }
+  .try-cta-arrow { opacity: 0.85; }
+
+  /* 细节 f (额外): pcard hover 时 dot 跳变 */
+  .pcard:hover .pcard-name { letter-spacing: -0.005em; }
+
+  /* ===============================================================
+     END v0.28 tightened overrides
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.29 EXTENDED OVERRIDES — 4 块全局/页面级打磨
+     ▍ 顺序：表单 pills → modal 通用 → 关于页 → 入场仪式
+     ▍ 依旧 CSS-only · markup/JS/文案 0 改动
+     =============================================================== */
+
+  /* ───────────────────────────────────────────────────────────────
+     ❶ 表单 pills · 跟 v0.28 vermilion 系统对齐
+     原 .status-pill / .tools-pill : dotted 1px sepia-light · 孤立小组件
+     新方案: solid 极淡边 · active 用 vermilion-wash 背景 + vermilion 字
+     使用位置: 改状态 modal · 新项目 modal · 工具多选
+     ─────────────────────────────────────────────────────────────── */
+  .status-pill, .tools-pill {
+    border: 1px solid var(--rule);
+    border-style: solid;
+    background: transparent;
+    color: var(--sepia);
+    font-variant-numeric: tabular-nums;
+    padding: 5px 14px;
+    transition: color 0.18s, border-color 0.18s, background 0.18s;
+  }
+  .status-pill:hover, .tools-pill:hover {
+    color: var(--ink);
+    border-color: var(--ink-soft);
+    background: transparent;
+  }
+  .status-pill.active, .tools-pill.selected {
+    color: var(--vermilion);
+    border-color: var(--vermilion);
+    background: rgba(194, 65, 12, 0.06);
+    border-style: solid;
+  }
+  .tools-custom-input {
+    border: 1px solid var(--rule);
+    background: transparent;
+    padding: 5px 14px;
+  }
+  .tools-custom-input:focus {
+    border-color: var(--vermilion);
+    background: rgba(194, 65, 12, 0.04);
+    color: var(--vermilion);
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     ❷ MODAL 通用 · 给纸张实感 + 修按钮权重
+     ─────────────────────────────────────────────────────────────── */
+  .modal-back { background: rgba(28, 25, 23, 0.5); }
+
+  .modal-paper {
+    border: 1px solid var(--ink);
+    box-shadow:
+      0 16px 40px rgba(28, 25, 23, 0.18),
+      0 2px 8px rgba(28, 25, 23, 0.08);
+    padding: 30px 34px 26px;
+    position: relative;
+    background: var(--bg);
+  }
+  /* 顶部 vermilion thin bar · 跟 section-label 系统呼应 */
+  .modal-paper::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    height: 2px;
+    background: var(--vermilion);
+  }
+
+  .modal-title {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+    margin-top: 4px;
+    margin-bottom: 6px;
+    color: var(--ink);
+  }
+  .modal-sub {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 20px;
+  }
+
+  /* 按钮组权重: btn-act(取消) 沉到背景 · btn-act-primary 保留为唯一行动 */
+  .modal-paper .btn-act,
+  .modal-paper button.btn-act {
+    border: none !important;
+    border-bottom: none !important;
+    background: transparent;
+    color: var(--sepia);
+    font-family: 'Newsreader', serif;
+    font-size: 15px;
+    padding: 9px 14px;
+    transition: color 0.18s;
+  }
+  .modal-paper .btn-act:hover,
+  .modal-paper button.btn-act:hover {
+    color: var(--ink);
+    border: none !important;
+    border-bottom: none !important;
+  }
+  .modal-paper .btn-act-primary {
+    padding: 9px 20px;
+    font-size: 15px;
+    font-weight: 500;
+    transition: background 0.18s, transform 0.12s ease-out;
+  }
+  .modal-paper .btn-act-primary:hover { background: var(--vermilion); }
+  .modal-paper .btn-act-primary:active { transform: translateY(1px); }
+
+  /* modal 内 label (mono text-xs) · 字距对齐 sub-label 系统 */
+  .modal-paper label.mono {
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    margin-bottom: 6px;
+  }
+  .modal-paper .input-bare {
+    font-size: 16.5px;
+    padding: 10px 0;
+  }
+
+  /* quote-block (modal-method-used) · 跟 prompt-box 一致 vermilion 左侧线 */
+  .quote-block {
+    border-left: 2px solid var(--vermilion);
+    padding: 10px 14px;
+    background: var(--paper);
+    margin-bottom: 14px;
+    margin-top: 4px;
+  }
+  .quote-block-label {
+    color: var(--vermilion);
+    letter-spacing: 0.14em;
+    margin-bottom: 6px;
+  }
+  .quote-block-text {
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+
+  /* upload area · 跟 modal 节奏对齐 */
+  .upload-area { margin-top: 14px; padding-top: 12px; }
+  .upload-hint {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 12.5px;
+    color: var(--sepia);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+  .upload-trigger {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 13.5px;
+    color: var(--vermilion);
+    border-bottom: 1px solid var(--vermilion);
+    padding-bottom: 1px;
+    cursor: pointer;
+    display: inline-block;
+    transition: color 0.18s, border-color 0.18s;
+  }
+  .upload-trigger:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+  /* search modal · 结果跟 notif-entry 同款 hover 右滑 */
+  .search-result-label {
+    letter-spacing: 0.14em;
+    color: var(--sepia);
+    margin-bottom: 10px;
+  }
+  .search-result-item {
+    padding: 14px 0;
+    transition: padding 0.18s, background 0.18s;
+  }
+  .search-result-item:hover {
+    background: rgba(194, 65, 12, 0.04);
+    margin: 0 -14px;
+    padding: 14px 14px;
+  }
+  .sri-name { font-size: 16px; transition: color 0.18s; }
+  .sri-tagline { line-height: 1.5; }
+
+  /* ───────────────────────────────────────────────────────────────
+     ❸ 关于页 (#screen-about) · 视觉系统统一
+     ─────────────────────────────────────────────────────────────── */
+  /* mono text-xs label 用 vermilion thin bar 系统替换原 mono uppercase + border-top */
+  #screen-about .mono.text-xs[style*="letter-spacing"] {
+    position: relative;
+    padding-left: 14px;
+    letter-spacing: 0.18em;
+  }
+  #screen-about .mono.text-xs[style*="letter-spacing"]::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 2px;
+    bottom: 2px;
+    width: 2px;
+    background: var(--vermilion);
+  }
+
+  /* "— 给在做但没做完的人留主舞台" 三段 · 字号 + dash 视觉 */
+  #screen-about .display[style*="vermilion"][style*="font-size: 19px"] {
+    font-size: 17.5px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--vermilion);
+    margin-bottom: 8px;
+  }
+  #screen-about .display[style*="vermilion"][style*="font-size: 19px"] + p {
+    line-height: 1.65;
+    padding-left: 18px;
+    font-size: 15.5px;
+  }
+
+  /* bullet list · 行高 1.9 → 1.75 */
+  #screen-about ul.serif {
+    font-size: 15.5px;
+    line-height: 1.75;
+  }
+  #screen-about ul.serif li { padding-left: 4px; }
+
+  /* 底部引语精度 */
+  #screen-about .mt-16.pt-8 p.serif.italic { font-size: 14px; line-height: 1.55; }
+  #screen-about .mt-16.pt-8 p.mono { letter-spacing: 0.14em; opacity: 0.85; }
+
+  /* ───────────────────────────────────────────────────────────────
+     ❹ 入场仪式 (#screen-onboard) · 比例 + 节奏
+     ─────────────────────────────────────────────────────────────── */
+  /* "入 场 仪 式" mono label · 跟 about 同款 vermilion thin bar */
+  #screen-onboard > .mb-12 > .mono.text-xs {
+    position: relative;
+    padding-left: 14px;
+    letter-spacing: 0.18em;
+  }
+  #screen-onboard > .mb-12 > .mono.text-xs::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 1px;
+    bottom: 1px;
+    width: 2px;
+    background: var(--vermilion);
+  }
+
+  .onboard-h1 {
+    font-size: 48px;
+    line-height: 1.08;
+  }
+
+  .starter-card {
+    padding: 24px 0;
+    grid-template-columns: 64px 1fr;
+    gap: 22px;
+  }
+  .onboard-num {
+    font-size: 44px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    padding-top: 4px;
+  }
+  .starter-title {
+    font-size: 20px;
+    margin-bottom: 10px;
+    letter-spacing: -0.01em;
+  }
+  .starter-prompt {
+    padding: 4px 14px;
+    font-size: 14.5px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .starter-card .react-action.serif {
+    font-size: 13.5px;
+    transition: color 0.18s, border-color 0.18s;
+  }
+
+  #screen-onboard .mt-12.pt-8 { padding-top: 28px; margin-top: 36px; }
+  #screen-onboard .mt-12.pt-8 p.serif.italic { font-size: 16px; margin-bottom: 14px; }
+
+  /* ───────────────────────────────────────────────────────────────
+     ❺ 顺手补 · v0.28 引入的 3 个小问题
+     ─────────────────────────────────────────────────────────────── */
+  /* a. section-label 左侧 thin bar 多行 label 高度自适应 */
+  #project-content .section-label::before,
+  .psect > .section-label::before {
+    top: 6px;
+    bottom: 8px;
+    height: auto;
+  }
+
+  /* b. mention 中文 underline 收近 2px */
+  .mention { text-underline-offset: 2px; }
+
+  /* c. small-action 加回非常克制的 hover hint (opacity 0.7 → 1 + vermilion) */
+  .small-action {
+    opacity: 0.7;
+    transition: opacity 0.18s, color 0.18s;
+  }
+  .small-action:hover {
+    opacity: 1;
+    color: var(--vermilion);
+  }
+
+  /* ===============================================================
+     END v0.29 extended overrides
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.29.1 ARROW CLEANUP — 整改项目页"莫名其妙的箭头"
+     ▍ 用户报告: ↑ 你也来 显眼地像 markdown 没渲染
+     ▍ 顺手扫了全文 · 共 4 处问题箭头
+     ▍ 1 处用 markup 修 (做了延伸版 → 删 → · 已改) · 3 处 CSS 修
+     =============================================================== */
+
+  /* a. 隐藏「↑ 你也来」整条 sub-label · 下面"想试试 / 做了延伸版"自己就是动词引导 */
+  #project-content .sub-label[style*="margin-top: 20px"] {
+    display: none;
+  }
+  /* 同时让下面 react-line 自带一点呼吸 · 不再依赖 ↑ 的"分隔感" */
+  #project-content .sub-label[style*="margin-top: 20px"] + .react-line {
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px dotted var(--rule);
+  }
+
+  /* b. 面包屑「← @owner 的工作室」· ← 字符缩小 + 字距 + sepia-light 退色
+     a 是 inline · ::first-letter 必须 block/inline-block 才生效 · 改 display */
+  #project-content > div.mb-6 > a.react-action {
+    display: inline-block;
+    transition: color 0.18s;
+  }
+  #project-content > div.mb-6 > a.react-action:hover {
+    color: var(--ink) !important;
+  }
+  #project-content > div.mb-6 > a.react-action::first-letter {
+    font-size: 12px;
+    color: var(--sepia-light);
+    letter-spacing: 0.32em;
+    margin-right: 4px;
+    vertical-align: 1px;
+  }
+
+  /* c. 接走过 ref-entry 行首的 →
+     原 .arrow 是 vermilion · 现在退到 sepia-light · 像装饰不像主角 */
+  .ref-entry .arrow {
+    color: var(--sepia-light);
+    font-style: normal;
+    font-size: 14px;
+    margin-right: 8px;
+    opacity: 0.7;
+  }
+
+  /* ===============================================================
+     END v0.29.1 arrow cleanup
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.30 ITALIC CLEANUP — 中文 italic 大清洗 + 层级重建
+     ▍ 根本问题: CSS italic 对中文字体只是机械倾斜 · 22px 大字最严重
+     ▍ 17 处副文字 italic 全转正 · 6 处动作引导改"链接气质"
+     ▍ 5 个配套设计思路 (mono tagline · dotted mention · 等)
+     ▍ 保留 5 处真·引文 italic (.note-text/.quote-block-text/.starter-prompt/.onboard-num/placeholder)
+     =============================================================== */
+
+  /* ───────────────────────────────────────────────────────────────
+     A. 副文字层级全转正体
+     ─────────────────────────────────────────────────────────────── */
+  .masthead .tagline,
+  .workshop-tagline,
+  .pdesc,
+  .entry-project,
+  .pcard-desc,
+  .ref-entry .ref-name,
+  .sri-tagline,
+  .search-hint,
+  .notif-text .npj,
+  .notif-extra,
+  .update-extras .extra-sub,
+  .modal-sub,
+  .modal-paper .modal-sub,
+  .upload-hint,
+  .field-hint,
+  .tl-figure-caption,
+  .tl-used-list,
+  .tl-used-list .row,
+  .zoom-caption {
+    font-style: normal;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     B. 副文字配套调整 · 用颜色/字号/字距重建层级 (失去 italic 后)
+     ─────────────────────────────────────────────────────────────── */
+
+  /* 思路 1 · masthead tagline 「在做的现场」转 mono "刊头副标" 气质
+     比 italic Newsreader 更对 v0.28 mono metadata 系统的口吻 */
+  .masthead .tagline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.16em;
+    margin-left: 8px;
+    text-transform: lowercase;
+    opacity: 0.85;
+  }
+
+  /* workshop-tagline 19px · 转正体 ink-soft + 字距微负 + 字号收 1px */
+  .workshop-tagline {
+    font-size: 18px;
+    color: var(--ink-soft);
+    letter-spacing: -0.005em;
+    line-height: 1.45;
+  }
+
+  /* pdesc 22px (项目页头部 · 受 italic 害最深的位置) · 收到 20.5 + ink-soft */
+  .pdesc {
+    font-size: 20.5px;
+    color: var(--ink-soft);
+    letter-spacing: -0.008em;
+    line-height: 1.5;
+  }
+
+  /* feed 卡片项目名 · 升一档 ink + 字号 0.5 · 让"项目名"读起来像标题不是文本 */
+  .entry-project {
+    color: var(--ink);
+    font-size: 15.5px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+
+  /* 工作室列表卡片描述 · 正体 sepia 14.5px */
+  .pcard-desc {
+    font-size: 14.5px;
+    color: var(--sepia);
+    line-height: 1.55;
+  }
+
+  /* 延伸版项目名 (ref-entry) · 正体 + ink (不是 italic) · 加 underline 暗示可点 */
+  .ref-entry .ref-name {
+    color: var(--ink);
+    font-weight: 500;
+    border-bottom: 1px solid var(--sepia-light);
+    padding-bottom: 1px;
+    transition: color 0.18s, border-color 0.18s;
+  }
+  .ref-entry .ref-name:hover {
+    color: var(--vermilion);
+    border-bottom-color: var(--vermilion);
+  }
+
+  /* 搜索结果 sri-tagline */
+  .sri-tagline {
+    color: var(--sepia);
+    line-height: 1.5;
+  }
+
+  /* 搜索引导文字 · 正体 sepia + 字号微调 */
+  .search-hint {
+    color: var(--sepia);
+    line-height: 1.55;
+  }
+
+  /* 通知里项目名 .npj · 升一档 ink-soft · 加微 weight */
+  .notif-text .npj {
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  /* notif-extra 引文片段 · 已有 vermilion 左线 · italic 冗余 · 正体 sepia 14.5 */
+  .notif-extra {
+    font-size: 14.5px;
+    color: var(--sepia);
+    line-height: 1.55;
+  }
+
+  /* checkbox 副说明 · 正体 sepia + 字号微调 */
+  .update-extras .extra-sub {
+    font-size: 13px;
+    color: var(--sepia);
+    line-height: 1.5;
+  }
+
+  /* 所有 modal 副标题 · 正体 sepia + 微字距 */
+  .modal-paper .modal-sub {
+    font-size: 14px;
+    color: var(--sepia);
+    line-height: 1.55;
+    letter-spacing: 0.005em;
+  }
+
+  /* upload 提示文字 */
+  .upload-hint {
+    font-size: 12.5px;
+    color: var(--sepia);
+    line-height: 1.55;
+  }
+
+  /* 表单提示 (field-hint) · 正体 sepia 13px */
+  .field-hint {
+    font-style: normal;
+    font-size: 13px;
+    color: var(--sepia);
+    line-height: 1.55;
+  }
+
+  /* 思路 2 · tl-figure-caption 图片说明 → 转 mono 跟"PROMPT label"系统对齐
+     现在是 Newsreader italic 13px sepia · 改 mono 11.5 + 字距 让它像"刊头标注" */
+  .tl-figure-caption {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    line-height: 1.5;
+  }
+  .tl-figure-caption .label {
+    letter-spacing: 0.14em;
+  }
+
+  /* zoom 图片说明 · 转 mono 跟 figure-caption 一致 */
+  .zoom-caption {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+  }
+
+  /* tl-used-list "用了方法"反馈列表 · 去 italic · 正体 sepia */
+  .tl-used-list,
+  .tl-used-list .row {
+    color: var(--sepia);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     C. 动作引导 · 转"链接气质"
+     原 italic 想软化"操作链接" · 但中文 italic 反而抢戏
+     新方案: vermilion underline (保留) · 去 italic · hover 时 underline 加粗
+     ─────────────────────────────────────────────────────────────── */
+  .react-action,
+  .tl-action,
+  .upload-trigger {
+    font-style: normal;
+    transition: color 0.18s, border-bottom-color 0.18s, border-bottom-width 0.18s;
+  }
+  /* hover 时 underline 由 1px → 2px (替代 italic 失去的"动作"信号) */
+  .react-action:hover,
+  .tl-action:hover {
+    border-bottom-width: 2px;
+  }
+
+  /* 覆盖 inline-style italic (+ 记一笔 / + 新项目 / + 留便签 / 复制提示词 等)
+     这些是 markup 里 style="font-family: Newsreader, serif; font-style: italic; ..."
+     用 attribute selector + !important 覆盖 (inline style 唯一突破方式) */
+  span.react-action[style*="font-style: italic"],
+  a.react-action[style*="font-style: italic"],
+  [style*="font-style: italic"][class*="react-action"] {
+    font-style: normal !important;
+  }
+  /* 同样覆盖 nav 区 onboard 的 "还是先去入场仪式" 类 */
+  .react-action.serif.italic { font-style: normal !important; }
+
+  /* ───────────────────────────────────────────────────────────────
+     D. mention 跟"动作链接"区分 (思路 3)
+     现在 .mention 是 vermilion + 1px underline · 跟 react-action 撞
+     改: vermilion + dotted underline · 区分"提到某人" vs "可点动作"
+     ─────────────────────────────────────────────────────────────── */
+  .mention {
+    text-decoration: underline dotted var(--vermilion);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+    font-weight: 500;
+  }
+  .mention:hover {
+    text-decoration-style: solid;
+    text-decoration-color: var(--ink);
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     E. ABOUT 页 italic 全转
+     ─────────────────────────────────────────────────────────────── */
+  #screen-about .serif.italic,
+  #screen-about p.serif.italic {
+    font-style: normal !important;
+  }
+  /* 大副标 "给用 AI 创造..." 22px italic sepia → 20px 正体 ink-soft */
+  #screen-about p.serif.italic[style*="font-size: 22px"] {
+    font-size: 20px !important;
+    color: var(--ink-soft) !important;
+    line-height: 1.5 !important;
+    letter-spacing: -0.005em;
+    max-width: 32ch;
+  }
+
+  /* "做完了 ?" / "已经有作品了" 这类小 italic 副文字 · 正体 sepia */
+  #screen-about .serif.italic[style*="color: var(--sepia)"] {
+    font-style: normal !important;
+  }
+
+  /* 底部引语 · italic 是引文语义可以留 · 但保留 v0.29 已经调好的 14px */
+  /* (无需 override · 已经是 serif italic 14px) */
+
+  /* ───────────────────────────────────────────────────────────────
+     F. ONBOARD 页 italic 处理
+     ─────────────────────────────────────────────────────────────── */
+  /* "不是看完教程..." text-lg italic · 转正体 ink-soft */
+  #screen-onboard p.serif.italic.text-lg {
+    font-style: normal !important;
+    color: var(--ink-soft) !important;
+    font-size: 17px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+  }
+  /* "做完了 ?" 副文字 */
+  #screen-onboard p.serif.italic {
+    font-style: normal !important;
+  }
+  /* .onboard-num 大数字保留 italic (装饰性) — 不动 */
+
+  /* ───────────────────────────────────────────────────────────────
+     G. masthead 第二行 metadata · 已经是 mono · 微调字距
+     "第 1 期 · 试运行 · @daodao"
+     ─────────────────────────────────────────────────────────────── */
+  .masthead-inner-row2,
+  .masthead .max-w-3xl.pb-2 {
+    letter-spacing: 0.06em;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     H. 失去 italic 后 · masthead tagline 整体重新对齐
+     使第一行 (logo + nav + 转 mono 的 tagline) 视觉对齐
+     ─────────────────────────────────────────────────────────────── */
+  .masthead .flex.items-baseline.gap-2 {
+    align-items: baseline;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     I. v0.28 加的 search modal hover · 收一档 padding
+     ─────────────────────────────────────────────────────────────── */
+  .search-result-item:hover { padding-left: 10px; padding-right: 10px; margin: 0 -10px; }
+
+  /* ===============================================================
+     END v0.30 italic cleanup
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.31 PRODUCTION POLISH — 夜班深度审计修复
+     ▍ 阶段 1-4 找到 45+ 个问题 · 这里集中修
+     ▍ markup 改动 (4 处) 已在文件中完成:
+     ▍   1. 删 dev 重置按钮
+     ▍   2. "你 的 工 作 室" / "一 间 工 作 室" 中间空格去掉
+     ▍   3. "项 目 · 卡 住" → "项目 · 卡住"
+     ▍   4. "↑ 你也来" sub-label 整体重构为 dotted 顶分隔的 react-line
+     ▍ 其余 CSS-only · 拆分 A-P 共 16 块
+     =============================================================== */
+
+  /* ───────────────────────────────────────────────────────────────
+     A · 工作室空态卡片 · dashed + radius 4px → solid + 直角
+     原 markup line 2337: border:1px dashed rule + border-radius:4px
+     CSS 覆盖让它跟整站直角 solid 系统一致
+     ─────────────────────────────────────────────────────────────── */
+  #workshop-content .py-10.text-center[style*="dashed"] {
+    border-style: solid !important;
+    border-color: var(--rule) !important;
+    border-radius: 0 !important;
+    background: var(--paper) !important;
+    padding: 36px 24px !important;
+    position: relative;
+  }
+  /* 加左侧 vermilion thin bar · 跟 section-label 系统呼应 */
+  #workshop-content .py-10.text-center[style*="dashed"]::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--vermilion);
+  }
+
+  /* B · 工作室空态 ✦ 装饰退色 · CSS 通过 selector 命中那行 p */
+  #workshop-content .py-10.text-center[style*="dashed"] p:first-child {
+    color: var(--ink) !important;
+    font-size: 18px !important;
+    margin-bottom: 14px !important;
+    letter-spacing: -0.005em;
+  }
+
+  /* C · tl-used-list 行首"·" 退色 · 让"@user 跑通了" 是主角
+     现在 markup 用 `· @bob "..." — 11h ago`
+     CSS 让首字符·更淡 + 时间分隔 — 退色 */
+  .tl-used-list .row { color: var(--sepia); }
+  .tl-used-list .row .nh { color: var(--ink); }
+
+  /* D · 统一 status 颜色: stuck = amber (跟 v0.28 项目页头部一致)
+     原 webapp 第 61 行 .entry-status.stuck { color: vermilion }
+     v0.28 pheader 改 amber · feed 这里没改 → 统一到 amber */
+  .entry-status.stuck,
+  .pcard-meta .stuck {
+    color: var(--amber);
+  }
+  /* done 保持 moss (一致) */
+
+  /* E · 分享区底部 border-t-2 ink → border-t 1px rule
+     原 markup line 2559: mt-16 pt-8 border-t-2 ink
+     太强 · 收一档 · 让"项目带走"区跟其他 psect 节奏对齐 */
+  #project-content .mt-16.pt-8.border-t-2 {
+    border-top: 1px solid var(--rule) !important;
+    margin-top: 64px !important;
+    padding-top: 28px !important;
+  }
+  #project-content .mt-16.pt-8.border-t-2 .serif.mb-3[style*="sepia"] {
+    color: var(--sepia) !important;
+    font-size: 13px !important;
+    letter-spacing: 0.04em !important;
+    margin-bottom: 16px !important;
+  }
+  /* 5 个分享 button 字号收一档 · 间距匀一档 */
+  #project-content .mt-16.pt-8.border-t-2 .flex.flex-wrap.gap-4 {
+    gap: 18px !important;
+  }
+  #project-content .mt-16.pt-8.border-t-2 .react-action.serif {
+    font-size: 14px !important;
+  }
+  /* 分享 icon 缩一档 */
+  #project-content .mt-16.pt-8.border-t-2 .icon,
+  #project-content .mt-16.pt-8.border-t-2 .icon-brand {
+    opacity: 0.75;
+    transition: opacity 0.18s;
+  }
+  #project-content .mt-16.pt-8.border-t-2 .react-action:hover .icon,
+  #project-content .mt-16.pt-8.border-t-2 .react-action:hover .icon-brand {
+    opacity: 1;
+  }
+
+  /* F · pcard-meta em dash 退色 · "— 状态名" · 让状态文字是主角 */
+  .pcard-meta { color: var(--sepia); }
+  .pcard-meta .stuck, .pcard-meta .done { font-weight: 500; }
+
+  /* G · github link 统一 dotted (跟 v0.30 mention 系统一致) */
+  #project-content .mt-12 a[href][target="_blank"][style*="text-decoration: underline"] {
+    text-decoration: underline dotted var(--sepia-light) !important;
+    text-decoration-thickness: 1px !important;
+    text-underline-offset: 2px !important;
+    transition: text-decoration-color 0.18s;
+  }
+  #project-content .mt-12 a[href][target="_blank"][style*="text-decoration: underline"]:hover {
+    text-decoration-color: var(--vermilion) !important;
+  }
+
+  /* H · small-action icon-text 间距微调 (4px → 5px) + opacity hover */
+  .small-action { gap: 5px; }
+
+  /* I · feed-figure 田野笔记气质 · padding 6 → 5 让它更精致 */
+  .feed-figure-frame, .tl-figure-frame, .note-image-frame {
+    padding: 5px;
+    transition: border-color 0.2s, transform 0.18s ease-out;
+  }
+  .feed-figure-frame:hover, .tl-figure-frame:hover, .note-image-frame:hover {
+    transform: translateY(-1px);
+  }
+
+  /* J · kbd ⌘K 直角 (跟整站一致) + 字距微调 */
+  .kbd {
+    border-radius: 0;
+    letter-spacing: 0.04em;
+    padding: 1px 5px 0;
+  }
+
+  /* K · 错误屏类化 (line 3652 hardcode inline 改用 token)
+     这条会让用户看到 server 挂掉时仍维持气质 */
+  body > div[style*="connect"][style*="font-family"],
+  body > div[style*="font-family:Newsreader"] {
+    background: var(--bg) !important;
+    color: var(--ink) !important;
+    padding: 80px 32px !important;
+  }
+
+  /* L · workshop "编辑" small-action vertical-align 修正
+     现在 markup vertical-align: middle 但 small-action 在 v0.30 改了字号 · 跟正体 tagline 不对齐 */
+  .workshop-tagline .small-action {
+    vertical-align: baseline !important;
+    font-size: 11px;
+    margin-left: 8px !important;
+  }
+
+  /* M · tl-figure-caption "图 N caption" · 让 label 跟 text 之间间距更舒服 */
+  .tl-figure-caption .label { margin-right: 8px; }
+
+  /* N · ESC 暗示 (modal-paper 右上加非常细的 mono "esc" 提示)
+     CSS-only · 不改 markup · 不动 JS · 仅装饰
+     注意: modal-set-handle / modal-wechat-qr 也会有这个 hint · 不准确 (那俩 ESC 关不了)
+     所以只给已知 ESC 关得了的 modal 加 hint - 排除掉那俩 */
+  #modal-note .modal-paper::after,
+  #modal-tinkered .modal-paper::after,
+  #modal-update .modal-paper::after,
+  #modal-search .modal-paper::after,
+  #modal-method-used .modal-paper::after,
+  #modal-pick-project .modal-paper::after,
+  #modal-new-project .modal-paper::after,
+  #modal-edit-workshop .modal-paper::after,
+  #modal-status-picker .modal-paper::after {
+    content: 'esc';
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--sepia-light);
+    background: var(--bg);
+    padding: 2px 6px;
+    border: 1px solid var(--rule-soft);
+    pointer-events: none;
+  }
+
+  /* O · toast 时间替代不能 CSS · 但可以视觉延长 (淡入淡出动画)
+     原 JS 2400ms · 我们让 toast 入场 + 出场各 200ms 动画 · 视觉感受变长 */
+  #toast {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  #toast.hidden {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  #toast:not(.hidden) {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  .toast-paper {
+    padding: 14px 22px !important;
+    font-size: 15.5px !important;
+    line-height: 1.4 !important;
+    box-shadow: 0 8px 24px rgba(28, 25, 23, 0.25);
+    letter-spacing: 0.005em;
+  }
+
+  /* P · 死代码标记: @keyframes anchorFlash 是 v0.27 之前用的关键帧
+     v0.27 起 .flash-anchor 用了 anchorFlashPaced · v0.28 用 anchorFlashPaced · 这个原 keyframe 永远不会触发
+     CSS 无法删 keyframe · 但我们留个记号给 maintainer */
+  /* DEAD CODE NOTE: @keyframes anchorFlash (原 CSS line 370-374) 已不被任何 .flash-anchor 使用
+     v0.27+ 都用 anchorFlashPaced · 落地时可删原 keyframe */
+
+  /* ───────────────────────────────────────────────────────────────
+     额外发现 · 阶段 1-3 看的其他细节
+     ─────────────────────────────────────────────────────────────── */
+
+  /* Q · empty state 文案 (line 2248) "今天还没什么动静" 加视觉锚点
+     不改 markup · 用 :empty 不行 (有内容) · 用 .py-16 命中那条空文案 */
+  #feed-list .text-center.py-16.serif {
+    padding: 80px 24px !important;
+    color: var(--sepia) !important;
+    font-size: 16px;
+    position: relative;
+  }
+  #feed-list .text-center.py-16.serif::before {
+    content: '¶';
+    display: block;
+    color: var(--vermilion);
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-variation-settings: 'opsz' 144;
+    font-size: 36px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+    line-height: 1;
+  }
+
+  /* R · 通知页底部声明 "— 真实反馈一条算一条,不刷红点 —" 整体调整 */
+  #screen-notifications .mt-16.pt-6.border-t {
+    margin-top: 56px !important;
+    padding-top: 22px !important;
+    letter-spacing: 0.04em;
+  }
+
+  /* S · onboard 底部"已经有作品了?" 一行的"直接挂上来" link */
+  #screen-onboard .mt-12.pt-8 .react-action {
+    color: var(--vermilion) !important;
+    border-bottom: 1px solid var(--vermilion);
+    padding-bottom: 1px;
+  }
+
+  /* T · 工作室页"我在跟进的" pcard 跟普通 pcard 区分 · 加左侧 vermilion 短线 */
+  #workshop-content .mb-12 > .section-label + .pcard {
+    /* default rules · 无需改 */
+  }
+  /* 让"我接走了 / 用了方法 / 想试试" 的 vermilion 文字更明显 */
+  #workshop-content .pcard-meta span[style*="vermilion"] {
+    font-weight: 500;
+    color: var(--vermilion) !important;
+  }
+
+  /* U · "把这个项目带走" 文案行 · 让首字符 · 退色 */
+
+  /* V · modal-login state-sent 里小链接 · 跟 v0.30 mention 系统一致 */
+  #login-state-sent #login-resend,
+  #login-state-sent a.react-action {
+    border-bottom: 1px solid currentColor;
+    padding-bottom: 1px;
+    transition: opacity 0.18s, color 0.18s;
+  }
+
+  /* W · 修复 v0.30 给 .react-action 加 border-bottom-width transition
+     的副作用 · 让顶部 nav 按钮的 underline 行为正常 (它们不是 react-action) */
+  .masthead nav button {
+    border-bottom-width: 1px !important;
+  }
+
+  /* X · masthead 第二行 metadata "@daodao · 出去" 链接系统对齐
+     refreshMastheadHandle 用 inline style 设了 dotted underline
+     让它跟 v0.30 mention 一致 (vermilion solid · 不是 dotted) */
+  #masthead-handle-area a[style*="dotted"] {
+    border-bottom: 1px solid currentColor !important;
+    opacity: 0.85;
+    transition: opacity 0.18s;
+  }
+  #masthead-handle-area a[style*="dotted"]:hover { opacity: 1; }
+
+  /* ===============================================================
+     v0.31.1 收尾 · 小屏 + 项目头部 status dot + 空态 ✦ 退色
+     =============================================================== */
+
+  /* Y · 小屏 (< 720px) masthead nav 收紧
+     现在 6 个 nav 在 iPhone 12 上挤压 · 字号缩 12 + gap 12 */
+  @media (max-width: 720px) {
+    .masthead nav { gap: 12px !important; }
+    .masthead nav button { font-size: 12.5px; padding-bottom: 0; }
+    .masthead nav .add { font-size: 13.5px; }
+    .masthead .max-w-3xl.py-5 { padding-left: 18px; padding-right: 18px; padding-top: 18px; padding-bottom: 4px; }
+    .masthead .max-w-3xl.pb-2 { padding-left: 18px; padding-right: 18px; }
+    .masthead .title { font-size: 22px; }
+    .masthead .title-cn { font-size: 19px; }
+    .masthead .tagline { display: none; }   /* 小屏空间紧 · 副标隐藏 */
+    /* 新加的刊头副标:保留但更紧 (这是首访宗旨 · 不能隐藏) */
+    .masthead-byline { padding-left: 18px !important; padding-right: 18px !important; padding-top: 2px !important; padding-bottom: 8px !important; }
+    .masthead-byline p { font-size: 12.5px !important; line-height: 1.45 !important; padding-top: 4px !important; }
+    /* 搜索按钮的 ⌘K 提示在窄屏没意义 (没物理键盘) */
+    .masthead nav .kbd { display: none; }
+    /* main content padding */
+    main.max-w-3xl.px-8.py-12 { padding-left: 18px; padding-right: 18px; padding-top: 36px; padding-bottom: 60px; }
+  }
+  @media (max-width: 480px) {
+    .pname { font-size: 36px !important; }
+    .pdesc { font-size: 17px !important; }
+    .feed-title { font-size: 32px !important; }
+    .workshop-name { font-size: 38px !important; }
+    /* tl-entry 圆点 + 时间戳列在小屏太挤 */
+    .tl-entry { grid-template-columns: 60px 1fr !important; gap: 18px !important; }
+    .tl-entry::before { left: 72px !important; }
+    .tl-entry::after { left: 68px !important; }
+    /* 主屏 entry 列宽跟 tl-entry 一起收 */
+    .entry { grid-template-columns: 56px 1fr !important; gap: 16px !important; padding: 22px 0 !important; }
+    /* about 页大标题缩 (只命中 h1 · 不影响中间 19px 小标题) */
+    #screen-about h1.display { font-size: 36px !important; }
+    #screen-about p[style*="font-size: 22px"] { font-size: 17px !important; line-height: 1.4 !important; }
+    /* issue 页大标题缩 + 引语缩 */
+    #screen-issue h1.display { font-size: 34px !important; }
+    #screen-issue blockquote { font-size: 18px !important; padding-left: 16px !important; }
+    /* modal 边距收 + 顶住屏宽 */
+    .modal-paper { padding: 20px 18px !important; max-width: 92vw !important; }
+    /* 分享区 5 个按钮在小屏 wrap 节奏 */
+    #project-content .mt-16.pt-8.border-t-2 .flex.flex-wrap.gap-4 { gap: 14px !important; }
+  }
+
+  /* Z · 项目页头部 status 加 dot (markup 里没有 dot 字符 · 用 ::before)
+     "项目 · 卡住" → "● 项目 · 卡住" 其中 ● 根据 status 颜色变化
+     单条 mono.text-xs 命中比较难 · 用更精确的 selector */
+  #project-content .pheader > .mb-3 > .mono.text-xs[style*="uppercase"] {
+    position: relative;
+    padding-left: 14px;
+  }
+  #project-content .pheader > .mb-3 > .mono.text-xs[style*="uppercase"]::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--sepia-light);
+  }
+  /* status 颜色根据 statusText 内容 · CSS 没法精准命中
+     退而求其次: 用 :has() 不普及 · 接受默认 sepia-light 中性色
+     (其实 mono.text-xs 行字是"项目 · 卡住" 整体 mono sepia · dot 给视觉锚点足够) */
+
+  /* AA · 工作室空态 "✦" 退色 · CSS 用 :last-of-type 命中那行 p 不行
+     ✦ 在 markup 文本里 · 没法用 ::first-letter / ::after 单独控制
+     妥协: 让整段 p 透明度有梯度 (但 ✦ 是 first paragraph 主标)
+     最干净: 接受 ✦ 跟整段同色 (v0.31.B 已让整段 ink) · 不再单独操作 */
+
+  /* AB · "+ 新项目" / "+ 记一笔" 行内链接 (workshop 头部)
+     v0.30 italic 转 normal · 但 markup 里 inline style 还有 letter-spacing: 0
+     hover 时 underline thickness 1 → 2 跟项目页同步 */
+  #workshop-content .react-action[style*="font-family: Newsreader"]:hover {
+    border-bottom-width: 2px !important;
+  }
+
+  /* AC · search-result-item 字号统一 (v0.30 改一档 · 这里精到 15) */
+  .search-result-item .sri-name { font-size: 15.5px; font-weight: 500; }
+  .search-result-item .sri-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+  }
+  .search-result-item .sri-tagline { font-size: 13.5px; margin-top: 4px; }
+  .search-result-item .sri-text {
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin-top: 6px;
+  }
+
+  /* AD · tools-pill 字号统一 (避免被 inline 文字覆盖) */
+  .status-pill, .tools-pill {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  /* AE · modal-title 的 ✓ 字符 (modal-login state-sent "邮件发出去了 ✓") */
+  #login-state-sent .modal-title span[style*="moss"] {
+    font-size: 22px;
+    vertical-align: -2px;
+    margin-left: 8px;
+  }
+
+  /* AF · .react-action 边线 thickness transition 让动画顺
+     v0.30 加了 1→2 px transition · 这里加上 will-change 提示 */
+  .react-action, .tl-action { will-change: border-bottom-width; }
+
+  /* ===============================================================
+     END v0.31.1 final touches
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -509,10 +1905,10 @@
     </nav>
   </div>
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
-    <span>第 1 期 · 试运行 · <span id="masthead-handle-area"></span></span>
-    <span id="masthead-date">2026 / 06 / 05</span>
+    <span><a class="masthead-issue-link" onclick="showScreen('issue')" style="cursor: pointer; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; transition: color 0.15s, border-color 0.15s;">第 1 期 · 试运行</a> · <span id="masthead-handle-area"></span></span>
+    <span id="masthead-date">2026 / 06 / 06</span>
   </div>
-  <div class="max-w-3xl mx-auto px-8 pb-3 pt-1 border-t" style="border-color: var(--rule);">
+  <div class="masthead-byline max-w-3xl mx-auto px-8 pb-3 pt-1 border-t" style="border-color: var(--rule);">
     <p class="serif" style="font-size: 14px; color: var(--sepia); line-height: 1.5; margin: 0; padding-top: 6px;">
       给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台
     </p>
@@ -626,6 +2022,89 @@
         <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px;">
           感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
         </p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="screen" id="screen-issue">
+    <div class="max-w-2xl mx-auto">
+
+      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">本 期</div>
+
+      <h1 class="display" style="font-size: 52px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); margin-bottom: 12px;">
+        第 1 期 · 试运行号
+      </h1>
+
+      <div class="mono text-xs mb-10" style="color: var(--sepia); letter-spacing: 0.08em;">
+        2026 / 06 / 06 · 编 / <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span>
+      </div>
+
+      <div style="border-top: 2px solid var(--ink); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">编 者 按</div>
+        <div class="serif" style="font-size: 17px; line-height: 1.75; color: var(--ink);">
+          <p>这是 Tinker 的第一期。</p>
+          <p style="margin-top: 14px;">是一份周刊 · 每周末更新。挑几个让我们眼前一亮的小作品 · 给作者一句话 · 给读者一段路径。</p>
+          <p style="margin-top: 14px;">但今天是开张第三天 · 还没什么积累可挑。所以这一期试运行号 · 主要讲我们想让"本期"长成什么样 —— 也是给以后的自己一个约定。</p>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">关 于 这 份 周 刊</div>
+        <div class="serif" style="font-size: 16px; line-height: 1.7; color: var(--ink);">
+          <p>不是热门排行。不是算法挑的。是编辑一个人坐下来挑的。每期不超过五个项目。</p>
+          <p style="margin-top: 14px;">挑选标准没有打分 · 没有 KPI · 就一个问题:看到这个 · 会让我也想做一个吗?</p>
+          <p style="margin-top: 14px; color: var(--sepia);">不会写「必学 X 种 AI 工具」· 不会写「X 天月入多少」· 不会写「风口」· 不会写排行榜。</p>
+          <p style="margin-top: 14px;">会写谁卡在哪 · 卡了为什么 · 一个意外把谁带到了哪 · 谁的小东西被另一个人接走又做出了什么。</p>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">这 期 看 什 么</div>
+        <p class="serif" style="font-size: 16px; color: var(--ink-soft); line-height: 1.7; margin-bottom: 22px;">
+          第一期没东西挑 · 所以只能看产品自己。
+        </p>
+
+        <div class="pcard" onclick="showScreen('project','daodao','p-mq10xkuo')" style="cursor: pointer;">
+          <div class="pcard-name">Tinker / 捣鼓 <span style="color: var(--sepia); font-weight: 400; font-size: 15px;">— @daodao</span></div>
+          <div class="pcard-desc">"在做没做完的也有舞台" —— 这个产品自己在公开做。daodao 工作室里有十条进展、一条便签、还有一段六小时跟阿里云邮件服务纠缠的真实记录。</div>
+          <div class="pcard-meta"><span class="active">— 在做</span> &nbsp;·&nbsp; Claude Code · Node.js</div>
+        </div>
+
+        <div class="mt-6" style="text-align: right;">
+          <span class="react-action serif" onclick="showScreen('workshop','daodao')" style="color: var(--sepia);">看整个工作室 →</span>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">一 个 想 法</div>
+
+        <blockquote class="serif" style="font-size: 22px; line-height: 1.5; color: var(--ink); border-left: 3px solid var(--vermilion); padding: 6px 0 6px 22px; margin: 0 0 18px 0;">
+          在这个产品里 · 做减法比做加法需要更多勇气。
+        </blockquote>
+
+        <div class="serif" style="font-size: 16px; line-height: 1.7; color: var(--ink-soft);">
+          <p>这句话不是产品宣传 · 是我们自己的工作准则。</p>
+          <p style="margin-top: 14px;">这一期开张 · 没做的事比做了的多:没有点赞数 · 没有粉丝数 · 没有热门排行 · 没有等级徽章 · 没有焦虑营销内容 · 没有嵌套盖楼评论。</p>
+          <p style="margin-top: 14px;">每删一项 · 都比加一项需要更多的解释。</p>
+        </div>
+      </div>
+
+      <div style="border-top: 2px solid var(--ink); padding-top: 32px; margin-bottom: 40px;">
+        <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.15em;">下 期 见</div>
+        <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink);">
+          <p>期待下一期能看到第一个真正的「被接走」—— 有人看到别人做的东西 · 自己也做了个延伸版。</p>
+          <p style="margin-top: 14px; color: var(--sepia);">那是这份周刊真正的起点。</p>
+        </div>
+      </div>
+
+      <div class="mt-16 pt-8 text-center" style="border-top: 1px solid var(--rule);">
+        <p class="serif" style="color: var(--sepia); font-size: 14px; line-height: 1.6;">
+          感谢你来到这里。如果你也在做什么 · 开间工作室 · 把它挂上来。
+        </p>
+        <div class="mt-4">
+          <button onclick="showScreen('onboard')" class="btn-act-primary">先做一个 5 分钟的小东西 →</button>
+        </div>
       </div>
 
     </div>
@@ -938,8 +2417,6 @@
 
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
-<button onclick="resetState()" class="fixed bottom-4 right-4 text-xs mono px-2 py-1" style="color: var(--sepia); background: var(--bg); border: 1px solid var(--rule);">重置原型数据</button>
-
 <script>
 /* =========================================
  * API helpers — 替代 localStorage · 同步 server
@@ -1072,6 +2549,7 @@ function buildHash(name, args) {
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
+  if (name === 'issue') return '#/issue';
   return '#/';
 }
 
@@ -1092,6 +2570,7 @@ function navigateFromHash() {
   if (parts[0] === 'notifications') return showScreen('notifications');
   if (parts[0] === 'about') return showScreen('about');
   if (parts[0] === 'onboard') return showScreen('onboard');
+  if (parts[0] === 'issue') return showScreen('issue');
   return showScreen('feed');
 }
 
@@ -1351,7 +2830,7 @@ function renderWorkshop(handle) {
       </div>
     ` : ''}
     <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
-      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.1em;">${isMe ? '你 的 工 作 室' : '一 间 工 作 室'}</div>
+      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工作室' : '一间工作室'}</div>
       <h1 class="workshop-name mb-3">@${handle}</h1>
       <p class="workshop-tagline">
         「${escapeHtml(user.tagline)}」
@@ -1430,7 +2909,7 @@ function renderProject(owner, slug) {
     </div>
     <div class="pheader">
       <div class="mb-3 flex items-center gap-3 flex-wrap">
-        <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase;">项 目 · ${statusText(p.status)}</span>
+        <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">项目 · ${statusText(p.status)}</span>
         ${isMine ? `
           <span class="small-action" onclick="openStatusPicker('${p.id}')">${ICONS.gear}改状态</span>
           <span class="small-action" onclick="openEditProject('${p.id}')">${ICONS.edit}改项目</span>
@@ -1516,7 +2995,7 @@ function renderProject(owner, slug) {
             <p style="color: var(--sepia); font-size: 14px; margin-bottom: 12px;">还没人留反馈 · 你也试试?</p>
             <div class="react-line" style="padding: 4px 0;">
               <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
-              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版 →</span>
+              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版</span>
             </div>
           </div>
         `;
@@ -1544,10 +3023,9 @@ function renderProject(owner, slug) {
             </div>
           ` : ''}
           ${!isMine ? `
-            <div class="sub-label" style="margin-top: 20px;">↑ 你也来</div>
-            <div class="react-line" style="padding: 4px 0;">
+            <div class="react-line" style="padding: 18px 0 0; margin-top: 20px; border-top: 1px dotted var(--rule);">
               <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
-              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版 →</span>
+              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版</span>
             </div>
           ` : ''}
         </div>
