@@ -2627,6 +2627,133 @@ async function cmdLlm(sub) {
   ok('LLM 配好了 · 下次 prompt 选"发"就能看到自动起草');
 }
 
+// `tinker goodnight` · 今日总结 · 给 sleepy 时刻收个尾
+// 也被 GOODNIGHT 关键词触发器命中时自动出现
+async function cmdGoodnight(opts = {}) {
+  const cfg = mustHaveConfig();
+
+  // 1. git commits today (cwd 是 git repo 的话)
+  let gitCommits = [];
+  let gitStat = null;
+  if (inGitRepo()) {
+    try {
+      const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
+      gitCommits = execSync(`git log --since="${since}" --no-merges --pretty=format:"%h|%s|%ai"`, { encoding: 'utf-8' })
+        .trim().split('\n').filter(Boolean).map(l => {
+          const [sha, msg, at] = l.split('|');
+          return { sha, msg, at };
+        });
+      const stat = execSync(`git log --since="${since}" --no-merges --shortstat --pretty=format:""`, { encoding: 'utf-8' }).trim();
+      // shortstat 每条 commit 一行 · 全部累加
+      let files = 0, ins = 0, del = 0;
+      stat.split('\n').forEach(line => {
+        const m = line.match(/(\d+) files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?/);
+        if (m) { files += +m[1] || 0; ins += +m[2] || 0; del += +m[3] || 0; }
+      });
+      gitStat = { files, ins, del };
+    } catch {}
+  }
+
+  // 2. updates pushed to Tinker today
+  let todayUpdates = [];
+  try {
+    const state = await apiState(cfg);
+    const tk = todayKey();
+    for (const p of state.projects) {
+      if (p.owner !== cfg.handle) continue;
+      for (const u of (p.updates || [])) {
+        const d = new Date(u.at);
+        const dk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        if (dk === tk) todayUpdates.push({ projectName: p.name, text: u.text, at: u.at, kind: u.kind });
+      }
+    }
+  } catch {}
+
+  // 3. LLM token 用量
+  const usage = getTodayLLMUsage();
+  const totalTokens = usage.reduce((sum, u) => sum + (u.tokens || 0), 0);
+  const usageByKind = {};
+  usage.forEach(u => { usageByKind[u.kind] = (usageByKind[u.kind] || 0) + u.tokens; });
+
+  // 4. 时间跨度
+  let firstAt = null, lastAt = null;
+  if (gitCommits.length > 0) {
+    firstAt = new Date(gitCommits[gitCommits.length - 1].at);
+    lastAt = new Date(gitCommits[0].at);
+  }
+
+  // 输出
+  log('');
+  log(sepia('  ── ') + vermilion('晚安 · 今日总结') + sepia(' ── ') + sepia(new Date().toLocaleDateString()));
+  log('');
+
+  log('  ' + bold('Coding'));
+  if (gitCommits.length === 0) {
+    log(sepia('    今天没在这个 repo commit · 是去别的项目了 / 还是没动手'));
+  } else {
+    log(sepia('    commit ') + bold(gitCommits.length + ' 个') + sepia(' · 跨 ') + bold(((lastAt - firstAt) / 3600 / 1000).toFixed(1) + ' 小时'));
+    if (gitStat) log(sepia('    动了 ') + bold(gitStat.files + ' 个文件') + sepia(' · +') + moss(gitStat.ins) + sepia(' / -') + vermilion(gitStat.del));
+    log(sepia('    第一条: ') + sepia(gitCommits[gitCommits.length - 1].msg.slice(0, 60)));
+    log(sepia('    最后一条: ') + sepia(gitCommits[0].msg.slice(0, 60)));
+  }
+  log('');
+
+  log('  ' + bold('Tinker'));
+  if (todayUpdates.length === 0) {
+    log(sepia('    今天没发任何 update'));
+  } else {
+    log(sepia('    push ') + bold(todayUpdates.length + ' 条 update'));
+    const projectCounts = {};
+    todayUpdates.forEach(u => { projectCounts[u.projectName] = (projectCounts[u.projectName] || 0) + 1; });
+    Object.entries(projectCounts).forEach(([name, n]) => log(sepia('      · ') + name + sepia(' ×') + bold(n)));
+  }
+  log('');
+
+  log('  ' + bold('AI 帮你写'));
+  if (totalTokens === 0) {
+    log(sepia('    今天没用 LLM'));
+  } else {
+    log(sepia('    用了 ') + bold(totalTokens.toLocaleString() + ' 个 token') + sepia(' · ') + sepia(usage.length + ' 次调用'));
+    Object.entries(usageByKind).forEach(([kind, n]) => log(sepia('      · ') + kind + sepia(' ×') + bold(n.toLocaleString())));
+    // DeepSeek 价格估算 (输入 0.27¥ / 1M · 输出 1.1¥ / 1M · 平均按 0.7¥/1M)
+    const ynEst = (totalTokens * 0.7 / 1000000).toFixed(3);
+    log(sepia('    DeepSeek 估算成本: 约 ¥') + sepia(ynEst));
+  }
+  log('');
+
+  // LLM 总结 (可选)
+  if (cfg.llm && cfg.llm.apiKey && (gitCommits.length > 0 || todayUpdates.length > 0)) {
+    log(sepia('  让 AI 帮你 narrate 一下? 想要就跑 ') + vermilion('tinker goodnight --narrate') + sepia(' (会用一点 token)'));
+    log('');
+  }
+
+  if (opts.narrate && cfg.llm && cfg.llm.apiKey) {
+    log(sepia('  AI 总结中...'));
+    const commitsLine = gitCommits.slice(0, 12).map(c => '- ' + c.msg).join('\n');
+    const updatesLine = todayUpdates.slice(0, 6).map(u => '- (' + u.projectName + ') ' + u.text.slice(0, 80)).join('\n');
+    const prompt = `今天的 git commits:\n${commitsLine}\n\n今天发到 Tinker 的 updates:\n${updatesLine || '(无)'}\n\n用一段话 (80-150 字) 替作者收个尾 · 准备睡觉 · 语气朋友式 · 不总结 · 给一句你觉得最值得说的 · 一句"明天接着搞"那种话。不要"总结今天"那种 PM 周报开头。`;
+    try {
+      const r = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + cfg.llm.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 800, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        recordLLMUsage(cfg.llm.provider, d.usage && d.usage.total_tokens, 'goodnight');
+        log('');
+        log('  ' + bold('AI 帮你说一句:'));
+        const cleaned = sanitizeDraft(d.choices[0].message.content.trim()) || '';
+        log(sepia('  ') + cleaned.replace(/\n/g, '\n  '));
+        log('');
+      }
+    } catch {}
+  }
+
+  log(sepia('  晚安。'));
+  log('');
+}
+
 // `tinker session status | end` · 看 / 强制结束 当前 UI session
 async function cmdSession(sub) {
   const state = loadPromptState();
@@ -3112,6 +3239,9 @@ async function main() {
         break;
       case 'mute': cmdMute(args[1]); break;
       case 'session': await cmdSession(args[1]); break;
+      case 'goodnight': case 'recap':
+        await cmdGoodnight({ narrate: args.includes('--narrate') });
+        break;
       case 'llm': await cmdLlm(args[1]); break;
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
