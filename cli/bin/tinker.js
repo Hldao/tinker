@@ -1210,14 +1210,240 @@ function triggerFirstCommitOfDay() {
   } catch { return { fired: false }; }
 }
 
+// === UI session 管理 ===
+// 设计:一波 UI 改动当成一个 session 整体看 · 不每个 commit 都问
+// 起点: 第一个 UI commit (无 session 时) · 抓 BEFORE 快照 · 静默
+// 结束: 60min 时间窗 / 6 个 UI commit / 当前 commit 含 ship/done/完工 任一
+// 当前 commit 非 UI / 在 session 中: 静默 · 继续等结束
+// UI 文件判定 · 要么明确路径 (webapp/, components/, pages/, views/, frontend/, ui/, styles/, client/)
+// 要么明确 UI 后缀 (HTML / CSS / SCSS / LESS / .tsx / .jsx / .vue / .svelte / .astro)
+// 不匹配光秃秃的 .js / .ts (它们更多是后端 / CLI / 工具代码)
+const UI_FILE_PATTERN = /(^|\/)(webapp|components|pages|views|frontend|ui|styles|client)\/|\.html?$|\.css$|\.scss$|\.sass$|\.less$|\.styl$|\.tsx$|\.jsx$|\.vue$|\.svelte$|\.astro$/i;
+const UI_MSG_PATTERN = /(\bui\b|\bstyle\b|\bcss\b|\bvisual\b|样式|排版|视觉|界面|布局|配色|按钮|字体|颜色|动效|交互|UI)/i;
+const SESSION_END_KEYWORDS = /(\bship(?:ped|s|it)?\b|\bdone\b|\bdeployed?\b|\breleased?\b|完工|跑通|上线|发布)/i;
+
+function commitIsUi() {
+  // 用 git diff 拿这次 commit 的文件 · 任一 match UI_FILE_PATTERN 就算
+  try {
+    const files = execSync('git diff --name-only HEAD^ HEAD 2>/dev/null', { encoding: 'utf-8' }).trim();
+    if (files && files.split('\n').some(f => UI_FILE_PATTERN.test(f))) return true;
+  } catch {}
+  // 补救:commit msg 直接说了 UI
+  try {
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    return UI_MSG_PATTERN.test(title);
+  } catch { return false; }
+}
+
+function evaluateUiSession(state, cfg) {
+  const now = Date.now();
+  const isUi = commitIsUi();
+  const session = state.uiSession;
+  let title = '';
+  try { title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim(); } catch {}
+
+  // 无 session
+  if (!session) {
+    if (!isUi) return { fired: false };  // 啥也不做
+    // 启动 session · 抓 before 快照 · 静默
+    let sha = ''; try { sha = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim(); } catch {}
+    const snapPath = takeBeforeSnapshot(cfg, sha);  // 同步阻塞 (~3-5s) · 可以接受 (在 hook 里)
+    state.uiSession = {
+      startedAt: now,
+      startCommitHash: sha,
+      lastUiCommitAt: now,
+      commitCount: 1,
+      beforeSnapshotPath: snapPath,
+    };
+    return { fired: false, sessionStarted: true };
+  }
+
+  // 有 session · 评估是否该结束
+  const elapsed = now - session.startedAt;
+  const timeExpired = elapsed > 60 * 60 * 1000;
+  const tooMany = session.commitCount >= 6;
+  const shipKeyword = SESSION_END_KEYWORDS.test(title);
+  const shouldEnd = timeExpired || tooMany || shipKeyword;
+
+  if (!shouldEnd) {
+    // 继续 session
+    if (isUi) {
+      session.commitCount++;
+      session.lastUiCommitAt = now;
+    }
+    return { fired: false };
+  }
+
+  // session 结束 · 触发 prompt
+  const minutes = Math.round(elapsed / 60000);
+  let reason = '到时间了';
+  if (tooMany) reason = '改得有点多了';
+  if (shipKeyword) reason = '看起来在收尾';
+  return {
+    fired: true,
+    priority: 75,
+    reason: 'ui-session-end',
+    kind: 'ui-session',
+    session,
+    msg: `这一波 UI 改了 ${session.commitCount} 个 commit (${minutes} 分钟前开始 · ${reason})`,
+    suggestion: '想发一笔总结吗? 我会自动等 deploy 完贴 before/after 对比图',
+  };
+}
+
+// microlink 抓 prod 当前样子 · 存到 ~/.tinker/snapshots/
+// 返回保存的文件路径 · 失败返回 null
+function takeBeforeSnapshot(cfg, sha) {
+  if (!cfg || !cfg.serverUrl) return null;
+  const snapDir = path.join(CONFIG_DIR, 'snapshots');
+  try { fs.mkdirSync(snapDir, { recursive: true }); } catch {}
+  const fname = path.join(snapDir, (sha || Date.now()) + '-before.jpg');
+  try {
+    const params = new URLSearchParams({
+      url: cfg.serverUrl,
+      screenshot: 'true', type: 'jpeg',
+      'viewport.width': '1280', 'viewport.height': '720',
+      'viewport.deviceScaleFactor': '2',
+      waitUntil: 'networkidle0', waitForTimeout: '2500',
+      'screenshot.quality': '85', meta: 'false',
+    });
+    // 同步抓 (curl 走 bash) · hook 阻塞 5 秒内可接受
+    const json = JSON.parse(execSync(`curl -sS "https://api.microlink.io/?${params.toString()}"`, { encoding: 'utf-8' }));
+    const shotUrl = json.data && json.data.screenshot && json.data.screenshot.url;
+    if (!shotUrl) return null;
+    execSync(`curl -sS -o "${fname}" "${shotUrl}"`, { encoding: 'utf-8' });
+    return fname;
+  } catch { return null; }
+}
+
+// 启动 detached 后台进程 · 等 deploy 完成 + 抓 after + editUpdate 贴图
+// 任务以 JSON 文件传给子进程 (避开 argv 长度 / 转义麻烦)
+function spawnDeployWatcher(task) {
+  const { spawn } = require('child_process');
+  const watchDir = path.join(CONFIG_DIR, 'watch');
+  try { fs.mkdirSync(watchDir, { recursive: true }); } catch {}
+  const taskFile = path.join(watchDir, 'task-' + Date.now() + '.json');
+  fs.writeFileSync(taskFile, JSON.stringify(task));
+  // 调 tinker 自己的 watch 子命令 · 把 taskFile 路径传过去
+  const child = spawn(process.argv[0], [process.argv[1], 'watch', taskFile], {
+    detached: true,
+    stdio: 'ignore',
+    cwd: process.cwd(),
+  });
+  child.unref();
+}
+
+// `tinker watch <taskFile>` · 子进程实际跑的逻辑
+async function cmdWatch(taskFile) {
+  if (!taskFile || !fs.existsSync(taskFile)) {
+    err('watch task file 不存在: ' + taskFile);
+    process.exit(1);
+  }
+  const task = JSON.parse(fs.readFileSync(taskFile, 'utf-8'));
+  const logFile = path.join(CONFIG_DIR, 'watch', 'log.txt');
+  const wlog = (s) => { try { fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${s}\n`); } catch {} };
+  wlog(`watch start · updateId=${task.updateId}`);
+
+  // poll /api/health · 找 deploy 重启信号 (uptime 突然变小)
+  let lastUptime = null;
+  let detectedReset = false;
+  let stableAfterReset = 0;
+  let pollResult = null;
+  for (let i = 0; i < 80; i++) {  // 80 * 30s = 40 分钟最长等待
+    try {
+      const r = await fetch(task.serverUrl + '/api/health');
+      const j = await r.json();
+      const u = j.uptime || 0;
+      if (lastUptime !== null && u < lastUptime && u < 60) {
+        detectedReset = true;
+        stableAfterReset = 0;
+        wlog(`detected deploy reset (uptime ${lastUptime} → ${u})`);
+      }
+      if (detectedReset) {
+        stableAfterReset = u;
+        if (u > 40) { pollResult = 'ok'; break; }  // 重启后稳定运行 40s · deploy 完成
+      }
+      lastUptime = u;
+    } catch (e) { wlog('poll err: ' + e.message); }
+    await new Promise(r => setTimeout(r, 30000));
+  }
+  if (pollResult !== 'ok') {
+    wlog('deploy not detected within 40min · 放弃');
+    try { fs.unlinkSync(taskFile); } catch {}
+    return;
+  }
+
+  // 抓 after 快照
+  wlog('snapping after');
+  let afterPath = null;
+  try {
+    const snapDir = path.join(CONFIG_DIR, 'snapshots');
+    try { fs.mkdirSync(snapDir, { recursive: true }); } catch {}
+    afterPath = path.join(snapDir, task.updateId + '-after.jpg');
+    const params = new URLSearchParams({
+      url: task.serverUrl,
+      screenshot: 'true', type: 'jpeg',
+      'viewport.width': '1280', 'viewport.height': '720',
+      'viewport.deviceScaleFactor': '2',
+      waitUntil: 'networkidle0', waitForTimeout: '3000',
+      'screenshot.quality': '85', meta: 'false',
+    });
+    const json = JSON.parse(execSync(`curl -sS "https://api.microlink.io/?${params.toString()}"`, { encoding: 'utf-8' }));
+    const shotUrl = json.data && json.data.screenshot && json.data.screenshot.url;
+    if (!shotUrl) throw new Error('no shot url');
+    execSync(`curl -sS -o "${afterPath}" "${shotUrl}"`, { encoding: 'utf-8' });
+  } catch (e) {
+    wlog('snap after fail: ' + e.message);
+    try { fs.unlinkSync(taskFile); } catch {}
+    return;
+  }
+
+  // 读 before + after · 编 data URL · editUpdate
+  wlog('editUpdate attach images');
+  try {
+    const beforeBuf = fs.readFileSync(task.beforeSnapshotPath);
+    const afterBuf = fs.readFileSync(afterPath);
+    const beforeUrl = 'data:image/jpeg;base64,' + beforeBuf.toString('base64');
+    const afterUrl = 'data:image/jpeg;base64,' + afterBuf.toString('base64');
+    // editUpdate 用 updateIdx (排序里 ORDER BY at DESC · 最新的是 0)
+    // 当前这条刚 push · 应该就是 0
+    const r = await fetch(task.serverUrl + '/api/action', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + task.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'editUpdate',
+        payload: {
+          projectId: task.projectId,
+          updateIdx: 0,
+          text: task.text,
+          images: [
+            { src: beforeUrl, caption: '改之前' },
+            { src: afterUrl, caption: '改之后' },
+          ],
+          seekingFeedback: false,
+          feedbackAsk: '',
+        },
+      }),
+    });
+    if (r.ok) { wlog('attach ok'); } else { wlog('attach failed: ' + r.status); }
+  } catch (e) {
+    wlog('attach err: ' + e.message);
+  }
+
+  try { fs.unlinkSync(taskFile); } catch {}
+  wlog('watch end');
+}
+
 // 把所有触发器汇总 · 选 priority 最高的那个
-function evaluateAllTriggers(state, repoCfg) {
+function evaluateAllTriggers(state, repoCfg, cfg) {
+  // UI session 单独评估 · 因为它需要写 state (启动 session 时)
+  const uiResult = evaluateUiSession(state, cfg);
   const results = [
     triggerKeywordMatch(),
     triggerFirstCommitOfDay(),
     triggerLongSilence(state, repoCfg),
     triggerCumulativeCommits(),
   ].filter(r => r.fired);
+  if (uiResult.fired) results.push(uiResult);
   if (results.length === 0) return null;
   results.sort((a, b) => b.priority - a.priority);
   return results[0];
@@ -1257,7 +1483,10 @@ async function cmdCheck(opts) {
   }
 
   // 评估所有触发器 · 选最高 priority
-  const result = evaluateAllTriggers(state, repoCfg);
+  const cfgForUi = (() => { try { return mustHaveConfig(); } catch { return null; } })();
+  const result = evaluateAllTriggers(state, repoCfg, cfgForUi);
+  // UI session 评估可能写了 state (启动 session) · 即使没 fire 也存一下
+  savePromptState(state);
   if (!result) {
     if (!fromHook) log(sepia('  当前没有触发器命中 · 安静'));
     return;
@@ -1286,6 +1515,13 @@ async function cmdCheck(opts) {
     choices.push({ name: '⚠ 标卡住 · 让在意你的人看到', value: 'stuck-quiet' });
     choices.push({ name: '暂停 30 分钟 · 出去走走', value: 'mute-30m' });
     choices.push({ name: '没事 · 我接着搞', value: 'skip-once' });
+  } else if (result.kind === 'ui-session') {
+    // UI session 结束 · 想发一笔 + 自动贴对比图 (第二个 commit 加 deploy watcher)
+    choices.push({ name: '发一笔 · 自动贴 before / after 对比图', value: 'ui-push' });
+    choices.push({ name: '只发一笔 · 不要对比图', value: 'push' });
+    choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
+    choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
+    choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'brand') {
     // 品牌信号 · "捣鼓" / Tinker 出现 · 主动认歧义 · 让用户挑哪种意思
     choices.push({ name: '是 Tinker 项目本身的进展 · 发一笔', value: 'push' });
@@ -1327,7 +1563,40 @@ async function cmdCheck(opts) {
   state.lastPromptedAt = now;
 
   const cfg = mustHaveConfig();
-  if (choice === 'push') {
+  if (choice === 'ui-push') {
+    // UI session 结束 + 想要对比图
+    // 1. 用户写一句总结
+    // 2. push update
+    // 3. 启动 detached watcher · 等 deploy 完抓 after · editUpdate 贴图
+    // before 路径来自 result.session.beforeSnapshotPath
+    const session = result.session;
+    state.uiSession = null;  // 清掉 · 让下一波 UI 启动新 session
+    savePromptState(state);
+    const text = (await input({ message: '一句话总结这波 UI 改动' })).trim();
+    if (!text) { log(sepia('  没写内容 · 跳过')); return; }
+    const pushResult = await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
+    const updateId = pushResult && (pushResult.result?.id || pushResult.id);
+    state.lastPushAtByProject = state.lastPushAtByProject || {};
+    state.lastPushAtByProject[repoCfg.projectId] = Date.now();
+    savePromptState(state);
+    ok('发出去了 → ' + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
+
+    // 启动后台 watcher · 等 deploy 后抓 after + editUpdate 贴图
+    if (updateId && session && session.beforeSnapshotPath) {
+      spawnDeployWatcher({
+        updateId,
+        projectId: repoCfg.projectId,
+        text,
+        beforeSnapshotPath: session.beforeSnapshotPath,
+        serverUrl: cfg.serverUrl,
+        token: cfg.token,
+        startedAt: Date.now(),
+      });
+      log(sepia('  后台监控 deploy 中 · deploy 完会自动给那条 update 贴上 before/after 对比图'));
+    } else {
+      log(sepia('  before 快照丢了 · 这次没贴对比图 (后续会修)'));
+    }
+  } else if (choice === 'push') {
     savePromptState(state);
     const text = (await input({ message: '一句话进展 (会发到 ' + repoCfg.projectName + ')' })).trim();
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
@@ -1526,6 +1795,7 @@ async function main() {
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook || args.includes('--from-hook') }); break;
       case 'mute': cmdMute(args[1]); break;
+      case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default: err('未知命令: ' + cmd); help(); process.exit(1);
     }
