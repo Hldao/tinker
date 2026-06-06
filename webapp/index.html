@@ -150,33 +150,62 @@
   .feed-cta-line { font-family: 'Newsreader', serif; font-size: 14px; color: var(--vermilion); cursor: pointer; border-bottom: 1px solid var(--vermilion); padding-bottom: 1px; transition: all 0.15s; display: inline-block; }
   .feed-cta-line:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
-  /* v0.60 革命 · 主屏视图切换 (动静 + 陈列馆合并的开关)
-     两个 pill 并列 · 比 filter-pill 视觉权重重一档 · 因为它换的不是数据 · 是整页布局 */
-  .main-view-toggle {
-    display: inline-flex;
+  /* v0.61 编辑性 / 工具性分层 · 主屏顶部从"竖叠 5 行"改成"编辑 header + control ribbon"
+     灵感: 周刊电子版的 section opener (NYT / FT) · 但用 Tinker 自己的 vermilion + mono / serif 双轨
+     编辑部分 (serif): 标题 + 副标 + CTA 合一句 · 像杂志开篇
+     ribbon 部分 (mono): 视图切换 + 状态数据 · 一行 mono 横排 · 上下细线夹 */
+  .workshop-ribbon {
+    display: flex;
     align-items: center;
-    gap: 28px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    padding: 14px 0;
     border-top: 1px solid var(--rule);
     border-bottom: 1px solid var(--rule);
-    padding: 10px 0;
+    margin-bottom: 28px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.08em;
   }
-  .main-view-pill {
-    font-family: 'Newsreader', serif;
-    font-size: 15px;
+  .workshop-ribbon-left { display: inline-flex; align-items: center; gap: 28px; }
+  .workshop-ribbon-right { color: var(--sepia); font-size: 11px; letter-spacing: 0.12em; }
+  .workshop-ribbon-right .num { color: var(--ink); font-weight: 500; padding: 0 2px; font-variant-numeric: tabular-nums; }
+  .ribbon-stats:not(:empty)::before {
+    content: '';
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--vermilion); margin-right: 8px;
+    vertical-align: 1px;
+    animation: live-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1); }
+  }
+
+  .view-pill {
     color: var(--sepia);
     cursor: pointer;
-    padding: 2px 0;
-    border-bottom: 1px dotted transparent;
-    transition: all 0.15s;
+    padding: 4px 0;
+    border-bottom: 1px solid transparent;
+    transition: color 0.22s ease, border-color 0.22s ease, transform 0.18s ease;
+    position: relative;
   }
-  .main-view-pill:hover {
-    color: var(--ink);
-  }
-  .main-view-pill.active {
+  .view-pill:hover { color: var(--ink); transform: translateY(-1px); }
+  .view-pill.active {
     color: var(--vermilion);
-    border-bottom: 1px solid var(--vermilion);
-    font-style: italic;
+    border-bottom-color: var(--vermilion);
   }
+  .view-pill .view-icon {
+    display: inline-block;
+    width: 14px; height: 14px;
+    vertical-align: -2px;
+    margin-right: 6px;
+    opacity: 0.75;
+    transition: opacity 0.22s ease;
+  }
+  .view-pill.active .view-icon { opacity: 1; }
+  .view-pill:hover .view-icon { opacity: 1; }
 
   .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
   .entry:hover { background: rgba(194, 65, 12, 0.04); }
@@ -5133,15 +5162,28 @@
 <main class="max-w-3xl mx-auto px-8 py-12">
 
   <section class="screen active" id="screen-feed">
+    <!-- v0.61 编辑性 header · serif · 副标 + CTA 合一句 -->
     <div class="mb-8">
       <h1 class="feed-title mb-3">今天有动静</h1>
-      <p class="feed-sub mb-2">大家在做的、做出来的 — 路过看一眼别人在捣鼓什么</p>
-      <span class="feed-cta-line" onclick="openPickProject()">或者你今天也来记一笔 →</span>
-      <div id="feed-stats" class="feed-stats"></div>
-      <!-- v0.60 革命:动静 + 陈列馆合并 · 视图切换 pill 在这里 -->
-      <div class="main-view-toggle mt-6">
-        <span class="main-view-pill active" data-view="stream" onclick="switchMainView('stream')">时序看进展</span>
-        <span class="main-view-pill" data-view="gallery" onclick="switchMainView('gallery')">项目分组看积累</span>
+      <p class="feed-sub mb-2">
+        大家在做的、做出来的 — 路过看一眼别人在捣鼓什么。
+        <span class="feed-cta-line" onclick="openPickProject()">或者也来记一笔 →</span>
+      </p>
+    </div>
+    <!-- v0.61 control ribbon · mono · 视图切换 + 状态 -->
+    <div class="workshop-ribbon">
+      <div class="workshop-ribbon-left">
+        <span class="view-pill active" data-view="stream" onclick="switchMainView('stream')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+          时序看进展
+        </span>
+        <span class="view-pill" data-view="gallery" onclick="switchMainView('gallery')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          项目分组看积累
+        </span>
+      </div>
+      <div class="workshop-ribbon-right">
+        <span id="feed-stats" class="ribbon-stats"></span>
       </div>
     </div>
     <div class="filter-row mb-4">
@@ -5257,14 +5299,25 @@
   </section>
 
   <section class="screen" id="screen-showcase">
+    <!-- v0.61 编辑性 header -->
     <div class="mb-6">
       <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">大家在做的、做出来的 — 按项目分组,看每个作品的积累</p>
-      <div id="showcase-stats" class="showcase-stats"></div>
-      <!-- v0.60 革命:跟动静屏共享视图切换 -->
-      <div class="main-view-toggle mt-6">
-        <span class="main-view-pill" data-view="stream" onclick="switchMainView('stream')">时序看进展</span>
-        <span class="main-view-pill active" data-view="gallery" onclick="switchMainView('gallery')">项目分组看积累</span>
+      <p class="feed-sub">大家在做的、做出来的 — 按项目分组,看每个作品的积累。</p>
+    </div>
+    <!-- v0.61 control ribbon · 跟动静屏共享样式 -->
+    <div class="workshop-ribbon">
+      <div class="workshop-ribbon-left">
+        <span class="view-pill" data-view="stream" onclick="switchMainView('stream')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+          时序看进展
+        </span>
+        <span class="view-pill active" data-view="gallery" onclick="switchMainView('gallery')">
+          <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          项目分组看积累
+        </span>
+      </div>
+      <div class="workshop-ribbon-right">
+        <span id="showcase-stats" class="ribbon-stats"></span>
       </div>
     </div>
     <div class="filter-row mb-4">
