@@ -1147,7 +1147,11 @@ function triggerKeywordMatch() {
     }
 
     // TINKER (捣鼓 · 在玩 · active exploration)
-    const TINKER_WORDS = /(捣鼓|玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
+    // 重要:"捣鼓" 在 Tinker 自己的 repo 里指产品本身 ("feat(捣鼓): ...")
+    // 所以只匹配动词形 · 不匹配光秃秃 "捣鼓" 这种名词指代
+    //   ✓ 在捣鼓 / 捣鼓了 / 捣鼓一下 / 捣鼓一波 / 捣鼓着
+    //   ✗ feat(捣鼓): ... · 更新捣鼓首页 · @捣鼓项目
+    const TINKER_WORDS = /(在捣鼓|捣鼓了|捣鼓一下|捣鼓一波|捣鼓着|玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
     if (TINKER_WORDS.test(title)) {
       return { fired: true, priority: 70, reason: 'keyword-tinker', kind: 'progress', msg: `在捣鼓: ${dim(titleSnippet)}`, suggestion: '一句话说一下你在玩什么?' };
     }
