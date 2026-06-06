@@ -43,9 +43,9 @@
 ## [Unreleased] / 0.5.x · UI 体系化打磨 (进行中)
 
 > Owner: 设计线 (ui.N)
-> 进展: webapp/index.html 累积 v0.27 → v0.51 共 27 个子段
+> 进展: webapp/index.html 累积 v0.27 → v0.52 共 28 个子段
 > 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
-> Build badge: webapp 右下角小角标 `ui · v0.51` (hover 显示完整 patch 历史)
+> Build badge: webapp 右下角小角标 `ui · v0.52` (hover 显示完整 patch 历史)
 
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
@@ -77,6 +77,7 @@
 - **v0.50** 中文长文本排版修复 · entry-text / pcard-desc / 项目页正文加 'Songti SC' 'Noto Serif SC' fallback · 撤销 v0.30 留下的负字距 · 中文用 0.005em 微正"呼吸距"
 - **v0.50.1** inline-code 长 URL 溢出修复 · 撤销 white-space: nowrap · 改 overflow-wrap: anywhere · 长 `git clone` / URL 在任意位置可断 · 卡片不再撑爆
 - **v0.51** 陈列馆视觉升级 + 全站 AI 符号清洗 · 序号 01/02 浮左 + dateline 绝对日期 + 铭牌行 + 截图框 16:9 + 完工感想 mono 标签 + 印章 dotted 边框 + 馆藏统计 · markup 同步 renderShowcase + formatShipDate/daysSinceShip helper · 全站字间空格删 + 文案 staccato `·` 链改自然中文标点 (顿号/句号/破折号) · 保留卷期号/工具列表/时间元数据的 ·
+- **v0.52** 长文阅读体验三件套 · ① renderRichText 块级版 \n\n→`<p>` + 单 \n→`<br>` · 段间距 12px · entry-text/tl-text 行高 1.65 · ② status chip 退化成 8px 圆点 + 状态色 (active/done=moss · stuck=vermilion · paused=sepia) · 文字走 title tooltip · hover 圆点放大 · ③ entry-meta 工具栈默认 opacity 0.55 · hover 1.0 · 移动端 (hover:none) 永远 1.0 · 4 处调用切换 renderRichText (feed/workshop 最近的动静/timeline/showcase reflection)
 
 ### [ui] markup 减法记录 (累积 5 处)
 所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
