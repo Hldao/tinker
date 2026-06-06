@@ -1,6 +1,6 @@
 {
   "name": "tinker-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Tinker / 捣鼓 — 在 coding 时一句话发布",
   "bin": {
     "tinker": "./bin/tinker.js"

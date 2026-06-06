@@ -1596,12 +1596,14 @@ async function cmdCheck(opts) {
     return;
   }
 
-  // prompt 出来
-  log('');
-  log(sepia('  ── ') + vermilion('tinker') + sepia(' ──'));
-  log('  ' + bold(result.msg) + sepia(' · 在 ') + vermilion(repoCfg.projectName));
-  if (result.suggestion) log('  ' + sepia(result.suggestion));
-  log('');
+  // prompt 出来 · v0.3 --json mode 跳过人类可读输出 · 只输出 JSON
+  if (!opts.json) {
+    log('');
+    log(sepia('  ── ') + vermilion('tinker') + sepia(' ──'));
+    log('  ' + bold(result.msg) + sepia(' · 在 ') + vermilion(repoCfg.projectName));
+    if (result.suggestion) log('  ' + sepia(result.suggestion));
+    log('');
+  }
 
   // 根据触发器类型 · 默认动作不一样:
   //   keyword=frustrated → 特殊:不说"想发一笔"·三选 [标卡住 / 喘口气 / 没事接着搞]
