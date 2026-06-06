@@ -288,6 +288,12 @@ const DEFAULT_VOICE = `Tinker(中文名:捣鼓)是给 vibe coder 的工作室社
 
 const DRAFT_PROMPT_TEMPLATE = `${'$'}{voice}
 
+${'$'}{fingerprint}
+
+${'$'}{goodSamples}
+
+${'$'}{rejectSamples}
+
 ==================
 任务
 ==================
@@ -296,6 +302,7 @@ const DRAFT_PROMPT_TEMPLATE = `${'$'}{voice}
 注意:
 - 只起草 1 条,不是 1-3 条。LLM 写多了反而都平庸。
 - 这一条要符合上面所有规则,尤其是字数(150-280 字)和硬性禁用清单。
+- 如果上面给了 fingerprint / 真实样本,优先 mimic 那种节奏和语言习惯,而不是单纯按规则避雷。
 - 如果 git 全是 typo / 格式调整 / 自动 lint / 没真实信号,返回 { "candidates": [] }。
 - 写完之前自检一遍:有没有 ALL_CAPS 标识符?有没有版本号?有没有中圆点(·)?有没有 em-dash?有没有"接着...然后..."?有的话重写。
 
@@ -327,6 +334,78 @@ function loadVoice() {
   return DEFAULT_VOICE;
 }
 
+// v0.4 Phase 3 · 读 .tinker/voice-fingerprint.md (cmdVoiceAnalyze 生成的)
+// 没有就返回空串 · 不强求 (alpha 期 pool 薄时 fingerprint 不存在很正常)
+function loadFingerprint() {
+  let dir = process.cwd();
+  while (dir !== path.dirname(dir)) {
+    const f = path.join(dir, '.tinker', 'voice-fingerprint.md');
+    if (fs.existsSync(f)) {
+      try {
+        const raw = fs.readFileSync(f, 'utf-8').trim();
+        if (!raw) return '';
+        return `==================
+voice fingerprint · 作者真实风格画像 (优先 mimic 这个 · 比 voice 硬规则准)
+==================
+${raw}`;
+      } catch {}
+    }
+    dir = path.dirname(dir);
+  }
+  return '';
+}
+
+// v0.4 Phase 3 · 从 ~/.tinker/style-pool/good/ 抽 N 篇最近的 good sample
+// 默认 3 篇 · 不够就有几篇用几篇 · 完全没就返回空串
+function loadGoodSamples(n = 3) {
+  const dir = path.join(CONFIG_DIR, 'style-pool', 'good');
+  if (!fs.existsSync(dir)) return '';
+  let files;
+  try {
+    files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort().reverse();
+  } catch { return ''; }
+  if (files.length === 0) return '';
+  const picked = files.slice(0, n);
+  const texts = picked.map(f => {
+    const raw = fs.readFileSync(path.join(dir, f), 'utf-8');
+    const m = raw.match(/---\s*\n[\s\S]*?\n---\s*\n([\s\S]+)$/);
+    return m ? m[1].trim() : raw.trim();
+  }).filter(Boolean);
+  if (texts.length === 0) return '';
+  const joined = texts.map((t, i) => `### 真实样本 ${i + 1}\n${t}`).join('\n\n');
+  return `==================
+作者最近发过的 ${texts.length} 篇真实 update (学这种节奏 / 句法 / 词汇)
+==================
+${joined}`;
+}
+
+// v0.4 Phase 4 · 读 ~/.tinker/style-pool/reject-diff/*.json (LLM 草稿被作者改的 case)
+// 给 LLM 看 "AI 起草版" vs "作者改后版" 的对比 · 学怎么避免类似错
+function loadRejectSamples(n = 2) {
+  const dir = path.join(CONFIG_DIR, 'style-pool', 'reject-diff');
+  if (!fs.existsSync(dir)) return '';
+  let files;
+  try {
+    files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().reverse();
+  } catch { return ''; }
+  if (files.length === 0) return '';
+  const picked = files.slice(0, n);
+  const diffs = picked.map(f => {
+    try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8')); } catch { return null; }
+  }).filter(Boolean);
+  if (diffs.length === 0) return '';
+  const joined = diffs.map((d, i) => `### 改稿 ${i + 1}
+[AI 起草版]
+${d.llmDraft || ''}
+
+[作者改后版]
+${d.finalText || ''}`).join('\n\n');
+  return `==================
+AI 起草过的草稿 · 作者改成下面这样了 (避免起草版那种 tell · 学改后版怎么写)
+==================
+${joined}`;
+}
+
 async function llmDraft(cfg, gitContext) {
   if (!cfg.llm || !cfg.llm.apiKey) {
     throw new Error('LLM 没配置 · 重新跑 ' + vermilion('tinker login') + ' 配一下');
@@ -337,8 +416,16 @@ async function llmDraft(cfg, gitContext) {
   const pending = gitContext.pendingStat
     ? `当前未 commit 的改动:\n${gitContext.pendingStat}` : '';
   const voice = loadVoice();
+  // v0.4 Phase 3 · 加 fingerprint + few-shot 真实样本 + 改稿对比
+  // 三个都有就全用 · 空就跳过 (DEFAULT_VOICE 保底)
+  const fingerprint = loadFingerprint();
+  const goodSamples = loadGoodSamples(3);
+  const rejectSamples = loadRejectSamples(2);
   const prompt = DRAFT_PROMPT_TEMPLATE
     .replaceAll('${voice}', voice)
+    .replaceAll('${fingerprint}', fingerprint)
+    .replaceAll('${goodSamples}', goodSamples)
+    .replaceAll('${rejectSamples}', rejectSamples)
     .replaceAll('${since}', gitContext.since)
     .replaceAll('${history}', history)
     .replaceAll('${pending}', pending);
@@ -732,6 +819,17 @@ async function cmdDraft(opts) {
     candidates, since: history.since, commits: (history.log||'').split('\n').filter(Boolean).length, handle: cfg.handle,
   });
   fs.writeFileSync(draftFile, md);
+
+  // v0.4 Phase 4 · 记最新 LLM 草稿 · 让 cmdResolve 跟用户改后版本比较 · 收集 reject-diff
+  try {
+    const lastDraft = {
+      at: Date.now(),
+      text: (candidates[0] && candidates[0].text) || '',
+      projectId: null,  // 跨命令不一定知道 projectId · cmdResolve 凭 pending 判断
+      since: history.since,
+    };
+    fs.writeFileSync(path.join(CONFIG_DIR, 'last-llm-draft.json'), JSON.stringify(lastDraft, null, 2));
+  } catch {}
 
   log('');
   ok('起草了 ' + bold(candidates.length + '') + ' 条候选 → ' + sepia(path.relative(process.cwd(), draftFile)));
@@ -2207,6 +2305,41 @@ function clearPending() {
 // strip ANSI 颜色码 · JSON 里不该带终端控制符
 function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, ''); }
 
+// v0.4 Phase 4 · 检测作者改稿 · 保存 reject-diff 给未来 LLM 学习
+// LLM 草稿放在 ~/.tinker/last-llm-draft.json (cmdDraft 生成时写)
+// 跟 cmdResolve 实际发出的 text 比较 · 不一样就 save 一条 diff
+function saveRejectDiffIfChanged(pending, choice, finalText) {
+  if (!finalText || !finalText.trim()) return;
+  try {
+    const lastDraftFile = path.join(CONFIG_DIR, 'last-llm-draft.json');
+    if (!fs.existsSync(lastDraftFile)) return;  // 没起草过 LLM 草稿 · 不算改稿
+    const lastDraft = JSON.parse(fs.readFileSync(lastDraftFile, 'utf-8'));
+    if (!lastDraft || !lastDraft.text) return;
+    // 30 分钟超时 · 太久就不算同一次
+    if (Date.now() - lastDraft.at > 30 * 60 * 1000) return;
+    const draftText = lastDraft.text.trim();
+    const final = finalText.trim();
+    if (draftText === final) return;  // 没改 · 不算 reject
+    // 改了 · 但不能差太多 (否则可能根本是手写的不是基于草稿改) · 用 length ratio 判断
+    const lenRatio = Math.min(draftText.length, final.length) / Math.max(draftText.length, final.length);
+    if (lenRatio < 0.3) return;  // 长度差超过 3 倍 · 不算同一条的改稿
+    const dir = path.join(CONFIG_DIR, 'style-pool', 'reject-diff');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    const out = {
+      at: new Date().toISOString(),
+      choice,
+      project: (pending && pending.projectName) || '',
+      commit: (pending && pending.commitTitle) || '',
+      llmDraft: draftText,
+      finalText: final,
+    };
+    fs.writeFileSync(path.join(dir, `${stamp}-${choice}.json`), JSON.stringify(out, null, 2));
+    // 用完即删 · 防止同一草稿被多次 reject
+    try { fs.unlinkSync(lastDraftFile); } catch {}
+  } catch {}
+}
+
 // v0.4 Phase 1 · 静默收集 voice sample 到 ~/.tinker/style-pool/good/
 // 每次成功 push (从 cmdResolve) 时调一次 · 累积作者真实风格样本
 // 之后 tinker voice analyze 会读这个池子总结 fingerprint
@@ -2266,6 +2399,7 @@ async function cmdResolve(choice, opts) {
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
       savePoolSample(pending, choice, text, cfg.handle);
+      saveRejectDiffIfChanged(pending, choice, text);
       const okMsg = choice === 'push-decision' ? '✓ 决策记下来了' : '发出去了';
       ok(okMsg);
     } else if (choice === 'ship' || choice === 'prototype') {
@@ -2279,6 +2413,7 @@ async function cmdResolve(choice, opts) {
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
       savePoolSample(pending, choice, text, cfg.handle);
+      saveRejectDiffIfChanged(pending, choice, text);
       ok(choice === 'ship' ? '✦ 完工 · 已进陈列馆' : '◐ 原型 · 已进陈列馆');
     } else if (choice === 'stuck' || choice === 'stuck-quiet') {
       const cfg = mustHaveConfig();
@@ -2287,6 +2422,7 @@ async function cmdResolve(choice, opts) {
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
       savePoolSample(pending, choice, text, cfg.handle);
+      saveRejectDiffIfChanged(pending, choice, text);
       ok('⚠ 卡住了 · 已通知关心你的人');
     } else if (choice === 'later') {
       state.laterUntil = now + 60 * 60 * 1000;
