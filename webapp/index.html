@@ -4,20 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tinker · 在做的现场</title>
-<meta name="description" content="给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台">
-
-<!-- Open Graph · 给微信 / X / 飞书 等抓取生成漂亮卡片 -->
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="Tinker / 捣鼓">
-<meta property="og:title" content="Tinker · 在做的现场">
-<meta property="og:description" content="给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台">
-<meta property="og:locale" content="zh_CN">
-
-<!-- Twitter / X 卡片 -->
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Tinker · 在做的现场">
-<meta name="twitter:description" content="给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台">
-
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -36,18 +22,6 @@
   body { background: var(--bg); color: var(--ink); font-family: 'Inter', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-font-smoothing: antialiased; }
   .serif { font-family: 'Newsreader', 'Source Serif Pro', Georgia, serif; }
   .mono  { font-family: 'JetBrains Mono', ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
-  /* 极简 inline markdown · 进展/便签里 **粗体** + `代码` · 不喧宾夺主 */
-  strong { font-weight: 600; }
-  .inline-code {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.88em;
-    background: var(--paper);
-    padding: 1px 6px;
-    border-radius: 3px;
-    color: var(--vermilion);
-    border: 1px solid var(--rule);
-    white-space: nowrap;
-  }
   /* Fraunces — 大字号 hero 专用 · variable opsz 144 让大字渲染最优雅 */
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
 
@@ -56,7 +30,6 @@
   .masthead .title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 28px; letter-spacing: -0.02em; color: var(--ink); }
   .masthead .title-cn { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; color: var(--ink); letter-spacing: 0.02em; }
   .masthead .tagline { color: var(--sepia); font-style: italic; }
-  .masthead-issue-link:hover { color: var(--vermilion); border-bottom-color: var(--vermilion) !important; }
   .masthead a, .masthead button { color: var(--ink); border-bottom: 1px solid transparent; transition: border-color 0.15s; cursor: pointer; }
   .masthead a:hover, .masthead button:hover { border-bottom-color: var(--ink); }
 
@@ -122,34 +95,13 @@
   .workshop-name { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 48px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
   .workshop-tagline { font-family: 'Newsreader', serif; font-style: italic; color: var(--sepia); font-size: 19px; }
   .section-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 18px; }
-  .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; position: relative; }
+  .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
   .pcard:hover .pcard-name { color: var(--vermilion); }
-  .pcard-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-  .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; flex: 1; min-width: 0; }
+  .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
   .pcard-desc { color: var(--sepia); font-size: 14px; font-style: italic; margin-bottom: 8px; }
-  .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+  .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; }
   .pcard-meta .stuck { color: var(--vermilion); }
   .pcard-meta .done { color: var(--moss); }
-  /* 状态小圆点 · 颜色按 status 变 · 替代之前的横线 */
-  .pcard-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--sepia-light); margin-right: 8px; flex-shrink: 0; }
-  .pcard-status-dot.status-active  { background: var(--ink-soft); }
-  .pcard-status-dot.status-stuck   { background: var(--vermilion); }
-  .pcard-status-dot.status-done    { background: var(--moss); }
-  .pcard-status-dot.status-paused  { background: var(--sepia-light); }
-  .pcard-status-dot.status-archive { background: var(--sepia-light); }
-  /* 真实复用印章 · 只显示非零的 · 用真实手艺数据做差异化 · 不是包装 */
-  .pcard-stamps { display: flex; gap: 6px; flex-shrink: 0; }
-  .pcard-stamp {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
-    color: var(--vermilion);
-    letter-spacing: 0.04em;
-    background: var(--paper);
-    padding: 2px 8px;
-    border: 1px dotted var(--vermilion);
-    border-radius: 2px;
-    white-space: nowrap;
-  }
 
   /* PROJECT */
   .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
@@ -358,57 +310,15 @@
     color: var(--sepia);
     letter-spacing: 0.02em;
   }
-  .tl-used-block {
-    margin-top: 18px;
-    padding-top: 12px;
-    border-top: 1px dotted var(--rule);
-  }
-  .method-used-entry {
-    padding: 18px 0 16px;
-    border-bottom: 1px solid var(--rule);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .method-used-entry:hover { background: var(--paper); }
-  /* 案头 · 等你看一眼 · 工作室页 isMe 专属 · 持久的"留言桌" */
-  .pending-section-label {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--vermilion);
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    border-bottom: 1px solid var(--vermilion);
-    padding-bottom: 6px;
-    margin-bottom: 4px;
-  }
-  .pending-item {
-    padding: 12px 0;
-    font-family: 'Newsreader', serif;
-    font-size: 15px;
-    color: var(--ink);
-    line-height: 1.55;
-    cursor: pointer;
-    border-bottom: 1px dotted var(--rule);
-    transition: color 0.15s;
-  }
-  .pending-item:hover { color: var(--vermilion); }
-  .pending-item:last-child { border-bottom: none; }
-  .pending-item .nh { color: var(--ink); font-weight: 600; }
-  .pending-item .nh:hover { color: var(--vermilion); }
-  .tl-used-header {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
-    color: var(--vermilion);
-    letter-spacing: 0.15em;
-    margin-bottom: 8px;
-  }
   .tl-used-list {
+    margin-top: 8px;
     font-family: 'Newsreader', serif;
-    font-size: 13.5px;
-    color: var(--ink-soft);
-    line-height: 1.65;
+    font-size: 13px;
+    color: var(--sepia);
+    font-style: italic;
+    line-height: 1.6;
   }
-  .tl-used-list .nh { color: var(--ink); font-weight: 600; }
+  .tl-used-list .nh { color: var(--ink); font-weight: 600; font-style: normal; }
   .tl-used-list .nh:hover { color: var(--vermilion); cursor: pointer; }
   .quote-block {
     border-left: 2px solid var(--rule);
@@ -1858,11 +1768,6 @@
     .masthead .title { font-size: 22px; }
     .masthead .title-cn { font-size: 19px; }
     .masthead .tagline { display: none; }   /* 小屏空间紧 · 副标隐藏 */
-    /* 新加的刊头副标:保留但更紧 (这是首访宗旨 · 不能隐藏) */
-    .masthead-byline { padding-left: 18px !important; padding-right: 18px !important; padding-top: 2px !important; padding-bottom: 8px !important; }
-    .masthead-byline p { font-size: 12.5px !important; line-height: 1.45 !important; padding-top: 4px !important; }
-    /* 搜索按钮的 ⌘K 提示在窄屏没意义 (没物理键盘) */
-    .masthead nav .kbd { display: none; }
     /* main content padding */
     main.max-w-3xl.px-8.py-12 { padding-left: 18px; padding-right: 18px; padding-top: 36px; padding-bottom: 60px; }
   }
@@ -1875,16 +1780,6 @@
     .tl-entry { grid-template-columns: 60px 1fr !important; gap: 18px !important; }
     .tl-entry::before { left: 72px !important; }
     .tl-entry::after { left: 68px !important; }
-    /* 主屏 entry 列宽跟 tl-entry 一起收 */
-    .entry { grid-template-columns: 56px 1fr !important; gap: 16px !important; padding: 22px 0 !important; }
-    /* about 页大标题缩 (只命中 h1 · 不影响中间 19px 小标题) */
-    #screen-about h1.display { font-size: 36px !important; }
-    #screen-about p[style*="font-size: 22px"] { font-size: 17px !important; line-height: 1.4 !important; }
-    /* issue 页大标题缩 + 引语缩 */
-    #screen-issue h1.display { font-size: 34px !important; }
-    #screen-issue blockquote { font-size: 18px !important; padding-left: 16px !important; }
-    /* modal 边距收 + 顶住屏宽 */
-    .modal-paper { padding: 20px 18px !important; max-width: 92vw !important; }
     /* 分享区 5 个按钮在小屏 wrap 节奏 */
     #project-content .mt-16.pt-8.border-t-2 .flex.flex-wrap.gap-4 { gap: 14px !important; }
   }
@@ -1959,6 +1854,7 @@
   /* ===============================================================
      END v0.31.1 final touches
      =============================================================== */
+
 
   /* ===============================================================
      v0.32 BORROWED FROM WEEKLY BRIEF — 借鉴朋友的周报设计
@@ -2389,6 +2285,1347 @@
   /* ===============================================================
      END v0.33 about drop-cap + feed anchors
      =============================================================== */
+
+
+  /* ===============================================================
+     v0.34 day-label · feed/workshop 按日 group 的小日历
+     ▍ 配套 JS 改动: renderFeed + renderWorkshop "最近的动静"
+     ▍ 只在同一天 ≥ 2 条时才出现日历 (避免单条天冗余)
+     ▍ typography 风格 · 收一档周报 day-num 96px → 32px
+     =============================================================== */
+  .day-label {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    padding: 28px 0 14px;
+    margin-top: 18px;
+    border-bottom: 1px dotted var(--rule);
+    position: relative;
+  }
+  /* 第一个 day-label (在 feed 顶部紧贴 filter-row) 不需要上间距 */
+  .filter-row + .day-label,
+  .section-label + .day-label {
+    margin-top: 4px;
+    padding-top: 18px;
+  }
+
+  /* 日期数字 · Fraunces italic 大字 · 跟 entry-time 系统一致 (vermilion) */
+  .day-label .day-num {
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 36px;
+    font-weight: 400;
+    line-height: 0.9;
+    color: var(--vermilion);
+    letter-spacing: -0.02em;
+  }
+
+  /* 月份 + 星期 · 垂直排列 · 跟数字 baseline 对齐 */
+  .day-label .day-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-bottom: 2px;
+  }
+  .day-label .day-month {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    color: var(--sepia);
+    text-transform: uppercase;
+  }
+  .day-label .day-week {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+
+  /* 条目计数 · 右侧 mono 装饰 */
+  .day-label .day-count {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--sepia);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding-bottom: 2px;
+  }
+
+  /* day-label 后的第一条 entry 收紧上间距 (避免双重 padding) */
+  .day-label + .entry {
+    padding-top: 18px;
+  }
+  /* 反过来: entry 后再来 day-label · 需要更大 separator */
+  .entry + .day-label {
+    margin-top: 28px;
+  }
+
+  /* 小屏: 日期数字小一档 + 间距收 */
+  @media (max-width: 720px) {
+    .day-label {
+      padding: 20px 0 10px;
+      gap: 12px;
+    }
+    .day-label .day-num { font-size: 28px; }
+    .day-label .day-week { font-size: 13px; }
+  }
+
+  /* ===============================================================
+     END v0.34 day-label
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.35 day-label 横向 separator 改造
+     ▍ 反馈: v0.34 day-num (Fraunces 36 vermilion) 跟 entry-time
+     ▍ (Fraunces 22 vermilion) 在左侧 column 形成两条平行时间锚点
+     ▍ 改造: day-label 横向化 · 不占 left column · 像章节 separator
+     ▍ entry-time 保留 v0.33 主锚点不变
+     =============================================================== */
+
+  .day-label {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 30px 0 18px;
+    margin-top: 12px;
+    border-bottom: none;       /* 取消 v0.34 dotted 底线 · separator 自带 */
+  }
+  .day-label::before {
+    content: '';
+    flex: 0 0 28px;
+    height: 1px;
+    background: var(--rule);
+    align-self: center;
+  }
+  .day-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+    align-self: center;
+  }
+
+  /* day-num 收一档 (36 → 26) · 不跟 entry-time 22px 抢戏 */
+  .day-label .day-num {
+    font-size: 26px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    /* color/font-family/italic 沿用 v0.34 (Fraunces italic vermilion) */
+  }
+
+  /* day-meta 改 inline row (不再 column 堆叠) · 跟 day-num baseline 对齐 */
+  .day-label .day-meta {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    align-items: baseline;
+    padding: 0;
+  }
+  .day-label .day-month {
+    font-size: 10.5px;
+    /* mono / vermilion (从 sepia 升一档) · 跟 day-num 颜色协调 */
+    color: var(--vermilion);
+    opacity: 0.85;
+  }
+  .day-label .day-week {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    font-style: italic;
+    letter-spacing: 0;
+  }
+
+  /* day-count 用 order 推到 ::after 后面 (DOM 顺序在 ::after 前) */
+  .day-label .day-count {
+    order: 999;
+    margin-left: 0;
+    padding-left: 0;
+    flex: 0 0 auto;
+    font-size: 10.5px;
+  }
+
+  /* day-label 后第一条 entry 紧贴 separator · 不再额外 padding */
+  .day-label + .entry {
+    padding-top: 12px;
+  }
+  /* 第二个 day-label 之前的 entry 给点尾部呼吸 */
+  .entry + .day-label {
+    margin-top: 8px;
+  }
+
+  /* 小屏: separator 收一档 · day-num 更小 */
+  @media (max-width: 720px) {
+    .day-label {
+      gap: 10px;
+      padding: 22px 0 14px;
+    }
+    .day-label::before { flex: 0 0 20px; }
+    .day-label .day-num { font-size: 22px; }
+    .day-label .day-meta { gap: 8px; }
+    .day-label .day-week { font-size: 13px; }
+  }
+
+  /* ===============================================================
+     END v0.35 horizontal separator
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.36 day-label 嵌入 entry left column · "日历 = 章节起点"
+     ▍ 参考: Day One · GitHub PR conversation · Apple Calendar 周视图
+     ▍ 共同模式: 日历跟时间戳共享同一 column (日历 = 章节,时间戳 = 章节内时刻)
+     ▍ Tinker 实施: day-label 用 entry 同款 grid (76px / 1fr)
+     ▍   左 column: 日期数字 + 月份 + 星期 (堆叠 · 跟 entry-time 对齐)
+     ▍   右 column: 上 "N 条" mono · 下 dotted separator (跟 entry 主体对齐)
+     =============================================================== */
+
+  /* 重置 v0.34 / v0.35 的 flex 布局 · 改成 grid */
+  .day-label {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 26px;
+    row-gap: 0;
+    padding: 36px 0 0;
+    margin-top: 12px;
+    border-bottom: none;
+    align-items: start;
+  }
+  /* 取消 v0.35 的左右横线 ::before / ::after */
+  .day-label::before,
+  .day-label::after {
+    display: none;
+  }
+
+  /* 第一个 day-label (feed 顶端紧贴 filter-row) 上间距收 */
+  .filter-row + .day-label,
+  .section-label + .day-label {
+    padding-top: 22px;
+    margin-top: 4px;
+  }
+
+  /* 日历元素全部放左 column (跨两行) */
+  .day-label .day-num {
+    grid-column: 1;
+    grid-row: 1;
+    text-align: right;
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 40px;            /* 大一档 · 因为在 left column 内 · 不再跟横向 separator 等元素争 */
+    font-weight: 400;
+    line-height: 0.9;
+    color: var(--vermilion);
+    letter-spacing: -0.02em;
+    padding-top: 2px;
+  }
+  .day-label .day-meta {
+    grid-column: 1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    align-items: flex-end;       /* 跟 day-num text-align: right 对齐 */
+    text-align: right;
+    padding-top: 8px;
+    padding-bottom: 0;
+  }
+  .day-label .day-month {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    color: var(--vermilion);
+    opacity: 0.75;
+    text-transform: uppercase;
+  }
+  .day-label .day-week {
+    font-family: 'Newsreader', serif;
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-style: italic;
+    letter-spacing: 0;
+  }
+
+  /* 右 column: "N 条" 顶部 + dotted separator 占据底部 */
+  .day-label .day-count {
+    grid-column: 2;
+    grid-row: 1 / 3;             /* 跨两行 · 用 align-self 推到底 */
+    margin: 0 !important;
+    padding: 0;
+    align-self: end;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--sepia);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-align: right;
+    padding-bottom: 14px;
+    border-bottom: 1px dotted var(--rule);
+    order: 0;                    /* 取消 v0.35 的 order: 999 */
+  }
+
+  /* day-label 下一条 entry · 收一档上 padding (separator 已经隔开) */
+  .day-label + .entry {
+    padding-top: 22px;
+  }
+  /* 第二个 day-label 之前 entry 收尾 (避免 entry 跟下个 day-label 太紧) */
+  .entry + .day-label {
+    margin-top: 16px;
+    padding-top: 28px;
+  }
+
+  /* 小屏 · 日期数字缩 · 但仍嵌入 column 内 */
+  @media (max-width: 720px) {
+    .day-label {
+      grid-template-columns: 60px 1fr;
+      column-gap: 18px;
+      padding-top: 26px;
+    }
+    .day-label .day-num { font-size: 32px; }
+    .day-label .day-month { font-size: 9.5px; }
+    .day-label .day-week { font-size: 12.5px; }
+  }
+
+  /* ===============================================================
+     END v0.36 day-label embedded in left column
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.37 day-label 退化为"换天 separator"
+     ▍ 洞察: 99% 访问看到的就是今天 (masthead 已有 2026/06/06 锚点)
+     ▍ day-label 不该每个 group 都顶 · 应该只在跨越时间边界时出现
+     ▍ JS 改动: 跳过"第一个 group 且是今天"的 label · 见 renderFeed
+     ▍ CSS: 撤销 v0.34-v0.36 复杂日历布局 · 改极简一行文字 + dotted separator
+     ▍ 仪式感留给 masthead 顶部 · day-label 只是"换天"提示
+     =============================================================== */
+
+  /* 重置所有 v0.34/v0.35/v0.36 的 day-label 布局 · 改回简单 inline flow */
+  .day-label {
+    display: block;
+    grid-template-columns: none;
+    grid-template-rows: none;
+    column-gap: 0;
+    row-gap: 0;
+    padding: 28px 0 8px;
+    margin-top: 12px;
+    border-bottom: 1px dotted var(--rule);
+    align-items: initial;
+    /* 整段一行 mono · 跟 v0.32 eyebrow 系统呼应 */
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--sepia);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  /* 取消 ::before / ::after 横线 */
+  .day-label::before,
+  .day-label::after {
+    display: none !important;
+  }
+
+  /* 子元素重置 grid · 改成 inline */
+  .day-label .day-num,
+  .day-label .day-meta,
+  .day-label .day-month,
+  .day-label .day-week,
+  .day-label .day-count,
+  .day-label .day-relative,
+  .day-label .day-date,
+  .day-label .day-sep {
+    grid-column: initial;
+    grid-row: initial;
+    text-align: initial;
+    padding: 0;
+    margin: 0;
+    border: none;
+    align-self: initial;
+    order: initial;
+    flex: initial;
+    display: inline;
+    font-family: 'JetBrains Mono', monospace;
+    font-style: normal;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    line-height: 1;
+    font-variation-settings: normal;
+    text-transform: uppercase;
+    background: transparent;
+  }
+
+  /* 相对时间("昨天" / "前天" / "星期X") · 主角 · vermilion */
+  .day-label .day-relative {
+    color: var(--vermilion);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+  }
+
+  /* 绝对日期 ("06.05") · 辅助 · mono ink-soft */
+  .day-label .day-date {
+    color: var(--ink-soft);
+    font-family: 'Fraunces', 'Newsreader', serif !important;
+    font-style: italic !important;
+    font-size: 13px !important;
+    font-weight: 400;
+    letter-spacing: 0.02em !important;
+    text-transform: none !important;
+  }
+
+  /* 星期 · 退一档 sepia */
+  .day-label .day-week {
+    color: var(--sepia);
+    letter-spacing: 0.16em;
+  }
+
+  /* 分隔点 · 极淡 */
+  .day-label .day-sep {
+    color: var(--sepia-light);
+    margin: 0 2px;
+  }
+
+  /* "5 条" 计数 · 推到右侧 · 退一档 */
+  .day-label .day-count {
+    margin-left: auto !important;
+    color: var(--sepia-light);
+    letter-spacing: 0.18em;
+  }
+
+  /* day-label 后第一条 entry 收一档 padding (separator 已经隔开) */
+  .day-label + .entry {
+    padding-top: 22px;
+  }
+  /* 下一个 day-label 之前 entry 收尾 */
+  .entry + .day-label {
+    margin-top: 16px;
+    padding-top: 28px;
+  }
+
+  /* 小屏 · 文字行高更紧 · 不另起 layout */
+  @media (max-width: 720px) {
+    .day-label {
+      padding: 20px 0 6px;
+      gap: 8px;
+      font-size: 10px;
+    }
+    .day-label .day-date {
+      font-size: 12px !important;
+    }
+  }
+
+  /* ===============================================================
+     END v0.37 day-label as crossing-day separator
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.38 日历回归 · "给作品留下精确历史日期" 的重量感
+     ▍ 反馈: "昨天/前天" 相对说法消解时间重量 · 精确日历 = 历史感 + 成就感
+     ▍ 参考: Day One / GitHub commits / Notion daily notes (纯精确日期 · 无相对时间)
+     ▍ 布局:
+     ▍   left 76px column: 大日期数字 "06" Fraunces italic vermilion
+     ▍                     ↑ 跟下方 entry-time "1d / 12h" 形成统一时间轴 column
+     ▍   right 1fr column: Jun · 六月  星期五  2 条  + dotted separator
+     ▍                     ↑ 紧凑一行月份元数据
+     ▍ JS 改动: makeDayDesc 去掉 relative · markup 改 day-num + day-info
+     =============================================================== */
+
+  /* 重置 v0.37 的 inline flex 布局 · 改成 grid 跟 entry 对齐 */
+  .day-label {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    column-gap: 26px;
+    padding: 32px 0 0;
+    margin-top: 14px;
+    border-bottom: none;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+    align-items: start;
+    gap: 0;
+  }
+  /* 跟 entry 一致的 grid 对齐 · 第一个 day-label 收一档 padding */
+  .filter-row + .day-label,
+  .section-label + .day-label {
+    padding-top: 22px;
+    margin-top: 6px;
+  }
+
+  /* 左 column: 大日期数字 · Fraunces italic vermilion · 跟 entry-time 同款 */
+  .day-label .day-num {
+    grid-column: 1;
+    text-align: right;
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 42px;
+    font-weight: 400;
+    line-height: 0.92;
+    color: var(--vermilion);
+    letter-spacing: -0.02em;
+    padding-top: 4px;
+    display: block;
+    /* 取消 v0.37 inline 所有 reset */
+    font-variation-settings: 'opsz' 144;
+    text-transform: none;
+    background: transparent;
+  }
+
+  /* 右 column: 月份/星期/计数 一行 + dotted separator (用 ::after) */
+  .day-label .day-info {
+    grid-column: 2;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding-top: 14px;
+    padding-bottom: 16px;
+    border-bottom: 1px dotted var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    color: var(--sepia);
+    text-transform: none;
+  }
+
+  /* 月份 · vermilion 半透明 · 跟大日期数字色系协调 */
+  .day-label .day-month {
+    color: var(--vermilion);
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 10.5px;
+  }
+
+  /* 星期 · serif italic 让中文字符不机械 (字距对齐 mono) */
+  .day-label .day-week {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* "N 条" · 推到最右 · 退一档 */
+  .day-label .day-count {
+    margin-left: auto !important;
+    color: var(--sepia-light);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 10px;
+  }
+
+  /* day-label 下一条 entry · padding 收一档 (右 column 已有 dotted) */
+  .day-label + .entry {
+    padding-top: 24px;
+  }
+  /* entry 之后下个 day-label · 给 margin 喘息 */
+  .entry + .day-label {
+    margin-top: 18px;
+    padding-top: 30px;
+  }
+
+  /* 小屏 · 日期数字缩 · 但仍嵌入 column */
+  @media (max-width: 720px) {
+    .day-label {
+      grid-template-columns: 60px 1fr;
+      column-gap: 18px;
+      padding-top: 24px;
+    }
+    .day-label .day-num { font-size: 34px; }
+    .day-label .day-info {
+      padding-top: 10px;
+      padding-bottom: 12px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .day-label .day-week { font-size: 12.5px; }
+  }
+
+  /* 取消 v0.37 那些 inline reset 残留 · 用更高 specificity 覆盖 */
+  .day-label .day-num,
+  .day-label .day-info,
+  .day-label .day-month,
+  .day-label .day-week,
+  .day-label .day-count {
+    display: revert;
+    font-family: revert;
+    font-style: revert;
+    font-size: revert;
+    line-height: revert;
+    background: transparent;
+  }
+  /* 然后重新精确设字 (因为 revert 会清掉) */
+  .day-label .day-num {
+    display: block;
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 42px;
+    line-height: 0.92;
+    color: var(--vermilion);
+  }
+  .day-label .day-info {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+  }
+  .day-label .day-month {
+    display: inline;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--vermilion);
+    opacity: 0.85;
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .day-label .day-week {
+    display: inline;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: 0;
+  }
+  .day-label .day-count {
+    display: inline;
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--sepia-light);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  /* ===============================================================
+     END v0.38 calendar regression with weight
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.39 日历页卡片 · 大胆方向 · "撕下来的笔记本一页"
+     ▍ 撤销 v0.34-v0.38 所有 day-label CSS 累积 · 从头写
+     ▍ markup 改造: day-card (paper bg + 微旋转 + shadow) + day-note (诗意注解)
+     ▍ 视觉惊喜点:
+     ▍   1. 真正的纸张感 (paper-deep bg + 双层 shadow + 微旋转 -0.8deg)
+     ▍   2. 顶部 vermilion 2px thin bar 像装订线
+     ▍   3. 超细 Fraunces 大日期 (opsz 144 weight 300 / 64px) · 跟整站 italic 重一档区分
+     ▍   4. 诗意注解 "2026 年第 156 天 · 这天留下了 N 条进展" 给数字温度
+     ▍   5. hover 时卡片回正 + 抬起 + shadow 加深
+     =============================================================== */
+
+  /* ① 完全 reset 之前 v0.34-v0.38 累积的 day-label styles */
+  .day-label,
+  .day-label > *,
+  .day-label * {
+    all: unset;
+    box-sizing: border-box;
+  }
+  /* 单独 reset display 跟其他基础 · 因为 all: unset 把 display 也清了 */
+  .day-label::before,
+  .day-label::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* ② day-label 容器 · 左 card 右 note 的二分布局 */
+  .day-label {
+    display: grid !important;
+    grid-template-columns: 132px 1fr;
+    column-gap: 28px;
+    align-items: center;
+    padding: 40px 0 24px;
+    margin-top: 16px;
+  }
+  .filter-row + .day-label,
+  .section-label + .day-label {
+    padding-top: 28px;
+    margin-top: 8px;
+  }
+
+  /* ③ day-card · 真正的"撕下来的笔记本一页" */
+  .day-label .day-card {
+    display: block !important;
+    position: relative;
+    background: #ede2c4;            /* paper-deep · 比 cream 略深 */
+    border: 1px solid var(--rule);
+    padding: 14px 14px 12px;
+    text-align: center;
+    transform: rotate(-0.8deg);
+    transition: transform 0.35s cubic-bezier(.2,.7,.3,1), box-shadow 0.35s ease;
+    box-shadow:
+      0 1px 2px rgba(28, 25, 23, 0.05),
+      0 10px 28px rgba(28, 25, 23, 0.10);
+    cursor: default;
+  }
+  .day-label .day-card:hover {
+    transform: rotate(0deg) translateY(-3px);
+    box-shadow:
+      0 2px 4px rgba(28, 25, 23, 0.07),
+      0 16px 40px rgba(28, 25, 23, 0.14);
+  }
+  /* 顶部 vermilion thin bar · 像装订线 · 跟 modal-paper::before 系统呼应 */
+  .day-label .day-card::before {
+    content: '' !important;
+    display: block !important;
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    height: 2px;
+    background: var(--vermilion);
+    opacity: 0.85;
+  }
+
+  /* ④ 卡片顶部行: Jun · 六月 (mono uppercase vermilion) */
+  .day-label .day-card-top {
+    display: flex !important;
+    align-items: baseline;
+    justify-content: center;
+    gap: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--vermilion);
+    text-transform: uppercase;
+    padding-bottom: 8px;
+    border-bottom: 1px dotted var(--rule);
+    margin-bottom: 8px;
+    opacity: 0.85;
+  }
+  .day-label .day-month-cn {
+    display: inline !important;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 11px;
+    color: var(--vermilion);
+    letter-spacing: 0.02em;
+    text-transform: none;
+    opacity: 0.95;
+  }
+  .day-label .day-card-dot {
+    display: inline !important;
+    opacity: 0.5;
+  }
+
+  /* ⑤ 大日期数字 · 超细 Fraunces · 视觉主角 */
+  .day-label .day-card-num {
+    display: block !important;
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144, 'SOFT' 30;
+    font-weight: 300;
+    font-style: normal;
+    font-size: 68px;
+    line-height: 0.95;
+    color: var(--ink);
+    letter-spacing: -0.04em;
+    padding: 4px 0 8px;
+  }
+
+  /* ⑥ 卡片底部: 星期五 (italic Newsreader) */
+  .day-label .day-card-bot {
+    display: block !important;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    padding-top: 8px;
+    border-top: 1px dotted var(--rule);
+    letter-spacing: 0.01em;
+  }
+
+  /* ⑦ 右侧诗意注解 */
+  .day-label .day-note {
+    display: block !important;
+    padding-left: 4px;
+  }
+  .day-label .day-note-doy {
+    display: block !important;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    color: var(--vermilion);
+    opacity: 0.7;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .day-label .day-note-count {
+    display: block !important;
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 16px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    letter-spacing: 0.005em;
+  }
+
+  /* ⑧ day-label 跟下方 entry 节奏 */
+  .day-label + .entry {
+    padding-top: 26px;
+  }
+  .entry + .day-label {
+    margin-top: 24px;
+    padding-top: 44px;
+  }
+
+  /* ⑨ 小屏 · 卡片收一档 · 注解换行 */
+  @media (max-width: 720px) {
+    .day-label {
+      grid-template-columns: 100px 1fr;
+      column-gap: 18px;
+      padding: 28px 0 18px;
+    }
+    .day-label .day-card-num { font-size: 52px; }
+    .day-label .day-card { padding: 12px 10px 10px; }
+    .day-label .day-card-top { font-size: 9.5px; }
+    .day-label .day-card-bot { font-size: 12px; }
+    .day-label .day-note-doy { font-size: 9.5px; letter-spacing: 0.16em; }
+    .day-label .day-note-count { font-size: 14px; }
+  }
+
+  /* ===============================================================
+     END v0.39 撕日历纸 · 大胆方向
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.40 · 主从重构 · masthead 日历 + feed 简化
+     ▍ 用户洞察: 日历是主时间锚点 · 应该放页面顶部 (masthead-date 位置)
+     ▍                feed 内 day-label 退为分隔信号 · 不抢主视觉
+     ▍
+     ▍ 改动:
+     ▍   A · 撤销 v0.39 撕日历卡 (CSS 全部 disable)
+     ▍   B · day-label 回到简洁横向 inline (markup 已改回)
+     ▍   C · masthead-date 重做: Fri · 06 · Jun · 2026 报纸 dateline 风
+     ▍                          大日期数字 Fraunces italic vermilion 视觉锚点
+     =============================================================== */
+
+  /* ───────────────────────────────────────────────────────────────
+     A · 撤销 v0.39 撕日历卡 · 让 v0.40 接管 day-label 完全
+     ─────────────────────────────────────────────────────────────── */
+  .day-label .day-card,
+  .day-label .day-card-top,
+  .day-label .day-card-num,
+  .day-label .day-card-bot,
+  .day-label .day-month-en,
+  .day-label .day-month-cn,
+  .day-label .day-card-dot,
+  .day-label .day-note,
+  .day-label .day-note-doy,
+  .day-label .day-note-count {
+    /* 这些 v0.39 的 markup 不再存在 · 但保留 disable 以防回滚 */
+    display: none !important;
+  }
+
+  /* ───────────────────────────────────────────────────────────────
+     B · day-label 简洁横向 inline · 不抢主视觉
+     用 :where() 提高 selector specificity 干净覆盖 v0.34-v0.38
+     ─────────────────────────────────────────────────────────────── */
+  div.day-label {
+    all: unset;
+    display: flex !important;
+    align-items: baseline;
+    gap: 12px;
+    padding: 26px 0 10px;
+    margin-top: 14px;
+    border-bottom: 1px dotted var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    color: var(--sepia);
+    text-transform: uppercase;
+  }
+  div.day-label::before,
+  div.day-label::after {
+    display: none !important;
+    content: none !important;
+  }
+  /* 子元素 reset · inline display + clear all */
+  div.day-label > .day-num,
+  div.day-label > .day-month,
+  div.day-label > .day-week,
+  div.day-label > .day-count {
+    all: unset;
+    display: inline;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  /* 大日期 "05" · Fraunces italic vermilion · inline 小一档 */
+  div.day-label > .day-num {
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--vermilion);
+    letter-spacing: -0.02em;
+    text-transform: none;
+    line-height: 0.9;
+    margin-right: 2px;
+  }
+  /* "Jun · 六月" · mono vermilion 微透 */
+  div.day-label > .day-month {
+    color: var(--vermilion);
+    opacity: 0.75;
+    letter-spacing: 0.18em;
+  }
+  /* "星期五" · Newsreader italic sepia */
+  div.day-label > .day-week {
+    font-family: 'Newsreader', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  /* "N 条" · 推到最右 · 退一档 */
+  div.day-label > .day-count {
+    margin-left: auto;
+    color: var(--sepia-light);
+    letter-spacing: 0.16em;
+  }
+  div.day-label + .entry { padding-top: 22px; }
+  div.entry + .day-label { margin-top: 16px; padding-top: 28px; }
+
+  /* ───────────────────────────────────────────────────────────────
+     C · masthead-date 精致日历 dateline · 主时间视觉锚点
+     ─────────────────────────────────────────────────────────────── */
+  #masthead-date {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.22em;
+    color: var(--sepia);
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  /* 星期 · mono uppercase vermilion · 报纸 dateline 起手 */
+  #masthead-date .md-weekday {
+    color: var(--vermilion);
+    font-weight: 500;
+    letter-spacing: 0.24em;
+  }
+  /* 大日期数字 "06" · Fraunces italic vermilion · 主视觉锚点 */
+  #masthead-date .md-num {
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--vermilion);
+    letter-spacing: -0.03em;
+    text-transform: none;
+    line-height: 0.9;
+    padding: 0 2px;
+  }
+  /* 月份 mono uppercase ink-soft */
+  #masthead-date .md-month {
+    color: var(--ink-soft);
+    letter-spacing: 0.22em;
+  }
+  /* 年份 · 退一档 sepia-light */
+  #masthead-date .md-year {
+    color: var(--sepia-light);
+    letter-spacing: 0.18em;
+  }
+  /* 分隔点 · 极淡 */
+  #masthead-date .md-sep {
+    color: var(--sepia-light);
+    opacity: 0.6;
+    font-size: 10px;
+  }
+
+  /* 小屏 · masthead 第二行可能换行 · masthead-date 字号收一档 */
+  @media (max-width: 720px) {
+    #masthead-date .md-num { font-size: 18px; }
+    #masthead-date { gap: 4px; font-size: 9.5px; letter-spacing: 0.18em; }
+    #masthead-date .md-month { letter-spacing: 0.18em; }
+  }
+
+  /* ===============================================================
+     END v0.40 主从重构
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.41 颜色对换实验 · masthead 深色 + main 保持 cream
+     ▍ 用户想看: header (masthead) 跟 main 背景对换效果
+     ▍ 方向: 像独立杂志封面 — 顶部 ink 黑条 + 下面 cream 书页
+     ▍ 反差最强 · 用户看完决定要不要继续这个方向
+     =============================================================== */
+
+  /* ① masthead 背景 ink + 文字 cream */
+  .masthead {
+    background: var(--ink) !important;
+    border-bottom: 2px solid var(--vermilion) !important;     /* 底部分隔线改 vermilion 装饰 */
+  }
+  .masthead .title {
+    color: var(--bg) !important;                              /* "Tinker" cream */
+  }
+  .masthead .title-cn {
+    color: var(--bg) !important;                              /* "捣鼓" cream */
+  }
+  .masthead .tagline {
+    color: rgba(250, 248, 243, 0.55) !important;              /* "· 在做的现场" cream 透 */
+  }
+
+  /* ② nav 按钮反色 */
+  .masthead nav button {
+    color: rgba(250, 248, 243, 0.78) !important;              /* cream 略透 */
+  }
+  .masthead nav button:hover {
+    color: var(--bg) !important;
+    border-bottom-color: var(--bg) !important;
+  }
+  .masthead nav .about {
+    color: rgba(250, 248, 243, 0.42) !important;              /* "关于" 更退 */
+  }
+  .masthead nav .add {
+    color: var(--vermilion) !important;                       /* "+ 记一笔" vermilion 保留 (在黑底上仍突出) */
+    /* 加点微高亮让 vermilion 在黑底上更显眼 */
+    text-shadow: 0 0 0 var(--vermilion);
+  }
+  .masthead nav .add:hover {
+    color: #ff5a26 !important;                                /* hover 更亮的橙红 */
+    border-bottom-color: #ff5a26 !important;
+  }
+
+  /* ③ kbd ⌘K 反色 */
+  .masthead nav .kbd {
+    color: rgba(250, 248, 243, 0.55) !important;
+    border-color: rgba(250, 248, 243, 0.25) !important;
+  }
+
+  /* ④ 通知未读小红点 nav-unread-mark · 改更亮的 vermilion */
+  .masthead #nav-unread-mark {
+    color: #ff5a26 !important;                                /* 黑底上 vermilion 不够亮 · 换橙红 */
+  }
+
+  /* ⑤ masthead 第二行 metadata "第 1 期 · 试运行 · @daodao" · 反色退一档 */
+  .masthead-inner-row2,
+  .masthead .max-w-3xl.pb-2 {
+    color: rgba(250, 248, 243, 0.45) !important;
+  }
+  .masthead .handle-tag {
+    color: rgba(250, 248, 243, 0.85) !important;
+  }
+
+  /* ⑥ masthead-date dateline 反色 · vermilion 主角保留 · 其他换 cream 系 */
+  #masthead-date {
+    color: rgba(250, 248, 243, 0.45) !important;
+  }
+  #masthead-date .md-weekday {
+    color: #ff5a26 !important;                                /* 黑底 vermilion 偏暗 · 换更亮 */
+  }
+  #masthead-date .md-num {
+    color: #ff5a26 !important;
+  }
+  #masthead-date .md-month {
+    color: rgba(250, 248, 243, 0.75) !important;
+  }
+  #masthead-date .md-year {
+    color: rgba(250, 248, 243, 0.40) !important;
+  }
+  #masthead-date .md-sep {
+    color: rgba(250, 248, 243, 0.30) !important;
+  }
+
+  /* ⑦ masthead 内部 refreshMastheadHandle 渲染的 "出去" 链接 · 反色 */
+  #masthead-handle-area a {
+    color: rgba(250, 248, 243, 0.55) !important;
+    border-bottom-color: rgba(250, 248, 243, 0.3) !important;
+  }
+  #masthead-handle-area a:hover {
+    color: var(--bg) !important;
+    border-bottom-color: var(--bg) !important;
+  }
+
+  /* ⑧ body 光晕在黑色 masthead 上看不到 · OK 自然 fallback · 但 SVG 颗粒 z-index 100
+        会覆盖 masthead · 调成不影响 masthead */
+  body::before {
+    z-index: 1;                                                /* 让 colored noise 在 masthead 后面 */
+  }
+
+  /* ===============================================================
+     END v0.41 颜色对换实验
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.42 · 撤销 v0.41 + 温和的 cream/paper 对换
+     ▍ 用户澄清: 不要新颜色 · 只用现有的两个 paper 系
+     ▍ 现状: masthead 用 --bg cream · main 也用 --bg cream · 两者颜色相同
+     ▍ 对换: masthead 改用 --paper (#f5f1e8 微深米色) · main 保留 --bg cream
+     ▍       两个颜色互换位置 · 不引入新颜色
+     ▍       视觉效果: 顶部 masthead 微深 (更实) · main 浅 cream (更轻)
+     =============================================================== */
+
+  /* ① 撤销 v0.41 所有 ink 黑 + 反色文字 */
+  .masthead {
+    background: var(--paper) !important;            /* 关键改动: cream → paper 微深米色 */
+    border-bottom: 2px solid var(--ink) !important; /* 底线改回 ink (撤 v0.41 的 vermilion) */
+  }
+  .masthead .title,
+  .masthead .title-cn {
+    color: var(--ink) !important;                   /* 文字回到原 ink */
+  }
+  .masthead .tagline {
+    color: var(--sepia) !important;
+  }
+  .masthead nav button {
+    color: var(--ink) !important;
+  }
+  .masthead nav button:hover {
+    color: var(--ink) !important;
+    border-bottom-color: var(--ink) !important;
+  }
+  .masthead nav .about {
+    color: var(--sepia) !important;
+    font-size: 12px;
+  }
+  .masthead nav .add {
+    color: var(--vermilion) !important;
+    text-shadow: none;
+  }
+  .masthead nav .add:hover {
+    color: var(--ink) !important;
+    border-bottom-color: var(--vermilion) !important;
+  }
+  .masthead nav .kbd {
+    color: var(--sepia) !important;
+    border-color: var(--sepia-light) !important;
+  }
+  .masthead #nav-unread-mark {
+    color: var(--vermilion) !important;
+  }
+  .masthead-inner-row2,
+  .masthead .max-w-3xl.pb-2 {
+    color: var(--sepia) !important;
+  }
+  .masthead .handle-tag {
+    color: var(--ink) !important;
+  }
+
+  /* ② masthead-date 反色回原 vermilion + sepia */
+  #masthead-date {
+    color: var(--sepia) !important;
+  }
+  #masthead-date .md-weekday {
+    color: var(--vermilion) !important;
+  }
+  #masthead-date .md-num {
+    color: var(--vermilion) !important;
+  }
+  #masthead-date .md-month {
+    color: var(--ink-soft) !important;
+  }
+  #masthead-date .md-year {
+    color: var(--sepia-light) !important;
+  }
+  #masthead-date .md-sep {
+    color: var(--sepia-light) !important;
+  }
+
+  /* ③ "出去" 链接 · 反色回 sepia */
+  #masthead-handle-area a {
+    color: var(--sepia) !important;
+    border-bottom-color: var(--sepia-light) !important;
+  }
+  #masthead-handle-area a:hover {
+    color: var(--ink) !important;
+    border-bottom-color: var(--ink) !important;
+  }
+
+  /* ④ body 颗粒 z-index 回到原 100 (cover 全页) */
+  body::before {
+    z-index: 100;
+  }
+
+  /* ⑤ main 保持 --bg cream (不动) · 但确保 body 光晕 + main 整体一致
+        注: 因为 main 是 .max-w-3xl 容器 · 透明背景 · 实际显示是 body 颜色 (cream + 光晕)
+        所以 main 不需要单独改 · masthead 改 paper 后两者天然区分 */
+
+  /* ===============================================================
+     END v0.42 温和 cream/paper 对换
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.43 · 反转 · masthead 用 cream + main 用 paper 偏粉
+     ▍ 用户澄清: "main 用顶部的颜色 · 顶部用偏粉的"
+     ▍ 即反转 v0.42 的方向:
+     ▍   masthead 回到 --bg cream (浅)
+     ▍   body / main 用 --paper #f5f1e8 (偏粉米色 · 比 cream 略深)
+     ▍ 仍只用现有两种 paper 系色 · 不引入新颜色
+     =============================================================== */
+
+  /* ① 撤销 v0.42 的 masthead = paper · 回到 cream */
+  .masthead {
+    background: var(--bg) !important;
+    /* 其他 (border-bottom 文字色) 都是 v0.42 撤销 v0.41 时已恢复 · 不动 */
+  }
+
+  /* ② body 改 paper 色 · 整页内容区背景变偏粉 (v0.32 光晕保留 · 在 paper 上仍温暖) */
+  body {
+    background-color: var(--paper) !important;
+    /* 保留 v0.32 的 radial gradient 光晕 (不动 background-image) */
+  }
+
+  /* ③ 某些组件原本依赖 bg cream 颜色 · 现在 body 变 paper · 需要调整保持气质
+        a. modal-paper / quote-block / .toast-paper / try-cta · 仍用 ink 或 bg 不动
+        b. entry hover wash · 在 paper 上需要略加深一档让 hover 仍可见 */
+  .entry:hover,
+  .notif-entry:hover,
+  .search-result-item:hover,
+  .tl-entry:hover,
+  .pcard:hover,
+  .pick-project-item:hover,
+  #screen-feed > .mb-8::before {
+    /* hover 状态 vermilion wash · 在 paper 上仍有效 · 不动 */
+  }
+
+  /* ④ filter-row · entry · day-label · 这些边线 dotted/solid 在 paper 上仍可见 (rule 色不变) · 不动 */
+
+  /* ⑤ tl-prompt-box · 用 paper 色作背景 (line 160 原 CSS) · 在 body 也是 paper 时会失去对比
+        改: prompt-box 用更深一档 (--paper-deep #ede2c4) 保持对比 */
+  .tl-prompt-box {
+    background: #ede2c4 !important;        /* paper-deep · 跟 day-card 同色系 */
+  }
+  /* quote-block 同理 (modal-method-used) */
+  .quote-block {
+    background: #ede2c4 !important;
+  }
+
+  /* ⑥ pheader 项目页头部空态卡 (workshop-content 空态) 同理 */
+  #workshop-content .py-10.text-center[style*="dashed"] {
+    background: var(--bg) !important;      /* 反过来用 cream · 跟 paper body 形成微对比 */
+  }
+
+  /* ===============================================================
+     END v0.43 反转 cream/paper
+     =============================================================== */
+
+
+  /* ===============================================================
+     v0.44 · 取舍 · main 回 cream + masthead 保持 paper 区分
+     ▍ 用户反馈: "更早的米色更喜欢 · 但顶部要区分"
+     ▍ 解: main 回 --bg cream (用户喜欢的) · masthead 保持 --paper
+     ▍       paper 在 masthead 小面积出现 · 不会有 v0.43 大面积偏粉的问题
+     ▍       不引入新颜色 · 沿用原有两个米色系做"主从微差"
+     =============================================================== */
+
+  /* ① main / body 回到 cream */
+  body {
+    background-color: var(--bg) !important;
+  }
+
+  /* ② masthead 保持 paper (继承 v0.42 ·  v0.43 改回 cream · 这里再 override 回 paper) */
+  .masthead {
+    background: var(--paper) !important;
+  }
+
+  /* ③ prompt-box / quote-block · 现在 body 又是 cream · 它们可以回到原 paper (跟 masthead 同款) · 保持对比 */
+  .tl-prompt-box {
+    background: var(--paper) !important;
+  }
+  .quote-block {
+    background: var(--paper) !important;
+  }
+
+  /* ④ 工作室空态卡 · 反过来用 paper 跟 cream body 形成微对比 */
+  #workshop-content .py-10.text-center[style*="dashed"] {
+    background: var(--paper) !important;
+  }
+
+  /* ===============================================================
+     END v0.44 main cream + masthead paper
+     =============================================================== */
+
+
+  /* ===============================================================
+     UI BUILD BADGE · 右下角小标识 · 帮你区分 UI 版本
+     ▍ 默认 30% opacity · hover 90% · 不打扰阅读
+     ▍ 点击不响应 (pointer-events: none) · 纯展示
+     =============================================================== */
+  .ui-build-badge {
+    position: fixed;
+    bottom: 14px;
+    right: 14px;
+    z-index: 40;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 10px 6px;
+    background: rgba(245, 241, 232, 0.85);     /* paper 半透 · 不抢戏 */
+    border: 1px solid var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--sepia);
+    text-transform: lowercase;
+    line-height: 1;
+    opacity: 0.35;
+    transition: opacity 0.25s ease, transform 0.2s ease;
+    pointer-events: auto;
+    cursor: help;
+    user-select: none;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  .ui-build-badge:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+  }
+  .ui-build-badge .bb-scope {
+    color: var(--vermilion);
+    font-weight: 500;
+    letter-spacing: 0.22em;
+  }
+  .ui-build-badge .bb-sep {
+    color: var(--sepia-light);
+    opacity: 0.6;
+  }
+  .ui-build-badge .bb-ver {
+    font-family: 'Fraunces', 'Newsreader', serif;
+    font-variation-settings: 'opsz' 144;
+    font-style: italic;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--vermilion);
+    letter-spacing: -0.01em;
+    text-transform: none;
+    line-height: 0.9;
+  }
+  /* 小屏更小 + 移到底部居中 (右下可能挡到 nav 按钮) */
+  @media (max-width: 480px) {
+    .ui-build-badge {
+      right: 50%;
+      transform: translateX(50%);
+      bottom: 8px;
+      font-size: 9px;
+      padding: 3px 8px 4px;
+    }
+    .ui-build-badge .bb-ver { font-size: 11px; }
+    .ui-build-badge:hover { transform: translateX(50%) translateY(-1px); }
+  }
+
+  /* ===============================================================
+     END UI BUILD BADGE
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -2405,18 +3642,13 @@
       <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
       <button onclick="navMyWorkshop()">我的工作室</button>
       <button onclick="openSearch()" title="搜索 (⌘K)">找<span class="kbd">⌘K</span></button>
-      <button onclick="showScreen('about')">关于</button>
+      <button onclick="showScreen('about')" class="text-xs" style="color: var(--sepia);">关于</button>
       <button onclick="navAddUpdate()" class="serif" style="color: var(--vermilion);">+ 记一笔</button>
     </nav>
   </div>
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
-    <span><a class="masthead-issue-link" onclick="showScreen('issue')" style="cursor: pointer; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; transition: color 0.15s, border-color 0.15s;">第 1 期 · 试运行</a> · <span id="masthead-handle-area"></span></span>
-    <span id="masthead-date">2026 / 06 / 06</span>
-  </div>
-  <div class="masthead-byline max-w-3xl mx-auto px-8 pb-3 pt-1 border-t" style="border-color: var(--rule);">
-    <p class="serif" style="font-size: 14px; color: var(--sepia); line-height: 1.5; margin: 0; padding-top: 6px;">
-      给用 AI 做东西但不必会写代码的人的工作室 · 在做没做完的也有舞台
-    </p>
+    <span>第 1 期 · 试运行 · <span id="masthead-handle-area"></span></span>
+    <span id="masthead-date">2026 / 06 / 05</span>
   </div>
 </header>
 
@@ -2444,14 +3676,25 @@
   <section class="screen" id="screen-about">
     <div class="max-w-2xl mx-auto">
 
+      <div class="mb-8" style="background: var(--paper); padding: 16px 20px; border-left: 3px solid var(--vermilion);">
+        <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.1em;">ALPHA · 试运行</div>
+        <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.65;">
+          这是非常早期的 alpha · 跑在自有服务器 (阿里云大陆 · 暂用 IP 访问 · daogu.cc 备案中) · 数据有原子写入 + backup · 但还没接数据库 · 也没有真实认证。
+          适合<strong>团队内部互相测试 + 真实反馈</strong> · 不建议放重要私密数据。
+        </p>
+        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px; font-style: italic;">
+          感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
+        </p>
+      </div>
+
       <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">关 于</div>
 
       <h1 class="display" style="font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); margin-bottom: 18px;">
         捣鼓 <span style="color: var(--sepia-light); font-size: 38px;">/</span> Tinker
       </h1>
 
-      <p class="serif" style="font-size: 22px; color: var(--sepia); line-height: 1.45; margin-bottom: 40px;">
-        给用 AI 做东西但不必会写代码的人的工作室
+      <p class="serif italic" style="font-size: 22px; color: var(--sepia); line-height: 1.4; margin-bottom: 40px;">
+        给"用 AI 创造但不必懂代码"的人的工作室
       </p>
 
       <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 48px;">
@@ -2462,11 +3705,10 @@
       <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
         <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em; text-transform: uppercase;">我们不做什么</div>
         <ul class="serif" style="font-size: 16px; line-height: 1.9; color: var(--ink); list-style: none; padding: 0;">
-          <li>· 不做推荐算法 · 不做热门排名</li>
-          <li>· 不做点赞总数 · 不做粉丝数 · 不做浏览量这些数字游戏</li>
-          <li>· 不做等级 · 不做守护者 · 不做认证徽章这些身份证书</li>
-          <li>· 不做 X 天月入多少 这类焦虑营销</li>
-          <li>· 不做嵌套盖楼评论 · 不做战场化讨论区</li>
+          <li>· 不做推荐算法 / 热门 / trending</li>
+          <li>· 不做点赞总数 / 粉丝数 / 浏览量 这些"数字游戏"</li>
+          <li>· 不做等级 / 守护者 / verified 这些"身份证书"</li>
+          <li>· 不做 "X 天月入 $Y" 焦虑营销</li>
         </ul>
       </div>
 
@@ -2475,17 +3717,17 @@
 
         <div style="margin-bottom: 28px;">
           <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 给"在做但没做完"的人留主舞台</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">卡住、试错、放弃,都是一等内容。不是只有"成功"才能展示。</p>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">卡住、试错、放弃,都是 first-class 内容。不是只有"成功"才能展示。</p>
         </div>
 
         <div style="margin-bottom: 28px;">
-          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 手艺是硬通货 · 不是配方</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">「我用了你的方法 · 跑通了」是这里最有分量的反馈。在图片生成的社区里 · 提示词是配方;在 vibe coding 的社区里 · 真正可传承的是"怎么搞定 X"的手艺 —— 怎么扭过 AI 的弯、怎么绕过那个反复出错的地方、怎么把一个坏的回答救回来。提示词只是开场。</p>
+          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 真实复用反馈链</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">不是点赞,是「我用了你的方法 · 跑通了」。有人真的把你的东西接走用了,比 1000 个赞重要。</p>
         </div>
 
         <div>
           <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 作品必须挂可访问产物</div>
-          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">截图加 AI 文案不算作品。陌生人不联系你就能玩到的 · 才叫作品。这是反「AI 装大佬」的硬边界。</p>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">截图 + AI 文案 ≠ 作品。陌生人不联系你就能玩到的,才叫作品。这是反「AI 装大佬」的硬边界。</p>
         </div>
       </div>
 
@@ -2493,124 +3735,29 @@
         <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.15em; text-transform: uppercase;">关 于 产 品 本 身</div>
 
         <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink); margin-bottom: 24px;">
-          <p>Tinker 这个产品自己就是它的第一篇内容。</p>
+          <p>Tinker 用 Claude Code + Node.js + Docker 做的。</p>
           <p style="margin-top: 14px;">
-            我们的开发过程<strong>公开在产品里</strong> —
-            <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 工作室的「Tinker / 捣鼓」项目 · 能看到每一次卡住、每一次跑通、每一次为什么这么决定。
+            我们的开发过程本身就<strong>公开在这个产品里</strong> —
+            <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 工作室的「Tinker / 捣鼓」项目能看到每一次 commit、每一次卡住、每一次跑通。
           </p>
-          <p style="margin-top: 14px; color: var(--sepia);">
-            这是它的第一篇内容 · 也是它的第一个广告。
+          <p style="margin-top: 14px; color: var(--sepia); font-style: italic;">
+            这是产品的第一篇内容 · 也是它的第一个广告。
           </p>
         </div>
 
         <div class="flex gap-4 mt-8 items-center flex-wrap">
           <button onclick="showScreen('workshop','daodao')" class="btn-act-primary">看 @daodao 的工作室 →</button>
-          <span class="react-action serif" onclick="showScreen('onboard')" style="color: var(--sepia);">先去入场仪式做个小东西</span>
+          <span class="react-action serif italic" onclick="showScreen('onboard')" style="color: var(--sepia);">还是先去入场仪式做个小东西</span>
         </div>
       </div>
 
       <div class="mt-16 pt-8 text-center" style="border-top: 1px solid var(--rule);">
-        <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.5;">
-          在这个产品里 · 做减法比做加法需要更多勇气。
+        <p class="serif italic" style="color: var(--sepia); font-size: 14px;">
+          "在这个产品里,做减法比做加法需要更多勇气。"
         </p>
         <p class="mono text-xs mt-2" style="color: var(--sepia-light); letter-spacing: 0.1em;">
           — 给团队新人的一句话总结
         </p>
-      </div>
-
-      <div class="mt-16" style="background: var(--paper); padding: 16px 20px; border-left: 3px solid var(--sepia-light);">
-        <div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">ALPHA · 试运行</div>
-        <p class="serif" style="font-size: 13px; color: var(--ink-soft); line-height: 1.65;">
-          这是非常早期的 alpha · 跑在自有服务器 (阿里云大陆 · 暂用 IP 访问 · daogu.cc 备案中) · 用 SQLite 存数据 · 用邮件链接登录 · 数据有自动备份 · 但还在小范围测试。
-          适合朋友间互相测试 + 真实反馈 · 不建议放重要私密数据。
-        </p>
-        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-top: 8px;">
-          感谢你来帮忙 · 真实反馈 (用了什么不顺 / 哪里没看懂 / 哪里好) 比静默使用更有用。
-        </p>
-      </div>
-
-    </div>
-  </section>
-
-  <section class="screen" id="screen-issue">
-    <div class="max-w-2xl mx-auto">
-
-      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.15em;">本 期</div>
-
-      <h1 class="display" style="font-size: 52px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); margin-bottom: 12px;">
-        第 1 期 · 试运行号
-      </h1>
-
-      <div class="mono text-xs mb-10" style="color: var(--sepia); letter-spacing: 0.08em;">
-        2026 / 06 / 06 · 编 / <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span>
-      </div>
-
-      <div style="border-top: 2px solid var(--ink); padding-top: 32px; margin-bottom: 40px;">
-        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">编 者 按</div>
-        <div class="serif" style="font-size: 17px; line-height: 1.75; color: var(--ink);">
-          <p>这是 Tinker 的第一期。</p>
-          <p style="margin-top: 14px;">是一份周刊 · 每周末更新。挑几个让我们眼前一亮的小作品 · 给作者一句话 · 给读者一段路径。</p>
-          <p style="margin-top: 14px;">但今天是开张第三天 · 还没什么积累可挑。所以这一期试运行号 · 主要讲我们想让"本期"长成什么样 —— 也是给以后的自己一个约定。</p>
-        </div>
-      </div>
-
-      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
-        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">关 于 这 份 周 刊</div>
-        <div class="serif" style="font-size: 16px; line-height: 1.7; color: var(--ink);">
-          <p>不是热门排行。不是算法挑的。是编辑一个人坐下来挑的。每期不超过五个项目。</p>
-          <p style="margin-top: 14px;">挑选标准没有打分 · 没有 KPI · 就一个问题:看到这个 · 会让我也想做一个吗?</p>
-          <p style="margin-top: 14px; color: var(--sepia);">不会写「必学 X 种 AI 工具」· 不会写「X 天月入多少」· 不会写「风口」· 不会写排行榜。</p>
-          <p style="margin-top: 14px;">在 vibe coding 这件事上 · 真正珍贵的是手艺 · 不是配方。</p>
-          <p style="margin-top: 14px;">所以会写谁卡在哪 · 卡了为什么 · 谁怎么把 AI 反复出错的地方扭过来 · 一个意外把谁带到了哪 · 谁的小东西被另一个人接走又做出了什么。</p>
-        </div>
-      </div>
-
-      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
-        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">这 期 看 什 么</div>
-        <p class="serif" style="font-size: 16px; color: var(--ink-soft); line-height: 1.7; margin-bottom: 22px;">
-          第一期没东西挑 · 所以只能看产品自己。
-        </p>
-
-        <div class="pcard" onclick="showScreen('project','daodao','p-mq10xkuo')" style="cursor: pointer;">
-          <div class="pcard-name">Tinker / 捣鼓 <span style="color: var(--sepia); font-weight: 400; font-size: 15px;">— @daodao</span></div>
-          <div class="pcard-desc">"在做没做完的也有舞台" —— 这个产品自己在公开做。daodao 工作室里有十条进展、一条便签、还有一段六小时跟阿里云邮件服务纠缠的真实记录。</div>
-          <div class="pcard-meta"><span class="active">— 在做</span> &nbsp;·&nbsp; Claude Code · Node.js</div>
-        </div>
-
-        <div class="mt-6" style="text-align: right;">
-          <span class="react-action serif" onclick="showScreen('workshop','daodao')" style="color: var(--sepia);">看整个工作室 →</span>
-        </div>
-      </div>
-
-      <div style="border-top: 1px solid var(--rule); padding-top: 32px; margin-bottom: 40px;">
-        <div class="mono text-xs mb-5" style="color: var(--sepia); letter-spacing: 0.15em;">一 个 想 法</div>
-
-        <blockquote class="serif" style="font-size: 22px; line-height: 1.5; color: var(--ink); border-left: 3px solid var(--vermilion); padding: 6px 0 6px 22px; margin: 0 0 18px 0;">
-          在这个产品里 · 做减法比做加法需要更多勇气。
-        </blockquote>
-
-        <div class="serif" style="font-size: 16px; line-height: 1.7; color: var(--ink-soft);">
-          <p>这句话不是产品宣传 · 是我们自己的工作准则。</p>
-          <p style="margin-top: 14px;">这一期开张 · 没做的事比做了的多:没有点赞数 · 没有粉丝数 · 没有热门排行 · 没有等级徽章 · 没有焦虑营销内容 · 没有嵌套盖楼评论。</p>
-          <p style="margin-top: 14px;">每删一项 · 都比加一项需要更多的解释。</p>
-        </div>
-      </div>
-
-      <div style="border-top: 2px solid var(--ink); padding-top: 32px; margin-bottom: 40px;">
-        <div class="mono text-xs mb-5" style="color: var(--vermilion); letter-spacing: 0.15em;">下 期 见</div>
-        <div class="serif" style="font-size: 17px; line-height: 1.7; color: var(--ink);">
-          <p>期待下一期能看到第一个真正的「被接走」—— 有人看到别人做的东西 · 自己也做了个延伸版。</p>
-          <p style="margin-top: 14px; color: var(--sepia);">那是这份周刊真正的起点。</p>
-        </div>
-      </div>
-
-      <div class="mt-16 pt-8 text-center" style="border-top: 1px solid var(--rule);">
-        <p class="serif" style="color: var(--sepia); font-size: 14px; line-height: 1.6;">
-          感谢你来到这里。如果你也在做什么 · 开间工作室 · 把它挂上来。
-        </p>
-        <div class="mt-4">
-          <button onclick="showScreen('onboard')" class="btn-act-primary">先做一个 5 分钟的小东西 →</button>
-        </div>
       </div>
 
     </div>
@@ -2650,7 +3797,7 @@
   <div class="modal-paper w-full">
     <h3 class="modal-title">留个便签</h3>
     <p class="modal-sub">独立显示 · 不能盖楼 · 可以加截图说明</p>
-    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句... (**粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
+    <textarea id="note-text" class="input-bare" rows="3" placeholder="说一句..." style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="note-upload-list"></div>
@@ -2691,8 +3838,8 @@
 <div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
     <h3 class="modal-title">记一笔</h3>
-    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 一两句话就行 · 这是工作现场 · 不用排版</p>
-    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天... (短句就好 · **粗体** 和 `代码` 会渲染)" style="font-size: 17px; resize: vertical;"></textarea>
+    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
+    <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
 
     <div class="upload-area">
       <div class="upload-list" id="upload-list"></div>
@@ -2923,6 +4070,13 @@
 
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
+<!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.44 · 18 个子段 · 详见 CHANGELOG.md">
+  <span class="bb-scope">ui</span>
+  <span class="bb-sep">·</span>
+  <span class="bb-ver">v0.44</span>
+</div>
+
 <script>
 /* =========================================
  * API helpers — 替代 localStorage · 同步 server
@@ -3055,28 +4209,18 @@ function buildHash(name, args) {
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
-  if (name === 'issue') return '#/issue';
   return '#/';
 }
 
 function navigateFromHash() {
   const h = location.hash || '';
-  if (!h || h === '#/' || h === '#') {
-    // 第一次访问 · 没登录 · 落到 daodao 工作室作为产品门户
-    // Tinker 自己就是它的第一篇内容 · 让产品演示产品 · 比空 feed 更说得清这里是什么
-    if (!localStorage.getItem('tinker_visited') && !currentUser.handle && state.users && state.users.daodao) {
-      localStorage.setItem('tinker_visited', '1');
-      return showScreen('workshop', 'daodao');
-    }
-    return showScreen('feed');
-  }
+  if (!h || h === '#/' || h === '#') return showScreen('feed');
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
   if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
   if (parts[0] === 'notifications') return showScreen('notifications');
   if (parts[0] === 'about') return showScreen('about');
   if (parts[0] === 'onboard') return showScreen('onboard');
-  if (parts[0] === 'issue') return showScreen('issue');
   return showScreen('feed');
 }
 
@@ -3128,24 +4272,16 @@ const ICONS = {
   xhs:     '<svg class="icon-brand" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
 };
 
-// 渲染富文本 — 仅支持极简 inline markdown · 不支持 headers / lists / 块级元素
-// 设计哲学:这是"工作现场"·不是"博客"。**粗体** 和 `代码` 够用了。
-// (旧名 renderMentions 保留兼容性 · 现在做 @ + bold + inline code 三件事)
+// @username 渲染成可点击链接 (要求 user 存在)
 function renderMentions(text) {
   if (!text) return '';
-  let s = escapeHtml(text);
-  // **粗体** · 不跨行 · 不贪心
-  s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
-  // `内联代码` · 不跨行
-  s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
-  // @username · 用户存在才变可点击
-  s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
     if (state.users && state.users[username]) {
       return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${username}')">@${username}</span>`;
     }
     return match;
   });
-  return s;
 }
 
 function extractMentions(text) {
@@ -3264,38 +4400,96 @@ function renderFeed() {
     list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">${msg}</div>`;
     return;
   }
-  events.forEach(e => {
-    const entry = document.createElement('div');
-    entry.className = 'entry';
-    entry.onclick = (ev) => {
-      if (ev.target.classList.contains('entry-handle')) return;
-      showScreen('project', e.owner, e.projectSlug);
-    };
-    const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
-    const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
-    entry.innerHTML = `
-      <div class="entry-time mono">${shortAgo(e.at)}</div>
-      <div>
-        <div class="entry-headline">
-          <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
-          <span class="entry-slash">/</span>
-          <span class="entry-project">${escapeHtml(e.projectName)}</span>
-          <span class="entry-status ${e.status}">${statusText(e.status)}</span>
-        </div>
-        <div class="entry-text">${renderMentions(e.text)}</div>
-        ${firstImg ? `
-          <div class="feed-figure">
-            <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(firstImg.src).replace(/"/g,'&quot;')}, ${JSON.stringify(firstImg.caption||'').replace(/"/g,'&quot;')})">
-              <img src="${firstImg.src}" alt="${escapeHtml(firstImg.caption||'')}">
-            </div>
-            ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
-          </div>
-        ` : ''}
-        <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};"><span>${e.tools.slice(0,3).join(' · ')}</span></div>
-      </div>
-    `;
-    list.appendChild(entry);
+  // v0.37: day-label 退化为"换天信号" · 默认上下文是今天 (masthead 已有日期)
+  // 只在"从今天 → 昨天" 等跨越时间边界时插入 label · 第一个"今天"group 不出现 label
+  const groups = groupEventsByDay(events);
+  const todayKey = makeDateKey(new Date());
+  groups.forEach(({ day, items, dateKey }, groupIdx) => {
+    const skipLabel = (groupIdx === 0 && dateKey === todayKey);
+    if (!skipLabel) {
+      list.appendChild(makeDayLabelEl(day, items.length));
+    }
+    items.forEach(e => list.appendChild(makeEntryEl(e)));
   });
+}
+
+// 按日 group · 返回 [{day, items, dateKey}, ...] · 保持时间倒序
+function groupEventsByDay(events) {
+  const map = new Map();
+  events.forEach(e => {
+    const d = new Date(e.at);
+    const key = makeDateKey(d);
+    if (!map.has(key)) map.set(key, { day: makeDayDesc(d), items: [], dateKey: key });
+    map.get(key).items.push(e);
+  });
+  return Array.from(map.values());
+}
+
+function makeDateKey(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+}
+
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+// v0.40: 撤销 v0.39 卡片 · day-label 回到简洁横向 inline · 主日历视觉转移到 masthead-date
+function makeDayDesc(d) {
+  const MONTHS_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const MONTHS_CN = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  const WEEKDAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const WEEKDAYS  = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+  return {
+    num: pad2(d.getDate()),
+    monthEn: MONTHS_EN[d.getMonth()],
+    monthCn: MONTHS_CN[d.getMonth()],
+    weekday: WEEKDAYS[d.getDay()],
+    weekdayShort: WEEKDAYS_SHORT[d.getDay()],
+    year: d.getFullYear(),
+  };
+}
+
+function makeDayLabelEl(day, count) {
+  const el = document.createElement('div');
+  el.className = 'day-label';
+  el.innerHTML = `
+    <span class="day-num">${day.num}</span>
+    <span class="day-month">${day.monthEn} · ${day.monthCn}</span>
+    <span class="day-week">${day.weekday}</span>
+    <span class="day-count">${count} 条</span>
+  `;
+  return el;
+}
+
+function makeEntryEl(e) {
+  const entry = document.createElement('div');
+  entry.className = 'entry';
+  entry.onclick = (ev) => {
+    if (ev.target.classList.contains('entry-handle')) return;
+    showScreen('project', e.owner, e.projectSlug);
+  };
+  const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
+  const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
+  entry.innerHTML = `
+    <div class="entry-time mono">${shortAgo(e.at)}</div>
+    <div>
+      <div class="entry-headline">
+        <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
+        <span class="entry-slash">/</span>
+        <span class="entry-project">${escapeHtml(e.projectName)}</span>
+        <span class="entry-status ${e.status}">${statusText(e.status)}</span>
+      </div>
+      <div class="entry-text">${renderMentions(e.text)}</div>
+      ${firstImg ? `
+        <div class="feed-figure">
+          <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(firstImg.src).replace(/"/g,'&quot;')}, ${JSON.stringify(firstImg.caption||'').replace(/"/g,'&quot;')})">
+            <img src="${firstImg.src}" alt="${escapeHtml(firstImg.caption||'')}">
+          </div>
+          ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
+        </div>
+      ` : ''}
+      <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};"><span>${e.tools.slice(0,3).join(' · ')}</span></div>
+    </div>
+  `;
+  return entry;
 }
 
 /* ============ WORKSHOP ============ */
@@ -3324,88 +4518,15 @@ function renderWorkshop(handle) {
       if (role) trackingProjects.push({ p, role, roleLabel });
     });
   }
+  const renderPcards = (list) => list.map(p => `
+    <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
+      <div class="pcard-name">${escapeHtml(p.name)}</div>
+      <div class="pcard-desc">${escapeHtml(p.desc)}</div>
+      <div class="pcard-meta"><span class="${p.status}">— ${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
+    </div>
+  `).join('');
 
-  // 我的方法被用过的 — 我所有项目里 · update 有 usedBy 的 · 按最近一次被用排序 (只在自己工作室显示)
-  // 这是 Tinker 给作者的累积反馈 · 体现"手艺被复用"是这里的硬通货
-  const methodsUsed = [];
-  if (isMe) {
-    projects.forEach(p => {
-      p.updates.forEach((u, uIdx) => {
-        if (u.usedBy && u.usedBy.length > 0) {
-          const lastUsedAt = Math.max(...u.usedBy.map(x => x.at));
-          methodsUsed.push({ project: p, update: u, uIdx, lastUsedAt });
-        }
-      });
-    });
-    methodsUsed.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-  }
-
-  // 案头 · 等你看一眼 — 三类真实"等回应"的事 · 跟通知页不同的是持久(没动就一直在)
-  // 1. 别人留的便签 我没在便签之后 commit 过
-  // 2. 最近 14 天被接走
-  // 3. 项目 status=stuck 且最近 7 天没 commit
-  const pendingItems = [];
-  if (isMe) {
-    const now = Date.now();
-    const D7 = 7 * 24 * 60 * 60 * 1000;
-    const D14 = 14 * 24 * 60 * 60 * 1000;
-    const DAY = 24 * 60 * 60 * 1000;
-    projects.forEach(p => {
-      // 便签等回
-      if (p.notes && p.notes.length > 0) {
-        const myLastUpdate = p.updates && p.updates.length > 0 ? Math.max(...p.updates.map(u => u.at)) : 0;
-        const unreplied = p.notes.filter(n => n.user !== handle && n.at > myLastUpdate);
-        if (unreplied.length > 0) {
-          const users = [...new Set(unreplied.map(n => n.user))];
-          pendingItems.push({ type: 'note', project: p, users, sortAt: Math.max(...unreplied.map(n => n.at)) });
-        }
-      }
-      // 最近被接走
-      if (p.reactions && p.reactions.tinkered && p.reactions.tinkered.length > 0) {
-        const recent = p.reactions.tinkered.filter(t => t.at && (now - t.at) < D14);
-        if (recent.length > 0) {
-          pendingItems.push({ type: 'tinkered', project: p, tinkered: recent, sortAt: Math.max(...recent.map(t => t.at)) });
-        }
-      }
-      // 卡住没动
-      if (p.status === 'stuck' && p.updates && p.updates.length > 0) {
-        const lastAt = Math.max(...p.updates.map(u => u.at));
-        if ((now - lastAt) >= D7) {
-          pendingItems.push({ type: 'stuck', project: p, days: Math.floor((now - lastAt) / DAY), sortAt: lastAt });
-        }
-      }
-    });
-    pendingItems.sort((a, b) => b.sortAt - a.sortAt);
-  }
-  const renderPcards = (list) => list.map(p => {
-    const tinkeredCount = (p.reactions && p.reactions.tinkered) ? p.reactions.tinkered.length : 0;
-    const methodCount = (p.updates || []).reduce((acc, u) => acc + ((u.usedBy && u.usedBy.length) || 0), 0);
-    const stamps = [];
-    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过 ${tinkeredCount}</span>`);
-    if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用 ${methodCount}</span>`);
-    return `
-      <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
-        <div class="pcard-header">
-          <div class="pcard-name">${escapeHtml(p.name)}</div>
-          ${stamps.length > 0 ? `<div class="pcard-stamps">${stamps.join('')}</div>` : ''}
-        </div>
-        <div class="pcard-desc">${escapeHtml(p.desc)}</div>
-        <div class="pcard-meta"><span class="pcard-status-dot status-${p.status}"></span><span class="${p.status}">${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
-      </div>
-    `;
-  }).join('');
-
-  const isDaodaoPortal = handle === 'daodao' && !isMe;
   root.innerHTML = `
-    ${isDaodaoPortal ? `
-      <div class="mb-6" style="background: var(--paper); padding: 14px 18px; border-left: 3px solid var(--vermilion);">
-        <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.12em;">产 品 自 己 的 工 作 室</div>
-        <p class="serif" style="font-size: 14px; color: var(--ink-soft); line-height: 1.6; margin: 0;">
-          你正在看的就是 Tinker 这个产品自己的工作室。我们把开发过程公开在这里 · 每一次卡住、每一次跑通、每一次为什么这么决定 · 都记在「Tinker / 捣鼓」这个项目里。
-          <span class="react-action" onclick="showScreen('about')" style="color: var(--vermilion);">关于 Tinker →</span>
-        </p>
-      </div>
-    ` : ''}
     <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工作室' : '一间工作室'}</div>
       <h1 class="workshop-name mb-3">@${handle}</h1>
@@ -3414,25 +4535,6 @@ function renderWorkshop(handle) {
         ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
       </p>
     </div>
-    ${isMe && pendingItems.length > 0 ? `
-      <div class="mb-10">
-        <div class="pending-section-label">案 头 · 等你看一眼</div>
-        ${pendingItems.map(item => {
-          if (item.type === 'note') {
-            const users = item.users.map(u => `<span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${u}')">@${u}</span>`).join(' / ');
-            return `<div class="pending-item" onclick="showScreen('project','${handle}','${item.project.slug}')">${users} 在「${escapeHtml(item.project.name)}」留了便签 · 还没回过</div>`;
-          }
-          if (item.type === 'tinkered') {
-            const users = [...new Set(item.tinkered.map(t => t.user))].map(u => `<span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${u}')">@${u}</span>`).join(' / ');
-            return `<div class="pending-item" onclick="showScreen('project','${handle}','${item.project.slug}')">${users} 接走了「${escapeHtml(item.project.name)}」 · 看看 ta 做了什么</div>`;
-          }
-          if (item.type === 'stuck') {
-            return `<div class="pending-item" onclick="showScreen('project','${handle}','${item.project.slug}')">「${escapeHtml(item.project.name)}」 卡了 ${item.days} 天没动了</div>`;
-          }
-          return '';
-        }).join('')}
-      </div>
-    ` : ''}
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
         <span>最近在动 (${recent.length})</span>
@@ -3452,45 +4554,6 @@ function renderWorkshop(handle) {
         </div>
       ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent)}
     </div>
-    ${recentEvents.length > 0 ? `
-      <div class="mb-12">
-        <div class="section-label">最近的动静</div>
-        ${recentEvents.slice(0,5).map(e => `
-          <div class="entry" onclick="showScreen('project','${handle}','${e.projectSlug}')">
-            <div class="entry-time mono">${shortAgo(e.at)}</div>
-            <div>
-              <div class="mono text-xs mb-1" style="color: var(--sepia);">在「${escapeHtml(e.projectName)}」</div>
-              <div class="entry-text">${renderMentions(e.text)}</div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    ` : ''}
-
-    ${isMe && methodsUsed.length > 0 ? `
-      <div class="mb-12">
-        <div class="section-label" style="color: var(--vermilion);">你的方法被用过 (${methodsUsed.length})</div>
-        <p class="serif" style="font-size: 13px; color: var(--sepia); margin-bottom: 16px; line-height: 1.5;">
-          有人真的用了你这条进展的方法 · 跑通了。每一条都是手艺被复用的真实信号。
-        </p>
-        ${methodsUsed.map(({project, update, uIdx}) => `
-          <div class="method-used-entry" onclick="showScreen('project','${handle}','${project.slug}')">
-            <div class="mono text-xs mb-1" style="color: var(--sepia); letter-spacing: 0.05em;">
-              在「${escapeHtml(project.name)}」 · ${update.usedBy.length} 人用过 · ${timeAgo(Math.max(...update.usedBy.map(x => x.at)))}
-            </div>
-            <div class="serif" style="font-size: 15px; color: var(--ink); line-height: 1.55; margin-bottom: 8px;">
-              ${renderMentions(update.text.length > 140 ? update.text.slice(0, 140) + '…' : update.text)}
-            </div>
-            <div class="tl-used-list" style="margin-top: 4px;">
-              ${update.usedBy.map(used => `
-                <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
-              `).join('')}
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    ` : ''}
-
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
     ${done.length > 0 ? `<div class="mb-12"><div class="section-label">做过的 (${done.length})</div>${renderPcards(done)}</div>` : ''}
 
@@ -3501,14 +4564,44 @@ function renderWorkshop(handle) {
           <div class="pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
             <div class="pcard-name">@${p.owner} / ${escapeHtml(p.name)}</div>
             <div class="pcard-meta">
-              <span class="pcard-status-dot status-${p.status}"></span>
-              <span style="color: var(--vermilion);">${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
+              <span style="color: var(--vermilion);">— ${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
             </div>
           </div>
         `).join('')}
       </div>
     ` : ''}
+
+    <div class="mt-16" id="workshop-recent-events">
+      <div class="section-label">最近的动静</div>
+    </div>
   `;
+
+  // v0.37: 最近的动静 同样跳过"第一个今天"的 label · 只在换天时出现 separator
+  const recentRoot = root.querySelector('#workshop-recent-events');
+  if (recentRoot) {
+    const recent5 = recentEvents.slice(0, 5);
+    const groups = groupEventsByDay(recent5);
+    const todayKey = makeDateKey(new Date());
+    groups.forEach(({ day, items, dateKey }, groupIdx) => {
+      const skipLabel = (groupIdx === 0 && dateKey === todayKey);
+      if (!skipLabel) {
+        recentRoot.appendChild(makeDayLabelEl(day, items.length));
+      }
+      items.forEach(e => {
+        const entry = document.createElement('div');
+        entry.className = 'entry';
+        entry.onclick = () => showScreen('project', handle, e.projectSlug);
+        entry.innerHTML = `
+          <div class="entry-time mono">${shortAgo(e.at)}</div>
+          <div>
+            <div class="mono text-xs mb-1" style="color: var(--sepia);">在「${escapeHtml(e.projectName)}」</div>
+            <div class="entry-text">${renderMentions(e.text)}</div>
+          </div>
+        `;
+        recentRoot.appendChild(entry);
+      });
+    });
+  }
 }
 
 /* ============ PROJECT ============ */
@@ -3577,9 +4670,9 @@ function renderProject(owner, slug) {
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
                 <div class="tl-prompt-box">
-                  <div class="tl-prompt-label">开 场</div>
+                  <div class="tl-prompt-label">prompt</div>
                   <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
-                  <span class="react-action" style="font-family: Newsreader, serif; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制</span>
+                  <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制提示词</span>
                 </div>
               ` : ''}
               ${imagesHtml}
@@ -3589,15 +4682,13 @@ function renderProject(owner, slug) {
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
+                ${usedByList.length > 0 ? `<span class="tl-used-count">${usedByList.length} 人用过这个方法</span>` : ''}
               </div>
               ${usedByList.length > 0 ? `
-                <div class="tl-used-block">
-                  <div class="tl-used-header">被 用 过 · ${usedByList.length}</div>
-                  <div class="tl-used-list">
-                    ${usedByList.map(used => `
-                      <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
-                    `).join('')}
-                  </div>
+                <div class="tl-used-list">
+                  ${usedByList.map(used => `
+                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+                  `).join('')}
                 </div>
               ` : ''}
             </div>
@@ -3693,9 +4784,6 @@ function renderProject(owner, slug) {
     ` : ''}
 
     <div class="mt-16 pt-8 border-t-2" style="border-color: var(--ink);">
-      <div class="serif mb-2" style="color: var(--ink-soft); font-size: 13px; line-height: 1.6;">
-        在 Tinker · 反馈是真去试 · 不是点赞 · <span class="react-action" onclick="showScreen('about')" style="color: var(--vermilion);">关于 Tinker →</span>
-      </div>
       <div class="serif mb-3" style="color: var(--sepia); font-size: 14px;">把这个项目带走 · 离开社区也行,你的东西永远在</div>
       <div class="flex flex-wrap gap-4 text-base">
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('x')">${ICONS.x}分享到 X</span>
@@ -3718,7 +4806,7 @@ function renderOnboard() {
         <h3 class="starter-title">${escapeHtml(s.title)}</h3>
         <div class="starter-prompt">"${escapeHtml(s.prompt)}"</div>
         <div class="flex gap-5 items-center">
-          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制开场</span>
+          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
           <a href="${s.toolUrl}" target="_blank" class="react-action serif" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">打开 ${s.toolName} →</a>
         </div>
       </div>
@@ -4687,10 +5775,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// v0.40: masthead-date 精致日历 · 3 段 inline + 大日期数字作视觉锚点
 (function() {
+  const MONTHS_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const WEEKDAYS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const d = new Date();
-  document.getElementById('masthead-date').textContent =
-    d.getFullYear() + ' / ' + String(d.getMonth()+1).padStart(2,'0') + ' / ' + String(d.getDate()).padStart(2,'0');
+  const el = document.getElementById('masthead-date');
+  if (!el) return;
+  el.innerHTML = `<span class="md-weekday">${WEEKDAYS[d.getDay()]}</span><span class="md-sep">·</span><span class="md-num">${String(d.getDate()).padStart(2,'0')}</span><span class="md-sep">·</span><span class="md-month">${MONTHS_EN[d.getMonth()]}</span><span class="md-sep">·</span><span class="md-year">${d.getFullYear()}</span>`;
 })();
 
 function refreshMastheadHandle() {

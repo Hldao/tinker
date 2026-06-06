@@ -451,18 +451,25 @@ function markMethodUsed({ projectId, updateIdx, note }, { currentUserId }) {
 // NOTES
 // ============================================
 
-function addNote({ projectId, text, images }, { currentUserId }) {
+function addNote({ projectId, text, images, updateId }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('便签是空的 — 图片是辅助 · 文字才是核心');
   const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
+
+  // 校验 updateId 必须属于这个项目 (避免跨项目错挂)
+  let validUpdateId = null;
+  if (updateId) {
+    const u = db.prepare('SELECT id FROM updates WHERE id = ? AND project_id = ?').get(updateId, projectId);
+    if (u) validUpdateId = updateId;
+  }
 
   const noteId = 'n-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
 
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO notes (id, project_id, user_id, text, at) VALUES (?, ?, ?, ?, ?)
-    `).run(noteId, projectId, currentUserId, text.trim(), now);
+      INSERT INTO notes (id, project_id, user_id, text, at, update_id) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(noteId, projectId, currentUserId, text.trim(), now, validUpdateId);
 
     if (Array.isArray(images)) {
       const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
