@@ -4927,10 +4927,10 @@
     <div class="mb-6">
       <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">陈列馆</div>
       <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">完工了、还能玩到的小作品。时间倒序，<strong>不投票，不排行，看到喜欢的就去试用一下</strong>。</p>
+      <p class="feed-sub">Tinker 上所有人做完的、还能玩到的小作品都在这。时间倒序，<strong>不投票，不排行，看到喜欢的就去试用一下</strong>。</p>
       <div id="showcase-stats" class="showcase-stats"></div>
       <div class="showcase-publish-row">
-        <button class="showcase-publish-cta" onclick="openShipPick()">✦ 让一个项目入馆</button>
+        <button class="showcase-publish-cta" onclick="openShipPick()">✦ 让你的作品也入馆</button>
       </div>
     </div>
     <div class="filter-row mb-4">
@@ -4938,7 +4938,7 @@
     </div>
     <div id="showcase-list"></div>
     <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
-      — 完工的事情才进这里。在做没做完的去主屏「动静」看 —
+      — 这里只装跑通了的事，大家在做没做完的去主屏「动静」看 —
     </div>
   </section>
 
@@ -5362,10 +5362,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.54 · 30 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.55 · 31 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.54</span>
+  <span class="bb-ver">v0.55</span>
 </div>
 
 <script>
@@ -6287,7 +6287,7 @@ function renderShowcase(focusId) {
 
   const filtered = showcaseToolFilter === 'all' ? items : items.filter(it => (it.p.tools || []).includes(showcaseToolFilter));
 
-  // 馆藏统计
+  // 馆藏统计 · v0.55 加贡献者数 · 强调集体性 (>= 2 位才显示)
   const statsEl = document.getElementById('showcase-stats');
   if (statsEl) {
     if (items.length === 0) {
@@ -6298,7 +6298,11 @@ function renderShowcase(focusId) {
         const d = new Date(it.shipAt);
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       }).length;
-      statsEl.innerHTML = `馆藏 <span class="num">${items.length}</span> 件${thisMonthCount > 0 ? `，本月新入 <span class="num">${thisMonthCount}</span> 件` : ''}`;
+      const contributorCount = new Set(items.map(it => it.p.owner)).size;
+      const parts = [`馆藏 <span class="num">${items.length}</span> 件`];
+      if (contributorCount >= 2) parts.push(`来自 <span class="num">${contributorCount}</span> 位作者`);
+      if (thisMonthCount > 0) parts.push(`本月新入 <span class="num">${thisMonthCount}</span> 件`);
+      statsEl.innerHTML = parts.join('，');
     }
   }
 
