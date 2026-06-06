@@ -216,8 +216,35 @@ app.post('/api/auth/welcome', auth.requireSession, (req, res) => {
 
 // 登出
 app.post('/api/auth/logout', (req, res) => {
-  if (req.session) auth.destroySession(req.session.sessionId);
+  if (req.session?.sessionId) auth.destroySession(req.session.sessionId);
   res.clearCookie(auth.COOKIE_NAME, { path: '/' });
+  res.json({ ok: true });
+});
+
+// ============================================
+// API tokens (CLI / agent) · 必须 session cookie 鉴权 · 不能用 token 创建 token
+// ============================================
+app.get('/api/account/tokens', auth.requireSession, (req, res) => {
+  // 不允许 API token 自己看 token 列表 (避免链式)
+  if (req.session?.viaApiToken) return res.status(403).json({ error: '需要浏览器登录 · API token 无权管理 token' });
+  res.json(auth.listApiTokens(req.user.id));
+});
+
+app.post('/api/account/tokens', auth.requireSession, (req, res) => {
+  if (req.session?.viaApiToken) return res.status(403).json({ error: '需要浏览器登录 · API token 无权管理 token' });
+  const { label } = req.body || {};
+  try {
+    const created = auth.createApiToken({ userId: req.user.id, label });
+    res.json(created);  // 注意:这是 token 唯一一次返回 · 用户得自己存
+  } catch (e) {
+    res.status(400).json({ error: e.message || '创建 token 失败' });
+  }
+});
+
+app.delete('/api/account/tokens/:id', auth.requireSession, (req, res) => {
+  if (req.session?.viaApiToken) return res.status(403).json({ error: '需要浏览器登录 · API token 无权管理 token' });
+  const ok = auth.revokeApiToken({ userId: req.user.id, tokenId: req.params.id });
+  if (!ok) return res.status(404).json({ error: '找不到这个 token' });
   res.json({ ok: true });
 });
 

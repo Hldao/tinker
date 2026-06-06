@@ -8,6 +8,7 @@
 // Express middleware: attachSession(req, res, next) → req.user / req.session
 // requireSession(req, res, next) → 没 session 返 401
 
+const crypto = require('crypto');
 const db = require('./db');
 const { sendLoginEmail } = require('./email');
 
@@ -152,9 +153,82 @@ function destroySession(sessionId) {
 // 5. Express middleware
 // ============================================
 function attachSession(req, res, next) {
+  // 优先 cookie session (web 浏览)
   req.session = getSession(req);
+  // 没 session · 试 Bearer API token (CLI / 第三方 agent)
+  if (!req.session) {
+    const apiUser = getApiTokenUser(req);
+    if (apiUser) {
+      req.session = { sessionId: null, user: apiUser, viaApiToken: true };
+    }
+  }
   req.user = req.session?.user || null;
   next();
+}
+
+// 从 Authorization: Bearer <token> header 读 token · 找对应 user
+function getApiTokenUser(req) {
+  const authHeader = req.headers.authorization || '';
+  const m = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!m) return null;
+  const token = m[1].trim();
+  if (!token) return null;
+  const hash = crypto.createHash('sha256').update(token).digest('hex');
+  const row = db.prepare(`
+    SELECT t.id AS token_id, u.id, u.handle, u.email, u.name, u.tagline, u.created_at
+    FROM api_tokens t
+    JOIN users u ON u.id = t.user_id
+    WHERE t.token_hash = ? AND t.revoked_at IS NULL
+  `).get(hash);
+  if (!row) return null;
+  // last_used_at 异步更新
+  setImmediate(() => {
+    try {
+      db.prepare('UPDATE api_tokens SET last_used_at = ? WHERE id = ?').run(Date.now(), row.token_id);
+    } catch (e) { /* swallow */ }
+  });
+  return {
+    id: row.id,
+    handle: row.handle,
+    email: row.email,
+    name: row.name,
+    tagline: row.tagline,
+    createdAt: row.created_at,
+    needsWelcome: false, // 已有 token 的用户必然已经走过 welcome
+  };
+}
+
+// ============================================
+// API token CRUD (给 CLI / agent 用)
+// ============================================
+function createApiToken({ userId, label }) {
+  const tokenId = db.uuidv7();
+  // 32 字节随机 → base64url ~43 字符 · 加 'tk_' 前缀方便识别
+  const rawToken = 'tk_' + db.randomToken(32);
+  const prefix = rawToken.slice(0, 11); // tk_xxxxxxxx 给用户用来识别
+  const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  db.prepare(`
+    INSERT INTO api_tokens (id, user_id, label, token_hash, prefix, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(tokenId, userId, (label || '').slice(0, 80) || null, hash, prefix, Date.now());
+  return { id: tokenId, token: rawToken, prefix, label: label || null };
+}
+
+function listApiTokens(userId) {
+  return db.prepare(`
+    SELECT id, label, prefix, last_used_at, created_at
+    FROM api_tokens
+    WHERE user_id = ? AND revoked_at IS NULL
+    ORDER BY created_at DESC
+  `).all(userId);
+}
+
+function revokeApiToken({ userId, tokenId }) {
+  const result = db.prepare(`
+    UPDATE api_tokens SET revoked_at = ?
+    WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+  `).run(Date.now(), tokenId, userId);
+  return result.changes > 0;
 }
 
 function requireSession(req, res, next) {
@@ -192,6 +266,9 @@ module.exports = {
   attachSession,
   requireSession,
   completeWelcome,
+  createApiToken,
+  listApiTokens,
+  revokeApiToken,
   COOKIE_NAME,
   SESSION_TTL_MS,
 };

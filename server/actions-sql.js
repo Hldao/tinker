@@ -234,7 +234,7 @@ function getProjectFlat(projectId) {
 
 // notifyTinkered: 作者主动通知"接走我 + 想试试"的人 (默认 false · 避免轰炸)
 // alsoStuck: 同时把项目改为 stuck (spec §5.3 "卡了" 进展 → 召回过往关心者)
-function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk }, { currentUserId }) {
+function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('记一笔不能空');
   const p = db.prepare('SELECT owner_id, name, status FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
@@ -242,13 +242,18 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
 
   const updateId = 'u-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
+  // 可选回填时间(CLI 给真实 commit 时间用)· 限制不能未来 · 不能比项目还早
+  let useAt = now;
+  if (typeof at === 'number' && at > 0) {
+    if (at <= now) useAt = at;
+  }
   const willStuck = alsoStuck && p.status !== 'stuck';
   // 求反馈:勾了之后 · 存 feedback_ask 字段(可能为空字符串 = 求反馈但没具体问题)
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
   const txn = db.transaction(() => {
     db.prepare(`
       INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(updateId, projectId, text.trim(), prompt || null, now, feedbackVal);
+    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal);
 
     if (Array.isArray(images)) {
       const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
