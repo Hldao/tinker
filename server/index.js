@@ -13,6 +13,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const compression = require('compression');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -74,6 +75,10 @@ const app = express();
 
 // 信任反代 (nginx / caddy / cloudflare 等)
 app.set('trust proxy', 1);
+
+// gzip / brotli 压缩 · /api/state 全是 base64 高度可压 · 1.5MB → ~250KB
+// threshold 1KB 是 express compression 默认 · 小响应不值得压
+app.use(compression());
 
 // 安全 headers
 app.use(helmet({
@@ -272,6 +277,22 @@ app.get('/api/state', stateLimiter, (req, res) => {
 app.get('/api/tools', stateLimiter, (req, res) => {
   const tools = db.prepare('SELECT tool FROM available_tools ORDER BY position').all().map(r => r.tool);
   res.json(tools);
+});
+
+// 图片单独 endpoint · 不塞 /api/state 主响应里 (那个一拉就 1.5MB)
+// images.src 是 "data:image/<mime>;base64,<bytes>" · 这里拆出来发二进制 + 1 年永久缓存
+// id 由作者上传时随机生成 · 内容 immutable · 浏览器 / CDN 都能放心缓存
+app.get('/api/image/:id', (req, res) => {
+  const row = db.prepare('SELECT src FROM images WHERE id = ?').get(req.params.id);
+  if (!row || !row.src) return res.status(404).send('not found');
+  const m = row.src.match(/^data:([^;]+);base64,(.+)$/);
+  if (!m) return res.status(500).send('image format error');
+  const mime = m[1];
+  const buf = Buffer.from(m[2], 'base64');
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Content-Length', buf.length);
+  res.end(buf);
 });
 
 // 业务 action · 全部要求登录 · 用 session.user.id 代替信任 payload.currentUser

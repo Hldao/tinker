@@ -41,15 +41,17 @@ function buildState({ targetUserId } = {}) {
   const usedByMap = {};
   if (updateIds.length > 0) {
     const placeholders = updateIds.map(() => '?').join(',');
+    // v0.62: 不再拉 src (base64) 进主响应 · 只返 image_id · webapp 拼 /api/image/{id}
+    // 主响应预计从 1.5MB 降到 30KB 以内 · 图片走单独 endpoint + 1 年缓存
     const imgRows = db.prepare(`
-      SELECT ui.update_id, ui.position, i.src, i.caption
+      SELECT ui.update_id, ui.position, i.id AS image_id, i.caption
       FROM update_images ui JOIN images i ON i.id = ui.image_id
       WHERE ui.update_id IN (${placeholders})
       ORDER BY ui.update_id, ui.position
     `).all(...updateIds);
     for (const r of imgRows) {
       if (!updateImagesMap[r.update_id]) updateImagesMap[r.update_id] = [];
-      updateImagesMap[r.update_id].push({ src: r.src, caption: r.caption || '' });
+      updateImagesMap[r.update_id].push({ src: '/api/image/' + r.image_id, caption: r.caption || '' });
     }
     const muRows = db.prepare(`
       SELECT update_id, user_id, note, at FROM method_used
@@ -70,14 +72,14 @@ function buildState({ targetUserId } = {}) {
   if (noteIds.length > 0) {
     const placeholders = noteIds.map(() => '?').join(',');
     const imgRows = db.prepare(`
-      SELECT ni.note_id, ni.position, i.src, i.caption
+      SELECT ni.note_id, ni.position, i.id AS image_id, i.caption
       FROM note_images ni JOIN images i ON i.id = ni.image_id
       WHERE ni.note_id IN (${placeholders})
       ORDER BY ni.note_id, ni.position
     `).all(...noteIds);
     for (const r of imgRows) {
       if (!noteImagesMap[r.note_id]) noteImagesMap[r.note_id] = [];
-      noteImagesMap[r.note_id].push({ src: r.src, caption: r.caption || '' });
+      noteImagesMap[r.note_id].push({ src: '/api/image/' + r.image_id, caption: r.caption || '' });
     }
   }
 

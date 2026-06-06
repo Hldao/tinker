@@ -14,6 +14,29 @@ function isValidUrl(s) {
   return /^https?:\/\/\S+\.\S+/i.test(s.trim());
 }
 
+// v0.62: state.js 返回 image.src = "/api/image/{id}" · 不再是 data URL
+// 当 webapp re-submit (比如改 ship 仪式) 时, src 是这种相对引用 · 不是新上传
+// 此 helper 区分两种情况:
+//   - data:image/... → 新上传 · INSERT 新 image 行 · 返回新 id
+//   - /api/image/{id} → 引用已有图 · 不 INSERT · 复用 id (avoid 重复存)
+// 返回 image_id (供 update_images / note_images 的 FK 引用) · 或 null 跳过
+function resolveImageId(img) {
+  if (!img || !img.src) return null;
+  const src = String(img.src);
+  // 已存在的图 · 直接复用
+  const ref = src.match(/^\/api\/image\/(.+)$/);
+  if (ref) {
+    const exists = db.prepare('SELECT id FROM images WHERE id = ?').get(ref[1]);
+    return exists ? exists.id : null;
+  }
+  // 新上传 · 必须是 data URL · 否则跳过
+  if (!src.startsWith('data:')) return null;
+  const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
+  db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)')
+    .run(imgId, src, img.caption || null, Date.now());
+  return imgId;
+}
+
 // 从文本提取 @mention · 返回 user_id 数组 (排除自己 + 不存在的 handle)
 function extractMentions(text, excludeUserId) {
   if (!text) return [];
@@ -266,14 +289,12 @@ function exhibitProject({ projectId, kind, statement, seekingFeedback, feedbackA
     `).run(updateId, projectId, statement.trim(), now, feedbackVal, kind);
 
     // 图片 (跟 addUpdate 一致的存储方式,第一张作为陈列馆封面)
+    // v0.62: 走 resolveImageId 助手 · 区分新上传 data: URL 跟 re-submit 的 /api/image/ 引用
     if (Array.isArray(images)) {
-      const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
       const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
       images.forEach((img, idx) => {
-        if (!img || !img.src) return;
-        const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
-        insImg.run(imgId, img.src, img.caption || null, now);
-        insLink.run(updateId, imgId, idx);
+        const imgId = resolveImageId(img);
+        if (imgId) insLink.run(updateId, imgId, idx);
       });
     }
   });
@@ -376,13 +397,10 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
     `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal);
 
     if (Array.isArray(images)) {
-      const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
       const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
       images.forEach((img, idx) => {
-        if (!img || !img.src) return;
-        const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
-        insImg.run(imgId, img.src, img.caption || null, now);
-        insLink.run(updateId, imgId, idx);
+        const imgId = resolveImageId(img);
+        if (imgId) insLink.run(updateId, imgId, idx);
       });
     }
     if (willStuck) {
@@ -444,16 +462,13 @@ function editUpdate({ projectId, updateIdx, text, images, seekingFeedback, feedb
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
   const txn = db.transaction(() => {
     db.prepare('UPDATE updates SET text = ?, feedback_ask = ? WHERE id = ?').run(text.trim(), feedbackVal, u.id);
-    // 图片 · 全删重建 (简单 · alpha 期可接受)
+    // 图片 · 全删重建 link · resolveImageId 区分新上传跟引用已有
     db.prepare('DELETE FROM update_images WHERE update_id = ?').run(u.id);
     if (Array.isArray(images) && images.length > 0) {
-      const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
       const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
       images.forEach((img, idx) => {
-        if (!img || !img.src) return;
-        const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
-        insImg.run(imgId, img.src, img.caption || null, Date.now());
-        insLink.run(u.id, imgId, idx);
+        const imgId = resolveImageId(img);
+        if (imgId) insLink.run(u.id, imgId, idx);
       });
     }
   });
@@ -601,13 +616,10 @@ function addNote({ projectId, text, images, updateId }, { currentUserId }) {
     `).run(noteId, projectId, currentUserId, text.trim(), now, validUpdateId);
 
     if (Array.isArray(images)) {
-      const insImg = db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)');
       const insLink = db.prepare('INSERT INTO note_images (note_id, image_id, position) VALUES (?, ?, ?)');
       images.forEach((img, idx) => {
-        if (!img || !img.src) return;
-        const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
-        insImg.run(imgId, img.src, img.caption || null, now);
-        insLink.run(noteId, imgId, idx);
+        const imgId = resolveImageId(img);
+        if (imgId) insLink.run(noteId, imgId, idx);
       });
     }
   });
