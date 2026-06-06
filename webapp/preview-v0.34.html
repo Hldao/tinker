@@ -374,6 +374,15 @@
   }
   .tl-used-list .nh { color: var(--ink); font-weight: 600; font-style: normal; }
   .tl-used-list .nh:hover { color: var(--vermilion); cursor: pointer; }
+  /* 被用过 升级版 section header 样式 + 顶部点线分隔 */
+  .tl-used-block { margin-top: 18px; padding-top: 12px; border-top: 1px dotted var(--rule); }
+  .tl-used-header { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.15em; margin-bottom: 8px; }
+  /* update 卡片下面"N 条便签提到这里"反向跳转链接 */
+  .tl-note-ref { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; cursor: pointer; transition: color 0.15s; }
+  .tl-note-ref:hover { color: var(--vermilion); }
+  /* 便签墙某条便签关联了 update · 顶上"说的是「XXX」"跳转链接 */
+  .note-ref { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-bottom: 6px; cursor: pointer; transition: color 0.15s; padding-bottom: 6px; border-bottom: 1px dotted var(--rule); line-height: 1.5; }
+  .note-ref:hover { color: var(--vermilion); }
   .quote-block {
     border-left: 2px solid var(--rule);
     padding: 6px 16px;
@@ -436,6 +445,12 @@
   .pick-project-item-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.04em; }
   .pick-project-item-meta .stuck { color: var(--vermilion); }
   .pick-project-item-meta .done { color: var(--moss); }
+
+  /* API tokens 列表 */
+  .api-token-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px dotted var(--rule); gap: 12px; }
+  .api-token-row:last-child { border-bottom: none; }
+  .api-token-label { font-family: 'Newsreader', serif; font-size: 15px; color: var(--ink); }
+  .api-token-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-top: 2px; }
 
   /* NEW PROJECT modal — status pills + tools pills */
   .status-pill { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); border: 1px dotted var(--sepia-light); padding: 4px 12px; cursor: pointer; transition: all 0.15s; text-transform: lowercase; display: inline-block; }
@@ -3786,29 +3801,428 @@
   /* ===============================================================
      END v0.47 masthead 回原 cream
      =============================================================== */
+
+  /* ================================================================
+   *  v0.48 · masthead 减项分层 · 给顶部留呼吸
+   *  --------------------------------------------------------------
+   *  诊断:
+   *    ① nav 装 6 项 触发超载 · 视觉等权扫不动
+   *    ② 左 logo 3 段 + 右 nav 6 段 · 两团块挤 · 中间无气口
+   *    ③ + 记一笔 是 primary CTA · 却埋在 nav 末尾
+   *    ④ ⌘K kbd 工程师审美 · 跟工艺人调性不搭
+   *    ⑤ dateline 行也左右都满 · 节奏单一
+   *
+   *  处方:
+   *    · 主行 = logo + 主 nav 3 项 + 独立 CTA (浮成按钮形态)
+   *    · 副行 = tagline + secondary 2 项 (找 / 关于 沉下来)
+   *    · dateline 加 dotted 顶线 · 标注"元数据"层级
+   *    · 删 ⌘K kbd · 改走 tooltip
+   *    · nav 内部 gap 加大 · 每项呼吸
+   *  ================================================================ */
+
+  /* —— 主行 —— */
+  .masthead .masthead-main-row {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    padding-top: 26px !important;
+    padding-bottom: 6px !important;
+  }
+  .masthead .masthead-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .masthead .masthead-actions {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .masthead .masthead-nav-primary {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+  }
+  .masthead .masthead-nav-primary button {
+    font-family: 'Newsreader', serif;
+    font-size: 14.5px;
+    font-weight: 400;
+    color: var(--ink);
+    letter-spacing: 0.005em;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+    transition: border-color 0.18s ease, color 0.18s ease;
+    background: transparent;
+  }
+  .masthead .masthead-nav-primary button:hover {
+    border-bottom-color: var(--ink);
+  }
+
+  /* —— + 记一笔 · 独立 CTA · 浮起 —— */
+  .masthead .masthead-cta {
+    font-family: 'Newsreader', serif !important;
+    font-size: 14px !important;
+    color: var(--vermilion) !important;
+    padding: 5px 13px !important;
+    border: 1px solid rgba(194, 65, 12, 0.32) !important;
+    background: rgba(194, 65, 12, 0.03) !important;
+    letter-spacing: 0.01em;
+    transition: background 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+    cursor: pointer;
+  }
+  .masthead .masthead-cta:hover {
+    background: rgba(194, 65, 12, 0.07) !important;
+    border-color: var(--vermilion) !important;
+    transform: translateY(-0.5px);
+  }
+
+  /* —— 副行 —— */
+  .masthead .masthead-sub-row {
+    display: flex !important;
+    align-items: baseline !important;
+    justify-content: space-between !important;
+    padding-top: 0 !important;
+    padding-bottom: 10px !important;
+  }
+  .masthead .masthead-sub-row .tagline {
+    display: inline !important;     /* 撤销 v0.47 之前的隐藏 · 副行专属 */
+    font-style: italic;
+    color: var(--sepia);
+    font-size: 13.5px;
+    letter-spacing: 0.005em;
+    margin-left: 0 !important;
+  }
+  .masthead .masthead-nav-secondary {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .masthead .masthead-nav-secondary button {
+    font-family: 'Newsreader', serif;
+    font-size: 12.5px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 1px;
+    background: transparent;
+    transition: color 0.18s ease, border-color 0.18s ease;
+    cursor: pointer;
+  }
+  .masthead .masthead-nav-secondary button:hover {
+    color: var(--ink);
+    border-bottom-color: var(--sepia);
+  }
+
+  /* —— dateline 行 · 加 dotted 顶线 标元数据 —— */
+  .masthead .max-w-3xl.pb-2 {
+    padding-top: 8px !important;
+    padding-bottom: 14px !important;
+    border-top: 1px dotted var(--rule) !important;
+    margin-top: 2px;
+  }
+
+  /* —— 通知未读 dot —— */
+  .masthead .masthead-nav-primary #nav-unread-mark:not(.hidden) {
+    color: var(--vermilion);
+    font-size: 8px;
+    margin-left: 4px;
+    vertical-align: middle;
+    display: inline-block;
+  }
+
+  /* —— 撤销旧 v0.27/v0.31/v0.32 段对 masthead 的部分干扰 —— */
+  .masthead .max-w-3xl.py-5 {
+    padding-top: 26px !important;   /* 用 v0.48 自己的值 · 别让旧 line 566 覆盖 */
+  }
+
+  /* —— 小屏响应式 · 接管 v0.31.1 / line 1822+ —— */
+  @media (max-width: 720px) {
+    .masthead .masthead-main-row {
+      padding-left: 18px !important;
+      padding-right: 18px !important;
+      padding-top: 18px !important;
+    }
+    .masthead .masthead-sub-row {
+      padding-left: 18px !important;
+      padding-right: 18px !important;
+    }
+    .masthead .masthead-nav-primary { gap: 16px !important; }
+    .masthead .masthead-nav-primary button { font-size: 13px; }
+    .masthead .masthead-actions { gap: 14px !important; }
+    .masthead .masthead-cta {
+      font-size: 12.5px !important;
+      padding: 4px 10px !important;
+    }
+    .masthead .masthead-nav-secondary { gap: 14px !important; }
+    .masthead .masthead-nav-secondary button { font-size: 11.5px; }
+    .masthead .masthead-sub-row .tagline { font-size: 12.5px; }
+  }
+  @media (max-width: 480px) {
+    .masthead .masthead-sub-row {
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-bottom: 8px !important;
+    }
+    .masthead .masthead-actions { gap: 12px !important; }
+  }
+
+  /* ===============================================================
+     END v0.48 masthead 减项分层
+     =============================================================== */
+
+  /* ================================================================
+   *  v0.49 · masthead 卷期号化 + secondary nav 沉底
+   *  --------------------------------------------------------------
+   *  参考成熟设计:
+   *    · NYT  "Vol. CLXXIV · No. 60,XXX" dateline 仪式感
+   *    · Defector "ESTABLISHED 2020" 时间锚紧贴品牌
+   *    · Substack publication "单一 primary CTA" 减项哲学
+   *
+   *  改动:
+   *    · tagline "· 在做的现场" 移除 (alpha 用户已内化 · 品牌不必每页喊话)
+   *    · dateline 加 "卷一 · 第 NNN 期" · epoch 2026-06-05 累积
+   *    · 卷期号数字 ink 色 · tabular-nums · 让它在 sepia 里浮出来
+   *    · secondary nav 沉到最底 · 右对齐 · 字号再轻一档
+   *    · 节奏: 主行(饱) → dateline(中) → secondary(轻) 三段衰减
+   *  ================================================================ */
+
+  /* —— dateline 行 · 卷期号 —— */
+  .masthead .masthead-dateline {
+    font-size: 11.5px !important;
+    letter-spacing: 0.04em;
+    padding-top: 9px !important;
+    padding-bottom: 7px !important;
+    color: var(--sepia) !important;
+  }
+  .masthead .masthead-dateline #masthead-issue-num {
+    color: var(--ink);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.08em;
+    padding: 0 1px;
+  }
+
+  /* —— secondary nav · 单独一行 · 沉到最底 · 右对齐 —— */
+  .masthead .masthead-sub-row {
+    display: flex !important;
+    justify-content: flex-end !important;   /* 撤销 v0.48 的 space-between */
+    align-items: center !important;
+    padding-top: 0 !important;
+    padding-bottom: 9px !important;
+    border-top: none !important;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary {
+    gap: 16px !important;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary button {
+    font-size: 11.5px !important;             /* 比 v0.48 的 12.5 再轻一档 */
+    color: var(--sepia-light, #c2b8a4) !important;
+    letter-spacing: 0.06em;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary button:hover {
+    color: var(--ink) !important;
+    border-bottom-color: var(--sepia) !important;
+  }
+
+  /* —— 小屏响应式 —— */
+  @media (max-width: 720px) {
+    .masthead .masthead-dateline { font-size: 10.5px !important; }
+    .masthead .masthead-sub-row .masthead-nav-secondary button { font-size: 10.5px !important; }
+  }
+  @media (max-width: 480px) {
+    .masthead .masthead-dateline {
+      flex-wrap: wrap;
+      gap: 4px;
+      font-size: 10px !important;
+    }
+  }
+
+  /* ===============================================================
+     END v0.49 卷期号化 + secondary 沉底
+     =============================================================== */
+
+  /* ================================================================
+   *  v0.49.1 · secondary nav 加重 · 用户反馈"太轻看不见"
+   *  --------------------------------------------------------------
+   *  问题: sepia-light (#c2b8a4) 跟 cream 米色反差不够 · 几乎看不见
+   *  修复:
+   *    · 颜色 sepia-light → sepia (#78716c)
+   *    · 字号 11.5 → 12.5px · 跟 dateline 同档
+   *    · 加常态 dotted underline · 暗示可点 (报纸"副刊链接"质感)
+   *    · hover 转 solid underline + 字色变 ink
+   *  ================================================================ */
+
+  .masthead .masthead-sub-row .masthead-nav-secondary button {
+    font-size: 12.5px !important;
+    color: var(--sepia) !important;
+    letter-spacing: 0.03em !important;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.45) !important;
+    padding-bottom: 1px !important;
+    transition: color 0.18s ease, border-bottom-color 0.18s ease, border-bottom-style 0.18s ease;
+  }
+  .masthead .masthead-sub-row .masthead-nav-secondary button:hover {
+    color: var(--ink) !important;
+    border-bottom: 1px solid var(--sepia) !important;
+  }
+
+  @media (max-width: 720px) {
+    .masthead .masthead-sub-row .masthead-nav-secondary button {
+      font-size: 11.5px !important;
+    }
+  }
+
+  /* ===============================================================
+     END v0.49.1 secondary nav 加重
+     =============================================================== */
+
+  /* ================================================================
+   *  v0.49.2 · 关于回主 nav · 找沉 dateline · 副行删除
+   *  --------------------------------------------------------------
+   *  用户洞察:
+   *    "关于在产品初期是相对重要的环节 · 需要快速告诉用户产品是什么"
+   *  改动:
+   *    · 关于 从 secondary 升回主 nav (第 4 项)
+   *    · 关于 加 dotted 常态 underline · 区别于普通主 nav · 暗示"参见说明"
+   *    · 找 从副行移到 dateline 行最右 · mono 跟 dateline 同档
+   *    · 副行整个删除 · masthead 从 3 行收到 2 行
+   *    · 节奏: 主行(饱) → dateline(中带功能) · 干净
+   *  ================================================================ */
+
+  /* —— 关于 · 主 nav 第 4 项 · 加 dotted 暗示"参见" —— */
+  .masthead .masthead-nav-primary .nav-about {
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5) !important;
+    padding-bottom: 1px;
+  }
+  .masthead .masthead-nav-primary .nav-about:hover {
+    border-bottom: 1px solid var(--ink) !important;
+  }
+
+  /* —— 主 nav 4 项后内部 gap 微收 · 避免回拥挤 —— */
+  .masthead .masthead-nav-primary {
+    gap: 22px !important;
+  }
+
+  /* —— dateline 行右侧组合 · 日期 + 找 —— */
+  .masthead .masthead-dateline .dateline-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .masthead .masthead-dateline .dateline-sep {
+    color: var(--sepia);
+    opacity: 0.35;
+  }
+  .masthead .masthead-dateline .dateline-find {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.04em;
+    border-bottom: 1px dotted rgba(120, 113, 108, 0.5);
+    padding-bottom: 1px;
+    cursor: pointer;
+    background: transparent;
+    transition: color 0.18s ease, border-bottom-color 0.18s ease, border-bottom-style 0.18s ease;
+  }
+  .masthead .masthead-dateline .dateline-find:hover {
+    color: var(--ink);
+    border-bottom: 1px solid var(--sepia);
+  }
+
+  /* —— 小屏响应 —— */
+  @media (max-width: 720px) {
+    .masthead .masthead-nav-primary { gap: 14px !important; }
+    .masthead .masthead-dateline .dateline-right { gap: 9px; }
+  }
+  @media (max-width: 480px) {
+    .masthead .masthead-dateline .dateline-find { font-size: 10.5px; }
+  }
+
+  /* ===============================================================
+     END v0.49.2 关于回主 nav · 找沉 dateline
+     =============================================================== */
+
+  /* ================================================================
+   *  v0.50 · 中文长文本排版修复
+   *  --------------------------------------------------------------
+   *  用户反馈:
+   *    "卡片正文较长时字间距较小"
+   *
+   *  根因 (两个叠加):
+   *    ① entry-text 仅 'Newsreader', serif · Newsreader 是纯英文字体
+   *       中文 fallback 到系统默认 (Songti / SimSun) · 排版属性不一致
+   *    ② v0.30 italic 清洗后给副文字加 -0.005em / -0.008em 负字距
+   *       英文紧凑感 OK · 中文方块字累积起来挤成团
+   *
+   *  修复:
+   *    · 主要中文正文位置加 'Songti SC', 'STSong', 'Noto Serif SC' fallback
+   *    · 撤销 v0.30 留下的负字距 · 中文用 0 或微正 (0.005em "呼吸距")
+   *    · 字号/字重/颜色继续承担"层级区分" · 不靠字距挤压
+   *  ================================================================ */
+
+  /* —— 卡片正文 (主战场) —— */
+  .entry-text {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    letter-spacing: 0.005em !important;
+  }
+  .entry-text strong { letter-spacing: 0 !important; }    /* 粗体不加距 · 避免视觉打架 */
+  .entry-text code { letter-spacing: 0 !important; }      /* 代码块同理 */
+
+  /* —— 求反馈那行也是长中文 —— */
+  .entry-feedback-ask {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— 撤销 v0.30 给副文字加的负字距 (中文不友好) —— */
+  .entry-project { letter-spacing: 0 !important; }
+  .pdesc { letter-spacing: 0 !important; }
+  .workshop-tagline { letter-spacing: 0 !important; }
+
+  /* —— 工作室列表卡片描述 · 也加中文 fallback —— */
+  .pcard-desc {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— 项目页正文 (notes / updates 详情) 同 entry-text 处理 —— */
+  .tl-update-text,
+  .tl-note-text {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    letter-spacing: 0.005em !important;
+  }
+
+  /* ===============================================================
+     END v0.50 中文长文本排版修复
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
 
 <header class="masthead">
-  <div class="max-w-3xl mx-auto px-8 py-5 flex items-end justify-between">
-    <div class="flex items-baseline gap-2 cursor-pointer" onclick="showScreen('feed')">
+  <!-- v0.48 主行 · logo + 主 nav 3 项 + 独立 CTA -->
+  <div class="max-w-3xl mx-auto px-8 py-5 masthead-main-row">
+    <div class="masthead-brand cursor-pointer" onclick="showScreen('feed')">
       <span class="title">Tinker</span>
       <span class="title-cn">捣鼓</span>
-      <span class="tagline serif" style="margin-left: 4px;">· 在做的现场</span>
     </div>
-    <nav class="flex items-center gap-5 text-sm">
-      <button onclick="showScreen('feed')">动静</button>
-      <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
-      <button onclick="navMyWorkshop()">我的工作室</button>
-      <button onclick="openSearch()" title="搜索 (⌘K)">找<span class="kbd">⌘K</span></button>
-      <button onclick="showScreen('about')" class="text-xs" style="color: var(--sepia);">关于</button>
-      <button onclick="navAddUpdate()" class="serif" style="color: var(--vermilion);">+ 记一笔</button>
-    </nav>
+    <div class="masthead-actions">
+      <nav class="masthead-nav-primary">
+        <button onclick="showScreen('feed')">动静</button>
+        <button onclick="navMyWorkshop()">我的工作室</button>
+        <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+        <button onclick="showScreen('about')" class="nav-about">关于</button>
+      </nav>
+      <button class="masthead-cta serif" onclick="navAddUpdate()">+ 记一笔</button>
+    </div>
   </div>
-  <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono" style="color: var(--sepia);">
-    <span>第 1 期 · 试运行 · <span id="masthead-handle-area"></span></span>
-    <span id="masthead-date">2026 / 06 / 05</span>
+  <!-- v0.49.2 dateline · 卷期号 + 找沉到右末 · 副行已删 -->
+  <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono masthead-dateline" style="color: var(--sepia);">
+    <span>卷一 · 第 <span id="masthead-issue-num">002</span> 期 · 试运行 · <span id="masthead-handle-area"></span></span>
+    <span class="dateline-right">
+      <span id="masthead-date">2026 / 06 / 05</span>
+      <span class="dateline-sep">·</span>
+      <button class="dateline-find" onclick="openSearch()" title="搜索 (⌘K)">找</button>
+    </span>
   </div>
 </header>
 
@@ -3966,6 +4380,14 @@
         <input type="file" accept="image/*" multiple onchange="handleNoteImageSelect(event)" style="display: none;">
       </label>
       <div class="upload-hint">截图说明 · 设计对比 · 错误信息 — 都可以 · 也可以直接粘贴 (⌘V)</div>
+    </div>
+
+    <div class="mt-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia); letter-spacing: 0.04em;">这条便签是说哪条进展? (可选)</label>
+      <select id="note-update-id" class="input-bare" style="font-family: 'Newsreader', serif; font-size: 14px; padding: 6px 0; cursor: pointer;">
+        <option value="">— 关于整个项目 —</option>
+      </select>
+      <div class="upload-hint" style="margin-top: 4px;">关联到具体进展后 · 作者读起来更聚焦</div>
     </div>
 
     <div class="flex justify-end gap-4 mt-6">
@@ -4142,6 +4564,53 @@
   </div>
 </div>
 
+<!-- API tokens (CLI 钥匙) modal -->
+<div id="modal-api-tokens" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 600px; max-height: 88vh; overflow-y: auto;">
+    <h3 class="modal-title">CLI 钥匙</h3>
+    <p class="modal-sub">给 <code class="inline-code">tinker</code> 命令行用 · 也能放进 Cursor / Claude Code 的对话里直接 push 进展</p>
+
+    <div id="api-tokens-list" class="mt-5"></div>
+
+    <div class="mt-6 pt-5" style="border-top: 1px dotted var(--rule);">
+      <label class="mono text-xs block mb-2" style="color: var(--sepia); letter-spacing: 0.05em;">生成一把新钥匙</label>
+      <div class="flex gap-3 items-center">
+        <input id="new-token-label" class="input-bare flex-1" placeholder="给它起个名 · 比如 Cursor / 我的笔记本">
+        <button onclick="submitNewToken()" class="btn-act-primary">生成 →</button>
+      </div>
+    </div>
+
+    <div id="new-token-revealed" class="hidden mt-6 pt-5" style="border-top: 1px dashed var(--vermilion);">
+      <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.15em;">这把钥匙只显示一次</div>
+      <p class="serif" style="font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.5;">
+        关掉窗口就再也看不到了 · 现在复制下来存好。丢了就生成新的。
+      </p>
+      <div class="tl-prompt-box" style="margin-top: 0;">
+        <div id="new-token-value" class="tl-prompt-text" style="font-size: 13px; user-select: all; word-break: break-all; margin-bottom: 8px;"></div>
+        <div class="flex gap-5 items-center flex-wrap">
+          <span class="react-action serif" onclick="copyText(this, document.getElementById('new-token-value').textContent)" style="font-size: 14px; display: inline-flex; align-items: center; gap: 5px;">复制钥匙</span>
+          <span class="react-action serif" onclick="copyAiPrompt(this, true)" style="font-size: 14px; color: var(--vermilion); border-bottom-color: var(--vermilion); display: inline-flex; align-items: center; gap: 5px;">复制成 AI 接入指南 (含钥匙)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-8 pt-6" style="border-top: 1px dotted var(--rule);">
+      <div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">用 AI 接入 · 不装 CLI</div>
+      <p class="serif" style="font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.55;">
+        把接入指南粘进 Cursor / Claude Code / 任意 AI 对话 · 配上自己的钥匙 · AI 就能直接帮你把 vibe coding 进展发到 Tinker。<strong>不用装 node · 不用装 CLI · 复制粘贴就能用</strong>。
+      </p>
+      <div class="flex gap-5 items-center flex-wrap">
+        <span class="react-action serif" onclick="copyAiPrompt(this, false)" style="font-size: 14px; color: var(--vermilion); border-bottom-color: var(--vermilion); display: inline-flex; align-items: center; gap: 5px;">复制接入指南(空钥匙占位)</span>
+        <span class="react-action serif" onclick="window.open('https://github.com/Hldao/tinker/blob/main/docs/07-tinker-with-ai.md', '_blank')" style="font-size: 13px; display: inline-flex; align-items: center; gap: 5px;">看完整文档 →</span>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-4 mt-8">
+      <button onclick="closeModal('modal-api-tokens')" class="btn-act" style="border-bottom: none;">关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- STATUS PICKER modal — 改项目状态 -->
 <div id="modal-status-picker" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
@@ -4239,10 +4708,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.47 · 21 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.50 · 25 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.47</span>
+  <span class="bb-ver">v0.50</span>
 </div>
 
 <script>
@@ -4306,6 +4775,32 @@ async function apiWelcome(handle, tagline) {
 
 async function apiLogout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+}
+
+// ============ API tokens (CLI) ============
+async function apiListTokens() {
+  const res = await fetch('/api/account/tokens', { credentials: 'same-origin' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '读取 token 失败');
+  return data;
+}
+async function apiCreateToken(label) {
+  const res = await fetch('/api/account/tokens', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '生成 token 失败');
+  return data;
+}
+async function apiRevokeToken(tokenId) {
+  const res = await fetch('/api/account/tokens/' + encodeURIComponent(tokenId), {
+    method: 'DELETE', credentials: 'same-origin',
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '撤销 token 失败');
+  return data;
 }
 
 
@@ -4731,6 +5226,7 @@ function renderWorkshop(handle) {
       <p class="workshop-tagline">
         「${escapeHtml(user.tagline)}」
         ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
+        ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="vertical-align: middle;">CLI 钥匙</span>` : ''}
       </p>
     </div>
     <div class="mb-12">
@@ -4861,6 +5357,7 @@ function renderProject(owner, slug) {
         }).join('') : '';
         const usedByList = u.usedBy || [];
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
+        const notesAboutThis = (p.notes || []).filter(n => n.updateId === u.id);
         return `
           <div class="tl-entry" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
@@ -4874,25 +5371,33 @@ function renderProject(owner, slug) {
               <div class="tl-text">${renderMentions(u.text)}</div>
               ${u.prompt ? `
                 <div class="tl-prompt-box">
-                  <div class="tl-prompt-label">prompt</div>
+                  <div class="tl-prompt-label">开 场</div>
                   <div class="tl-prompt-text">${escapeHtml(u.prompt)}</div>
-                  <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制提示词</span>
+                  <span class="react-action" style="font-family: Newsreader, serif; font-size: 14px; display: inline-flex; align-items: center; gap: 5px;" onclick="copyText(this, ${JSON.stringify(u.prompt).replace(/"/g,'&quot;')})">${ICONS.copy}复制</span>
                 </div>
               ` : ''}
               ${imagesHtml}
               <div class="tl-actions">
                 ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
+                <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
-                ${usedByList.length > 0 ? `<span class="tl-used-count">${usedByList.length} 人用过这个方法</span>` : ''}
               </div>
+              ${notesAboutThis.length > 0 ? `
+                <div class="tl-note-ref" onclick="event.stopPropagation(); flashAnchor('note-${notesAboutThis[0].id}')">
+                  ↓ ${notesAboutThis.length} 条便签提到这里
+                </div>
+              ` : ''}
               ${usedByList.length > 0 ? `
-                <div class="tl-used-list">
-                  ${usedByList.map(used => `
-                    <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' "' + escapeHtml(used.note) + '"' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
-                  `).join('')}
+                <div class="tl-used-block">
+                  <div class="tl-used-header">被 用 过 · ${usedByList.length}</div>
+                  <div class="tl-used-list">
+                    ${usedByList.map(used => `
+                      <div>· <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${used.user}')">@${used.user}</span>${used.note ? ' 「' + renderMentions(used.note) + '」' : ''} <span style="color: var(--sepia-light);">— ${timeAgo(used.at)}</span></div>
+                    `).join('')}
+                  </div>
                 </div>
               ` : ''}
             </div>
@@ -4959,8 +5464,15 @@ function renderProject(owner, slug) {
       </div>
       <p class="mb-4 text-xs serif" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
       ${p.notes.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
-      ${p.notes.map((n, nIdx) => `
+      ${p.notes.map((n, nIdx) => {
+        const refUpdate = n.updateId ? p.updates.find(u => u.id === n.updateId) : null;
+        return `
         <div class="note-entry" id="note-${n.id}">
+          ${refUpdate ? `
+            <div class="note-ref" onclick="event.stopPropagation(); flashAnchor('update-${refUpdate.id}')">
+              ↑ 说的是 「${escapeHtml((refUpdate.text || '').replace(/\\s+/g,' ').slice(0, 60))}${refUpdate.text.length > 60 ? '…' : ''}」 · ${shortAgo(refUpdate.at)}
+            </div>
+          ` : ''}
           <div class="note-head">
             <span class="nu">@${n.user}</span> · ${timeAgo(n.at)}
             ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">${ICONS.undo}撤回</span>` : ''}
@@ -4976,7 +5488,7 @@ function renderProject(owner, slug) {
             </div>
           ` : ''}
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>
 
     ${(p.tools && p.tools.length > 0) || p.githubLink ? `
@@ -5383,10 +5895,10 @@ async function reactToProject(level) {
   } catch (e) { showToast(e.message); }
 }
 
-function openNote() {
+function openNote(preselectUpdateId) {
   if (!currentUser.handle) {
     const savedProjectCtx = currentProjectCtx;
-    setPending('openNote', { projectCtx: savedProjectCtx });
+    setPending('openNote', { projectCtx: savedProjectCtx, preselectUpdateId });
     openLogin('留便签');
     return;
   }
@@ -5396,9 +5908,28 @@ function openNote() {
   const draftKey = 'note-' + currentNoteCtx;
   const draft = loadDraft(draftKey);
   document.getElementById('note-text').value = (draft && draft.text) || '';
+
+  // 填充"说哪条进展"下拉
+  const sel = document.getElementById('note-update-id');
+  if (sel) {
+    const p = projectById(currentNoteCtx);
+    sel.innerHTML = '<option value="">— 关于整个项目 —</option>';
+    if (p && p.updates) {
+      p.updates.forEach(u => {
+        const preview = (u.text || '').replace(/\s+/g, ' ').slice(0, 50);
+        const opt = document.createElement('option');
+        opt.value = u.id;
+        opt.textContent = shortAgo(u.at) + ' · ' + preview + (u.text.length > 50 ? '…' : '');
+        sel.appendChild(opt);
+      });
+    }
+    sel.value = preselectUpdateId || (draft && draft.updateId) || '';
+    sel.onchange = () => saveDraft(draftKey, { text: document.getElementById('note-text').value, updateId: sel.value });
+  }
+
   document.getElementById('modal-note').classList.remove('hidden');
   const textEl = document.getElementById('note-text');
-  textEl.oninput = () => saveDraft(draftKey, { text: textEl.value });
+  textEl.oninput = () => saveDraft(draftKey, { text: textEl.value, updateId: sel ? sel.value : '' });
   setTimeout(() => textEl.focus(), 50);
 }
 async function deleteTinkered(projectId) {
@@ -5430,11 +5961,13 @@ async function submitNote() {
   const text = document.getElementById('note-text').value.trim();
   if (!text) { showToast('便签是空的 — 图片是辅助 · 文字才是核心'); return; }
   const p = projectById(currentNoteCtx);
+  const updateId = (document.getElementById('note-update-id') || {}).value || null;
   try {
     await apiAction('addNote', {
       projectId: p.id,
       text,
       images: notePendingImages.length > 0 ? notePendingImages.map(i => ({ src: i.src, caption: i.caption || '' })) : undefined,
+      updateId,
     });
     notePendingImages = [];
     clearDraft('note-' + p.id);
@@ -5562,6 +6095,168 @@ async function submitEditWorkshop() {
     renderWorkshop(currentUser.handle);
     showToast('改好了');
   } catch (e) { showToast(e.message); }
+}
+
+// ============ API tokens ============
+async function openApiTokens() {
+  if (!currentUser.handle) { openLogin('管理钥匙'); return; }
+  document.getElementById('new-token-label').value = '';
+  document.getElementById('new-token-revealed').classList.add('hidden');
+  document.getElementById('modal-api-tokens').classList.remove('hidden');
+  await refreshApiTokensList();
+}
+async function refreshApiTokensList() {
+  const root = document.getElementById('api-tokens-list');
+  root.innerHTML = '<div class="serif" style="color: var(--sepia); font-size: 14px;">读取中...</div>';
+  try {
+    const tokens = await apiListTokens();
+    if (tokens.length === 0) {
+      root.innerHTML = '<div class="serif" style="color: var(--sepia); font-size: 14px; padding: 8px 0;">还没生成过钥匙。下面生成一把就能在 CLI / Cursor / Claude Code 里用 Tinker。</div>';
+      return;
+    }
+    root.innerHTML = '<div class="mono text-xs mb-2" style="color: var(--sepia); letter-spacing: 0.1em;">现 有 钥 匙 · ' + tokens.length + '</div>' +
+      tokens.map(t => `
+        <div class="api-token-row">
+          <div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-meta">
+              <span class="mono">${escapeHtml(t.prefix)}…</span> ·
+              建于 ${shortAgo(t.created_at)}
+              ${t.last_used_at ? ' · 上次用 ' + shortAgo(t.last_used_at) : ' · 还没用过'}
+            </div>
+          </div>
+          <span class="react-action serif" onclick="confirmRevokeToken('${t.id}', '${escapeHtml(t.label || '没起名的').replace(/'/g,'&#39;')}')" style="color: var(--vermilion); font-size: 13px;">撤销</span>
+        </div>
+      `).join('');
+  } catch (e) {
+    root.innerHTML = '<div class="serif" style="color: var(--vermilion); font-size: 14px;">读不到 token · ' + escapeHtml(e.message) + '</div>';
+  }
+}
+async function submitNewToken() {
+  const label = document.getElementById('new-token-label').value.trim();
+  try {
+    const created = await apiCreateToken(label);
+    // 显示一次 · 不再返回
+    document.getElementById('new-token-value').textContent = created.token;
+    document.getElementById('new-token-revealed').classList.remove('hidden');
+    document.getElementById('new-token-label').value = '';
+    await refreshApiTokensList();
+    showToast('生成了 · 复制下来存好 · 关掉就看不见了');
+  } catch (e) { showToast(e.message); }
+}
+async function confirmRevokeToken(tokenId, labelDesc) {
+  if (!confirm('撤销「' + labelDesc + '」? · 用这把钥匙的所有 CLI / agent 会立刻失败 · 不可恢复')) return;
+  try {
+    await apiRevokeToken(tokenId);
+    await refreshApiTokensList();
+    showToast('撤销了');
+  } catch (e) { showToast(e.message); }
+}
+
+// 复制"用 AI 接入"指南到剪贴板 · withToken=true 时用刚生成的钥匙 · 否则空占位
+function copyAiPrompt(el, withToken) {
+  const serverUrl = window.location.origin;
+  const handle = currentUser.handle || '你的_handle';
+  let token;
+  if (withToken) {
+    token = (document.getElementById('new-token-value') || {}).textContent || '';
+    if (!token) {
+      showToast('找不到刚生成的钥匙 · 先生成一把');
+      return;
+    }
+  } else {
+    token = 'tk_这里粘上你在工作室生成的钥匙';
+  }
+  const prompt = `你是 Tinker / 捣鼓(给 vibe coder 的工作室社区)的 AI 助手。
+帮我把 coding 进展按 Tinker 的 voice 发到我的工作室。
+
+## 协议
+
+- API base: ${serverUrl}
+- 鉴权: 所有 POST/GET 都加 header \`Authorization: Bearer <我的钥匙>\`
+- Content-Type: application/json
+- 我的钥匙: ${token}
+
+## 我的身份
+
+- handle: ${handle}
+- 我的项目 id: 不用先填 · 你需要时调 GET /api/state · 找 owner = ${handle} 的项目 · 取 id
+
+## 三个核心动作
+
+### 1) 发一条进展 (addUpdate)
+POST /api/action
+{
+  "type": "addUpdate",
+  "payload": {
+    "projectId": "<我某个项目的 id>",
+    "text": "<进展正文 · 支持 **粗体** 和 \\\`代码\\\` markdown>",
+    "feedbackAsk": "<可选 · 如果我求反馈 · 写具体想知道什么>",
+    "alsoStuck": false,
+    "notifyTinkered": false
+  }
+}
+
+### 2) 留便签 · 可关联具体进展
+POST /api/action
+{
+  "type": "addNote",
+  "payload": {
+    "projectId": "<...>",
+    "updateId": "<可选 · 指向某条 update id · 让便签'说的是哪条进展'>",
+    "text": "<便签内容>"
+  }
+}
+
+### 3) 改项目状态
+POST /api/action
+{ "type": "changeProjectStatus", "payload": { "projectId": "...", "newStatus": "done" } }
+状态: active / stuck / done / paused / archive
+
+## 找我的项目 + update id
+
+GET /api/state · 返回 JSON。
+- projects[] 数组里找 owner === ${handle}
+- 每个 project 有 id (=projectId)、slug、name、desc、status
+- 每个 project 的 updates[] 里每条有 id (=updateId)
+
+## Tinker voice(没特别说明就用这个)
+
+工艺人日志气质 · 反 changelog · 反 AI 装大佬。
+
+- 像跟朋友说"我刚做了 X" · 不像产品发布会
+- 用"跑通了 / 卡在 / 试了 / 接通了"这种动作动词 · 不用 "feature add / bug fix" 这种 changelog 词
+- 短句优先 · 一条进展 200-400 字 · 不需要排版
+- 不写"今天 / 最近"开头(平台已显示时间)
+- 支持 inline markdown:**粗体** 和 \\\`代码\\\` · 不要 # 标题 / - 列表 / 块级元素
+- 反"AI 装大佬" · 反"看着像产品宣传"
+
+## 工作流
+
+当我说"总结一下 / 发到 Tinker / 这段值得记一笔"时:
+
+1. 看 git 历史:\\\`git log --since="<合适的时间窗>" --oneline\\\`
+2. 看未 commit 改动:\\\`git diff --shortstat\\\`
+3. 起草 1-3 条候选进展(每条 200-400 字 · Tinker voice)
+4. 给我看候选 + 每条"自评"(为什么这条值得发)·我挑
+5. 我挑了 · 调 addUpdate POST 出去
+6. 报告:成功 + web URL
+
+## 硬规则
+
+- 永远别主动把我的钥匙复制到任何可见的地方
+- 永远别替我决定"该不该发" · 只能起草 + 等我确认
+- 不要凑数:git 历史全是 typo / 格式时 · 直接说"这段没什么值得发的"
+- 不要写 changelog 体 · 用 Tinker voice 重新组织
+- 不要写"在做 / 正在 / 努力中" · 进展是已经发生的事
+- 不要把"自评"行带进 POST 的 text 字段里
+`;
+  navigator.clipboard.writeText(prompt).then(() => {
+    if (el) { const orig = el.textContent; el.textContent = '复制了 ✓'; setTimeout(() => el.textContent = orig, 1800); }
+    showToast(withToken ? '复制了 · 粘到 AI 对话里就能用 · 注意保护钥匙' : '复制了模板 · 钥匙位置需要你手动填');
+  }).catch(() => {
+    showToast('剪贴板拒绝了 · 试试手动复制');
+  });
 }
 
 function openStatusPicker(projectId) {
@@ -6007,6 +6702,17 @@ document.addEventListener('keydown', (e) => {
   el.innerHTML = `<span class="md-weekday">${WEEKDAYS[d.getDay()]}</span><span class="md-sep">·</span><span class="md-num">${String(d.getDate()).padStart(2,'0')}</span><span class="md-sep">·</span><span class="md-month">${MONTHS_EN[d.getMonth()]}</span><span class="md-sep">·</span><span class="md-year">${d.getFullYear()}</span>`;
 })();
 
+// v0.49: masthead 卷期号 · alpha epoch 2026-06-05 起算累积天数 · 报纸"第 N 期"仪式感
+(function() {
+  const EPOCH = new Date(2026, 5, 5);  // 月份 0-based · 5 = 6月
+  const now = new Date();
+  const epochDay = new Date(EPOCH.getFullYear(), EPOCH.getMonth(), EPOCH.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const issueNum = Math.floor((today - epochDay) / 86400000) + 1;
+  const el = document.getElementById('masthead-issue-num');
+  if (el) el.textContent = String(Math.max(1, issueNum)).padStart(3, '0');
+})();
+
 function refreshMastheadHandle() {
   const el = document.getElementById('masthead-handle-area');
   if (!el) return;
@@ -6061,7 +6767,7 @@ function dispatchPending(p) {
   if (!p || !p.kind) return;
   if (p.kind === 'reactToProject') { currentProjectCtx = p.projectCtx; reactToProject(p.level); }
   else if (p.kind === 'openTinkered') { currentProjectCtx = p.projectCtx; openTinkered(); }
-  else if (p.kind === 'openNote') { currentProjectCtx = p.projectCtx; openNote(); }
+  else if (p.kind === 'openNote') { currentProjectCtx = p.projectCtx; openNote(p.preselectUpdateId); }
   else if (p.kind === 'openMethodUsed') { openMethodUsed(p.projectId, p.updateIdx); }
   else if (p.kind === 'openNewProject') { openNewProject(p.isFirst); }
   else if (p.kind === 'openEditProject') { openEditProject(p.projectId); }

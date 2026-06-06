@@ -4140,6 +4140,60 @@
   /* ===============================================================
      END v0.49.2 关于回主 nav · 找沉 dateline
      =============================================================== */
+
+  /* ================================================================
+   *  v0.50 · 中文长文本排版修复
+   *  --------------------------------------------------------------
+   *  用户反馈:
+   *    "卡片正文较长时字间距较小"
+   *
+   *  根因 (两个叠加):
+   *    ① entry-text 仅 'Newsreader', serif · Newsreader 是纯英文字体
+   *       中文 fallback 到系统默认 (Songti / SimSun) · 排版属性不一致
+   *    ② v0.30 italic 清洗后给副文字加 -0.005em / -0.008em 负字距
+   *       英文紧凑感 OK · 中文方块字累积起来挤成团
+   *
+   *  修复:
+   *    · 主要中文正文位置加 'Songti SC', 'STSong', 'Noto Serif SC' fallback
+   *    · 撤销 v0.30 留下的负字距 · 中文用 0 或微正 (0.005em "呼吸距")
+   *    · 字号/字重/颜色继续承担"层级区分" · 不靠字距挤压
+   *  ================================================================ */
+
+  /* —— 卡片正文 (主战场) —— */
+  .entry-text {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    letter-spacing: 0.005em !important;
+  }
+  .entry-text strong { letter-spacing: 0 !important; }    /* 粗体不加距 · 避免视觉打架 */
+  .entry-text code { letter-spacing: 0 !important; }      /* 代码块同理 */
+
+  /* —— 求反馈那行也是长中文 —— */
+  .entry-feedback-ask {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— 撤销 v0.30 给副文字加的负字距 (中文不友好) —— */
+  .entry-project { letter-spacing: 0 !important; }
+  .pdesc { letter-spacing: 0 !important; }
+  .workshop-tagline { letter-spacing: 0 !important; }
+
+  /* —— 工作室列表卡片描述 · 也加中文 fallback —— */
+  .pcard-desc {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    letter-spacing: 0.005em;
+  }
+
+  /* —— 项目页正文 (notes / updates 详情) 同 entry-text 处理 —— */
+  .tl-update-text,
+  .tl-note-text {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif !important;
+    letter-spacing: 0.005em !important;
+  }
+
+  /* ===============================================================
+     END v0.50 中文长文本排版修复
+     =============================================================== */
 </style>
 </head>
 <body class="min-h-screen">
@@ -4654,10 +4708,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.49.2 · 24 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.50 · 25 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.49.2</span>
+  <span class="bb-ver">v0.50</span>
 </div>
 
 <script>

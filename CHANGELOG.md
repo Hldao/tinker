@@ -43,9 +43,9 @@
 ## [Unreleased] / 0.5.x · UI 体系化打磨 (进行中)
 
 > Owner: 设计线 (ui.N)
-> 进展: webapp/index.html 累积 v0.27 → v0.44 共 18 个子段
+> 进展: webapp/index.html 累积 v0.27 → v0.50 共 25 个子段
 > 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
-> Build badge: webapp 右下角小角标 `ui · v0.44` (hover 显示完整 patch 历史)
+> Build badge: webapp 右下角小角标 `ui · v0.50` (hover 显示完整 patch 历史)
 
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
@@ -70,6 +70,11 @@
 - **v0.45** 冷静米白 · 日系配色 · main #faf8f3 → #f7f5ef (R=G 接近 · 不偏粉) · body 光晕降一档 · 装饰大字 vermilion 深一档
 - **v0.46** main 加一点黄 · #f7f5ef → #f8f5ec (R-B=8→12)
 - **v0.47** masthead 回原 cream · 只动 main · 反向对比 (顶部 #faf8f3 浅 · main #f8f5ec 微暖一档"实")
+- **v0.48** masthead 减项分层 · nav 6 项 → 主 3 + 副 2 · `+ 记一笔` 独立 CTA 浮起 · tagline 沉副行 · 删 ⌘K kbd
+- **v0.49** dateline 卷期号化 · `卷一 · 第 NNN 期` 从 2026-06-05 epoch 累积 · 报纸 masthead 仪式感落地 · secondary nav 沉到最底
+- **v0.49.1** secondary nav 加重修复 · sepia-light → sepia · 字号 11.5→12.5 · 加常态 dotted underline 暗示"参见"
+- **v0.49.2** 信息架构调整 · 关于回主 nav (alpha 期新人入口) + dotted underline 暗示"参见说明" · 找沉到 dateline 末 mono · 副行整个删除 · masthead 3 行 → 2 行
+- **v0.50** 中文长文本排版修复 · entry-text / pcard-desc / 项目页正文加 'Songti SC' 'Noto Serif SC' fallback · 撤销 v0.30 留下的负字距 · 中文用 0.005em 微正"呼吸距"
 
 ### [ui] markup 减法记录 (累积 5 处)
 所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
@@ -83,6 +88,22 @@
 - `renderFeed` / `renderWorkshop` 按日 group + `makeDayLabelEl` + 跳过今天 label
 - `groupEventsByDay` / `makeDateKey` / `makeDayDesc` / `pad2` 4 个 helper
 - `masthead-date` IIFE 改造 · 生成 dateline 4 段 markup (Sat · 06 · Jun · 2026)
+- **v0.49** `#masthead-issue-num` IIFE · alpha epoch 2026-06-05 累积天数 · 报纸"第 N 期"仪式感
+
+### [ui] masthead markup 重构 (v0.48 → v0.49.2)
+- `.masthead-main-row` / `.masthead-actions` / `.masthead-brand` 新 layout (v0.48)
+- `.masthead-nav-primary` 3 项 → 4 项 (关于回归 · v0.49.2)
+- `.masthead-cta` 独立 button · 取代原 nav 末"+ 记一笔" inline link (v0.48)
+- `.masthead-sub-row` 副行: v0.48 引入 → v0.49.2 整个删除
+- `.masthead-dateline` / `.dateline-right` / `.dateline-find` 卷期号化 + 找入口下沉 (v0.49 / v0.49.2)
+- `.nav-about` 加 dotted underline · 新人"参见说明"暗示 (v0.49.2)
+
+### [ui] 参考成熟设计 (v0.49 之前的对比研究)
+- **NYT** "Vol. CLXXIV" → 我们 `卷一 · 第 NNN 期` 卷期号
+- **Defector** "ESTABLISHED 2020" → 时间锚紧贴品牌
+- **Substack** publication 单一 primary CTA → `+ 记一笔` 独立浮
+- **Are.na** 极轻 secondary nav → 找/关于 弱化但不消失
+- 反例: HN / X 极致密集 · 跟我们留呼吸方向反
 
 ### [ui] preview 历史归档
 - 历史 preview 文件 (v0.27-v0.32) 已从 `webapp/` 移到 `prototypes/preview-history/`
