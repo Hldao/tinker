@@ -262,12 +262,29 @@ const DEFAULT_VOICE = `Tinker(中文名:捣鼓)是给 vibe coder 的工作室社
   例:"卡住可以发,只要还在试就行"
 
 ==================
-实事求是规则
+实事求是规则(最重要 · 你做不到就直接返回 candidates 空数组)
 ==================
 - 只写 git history 里真正发生的事,commit message 里没写的别瞎编
 - 别替作者捏造情绪("卡了一晚上""试了三次")
 - 别凭空说时间("一个月前""半年前")
-- 提团队/朋友时不确定性别用名字带过`;
+- 提团队/朋友时不确定性别用名字带过
+
+最严重的捏造类型(绝对不要写):
+1. "结果发现 / 实际跑下来 / 我观察到" 这种事后反思 — 你只看到了 commit,不知道后续真实发生了什么
+2. "agent 比真人 X / 这种模式很常见" 这种凭空数据论断 — 你没有数据
+3. "可复用的 takeaway / 可以总结为 / 这告诉我们" 这种 consultant 收尾 — LLM 偷懒填补结尾的常见模板,真人写日志不会这样收
+4. "出乎意料 / 没想到" — 你不知道作者预期是什么
+5. 把作者没在 commit message 里说的设计原因当成既定事实写出来
+
+作者能写的反思只有这三种:
+- 设计意图("我加了 X 是想让 Y 更容易")
+- 当前判断("我觉得这个方向是对的,因为...")
+- 下一步打算("接下来想做 Z")
+
+不能写的伪反思:
+- 事后效果观察(没数据)
+- 用户反应(没跟真用户聊过)
+- 跟其他产品对比(LLM 不知道竞品)`;
 
 const DRAFT_PROMPT_TEMPLATE = `${'$'}{voice}
 
@@ -387,18 +404,143 @@ async function llmDraft(cfg, gitContext) {
 // v0.64 · prompt 流程里用的简版 · 拿单条草稿当 input 默认值
 // 没配 LLM / 调用失败 都返回 null · 调用方走原本的空 input 路径
 // 默认时间窗 1 小时 · UI session 时传 session 起始时间更精准
+//
+// validate / 重写循环:
+// 1. LLM 起草 · sanitize 一遍
+// 2. 跑 validateDraft 检测"伪数据论断"(用户没收集过的)
+// 3. 有违规就让 LLM 重写一次 · 把违规句指给它
+// 4. 重写还有违规 → 返 null · 用户手敲 (宁可没草稿也不放伪论断进 update)
 async function llmQuickDraft(cfg, opts = {}) {
   if (!cfg || !cfg.llm || !cfg.llm.apiKey) return null;
   try {
     const sinceSpec = opts.sinceMinutes ? `${opts.sinceMinutes}m` : '1h';
     const gitCtx = gitHistorySince(sinceSpec);
     if (!gitCtx || !gitCtx.log) return null;
+
     const candidates = await llmDraft(cfg, gitCtx);
     if (!candidates || candidates.length === 0) return null;
-    return sanitizeDraft(candidates[0].text || null);
+    let draft = sanitizeDraft(candidates[0].text || null);
+    if (!draft) return null;
+
+    // Round 1 检测
+    const violations = validateDraft(draft);
+    if (violations.length === 0) return draft;
+
+    // Round 2 · 让 LLM 拿着违规重写一次
+    const reworked = await llmRework(cfg, gitCtx, draft, violations);
+    if (!reworked) return null;
+    const reworkedClean = sanitizeDraft(reworked);
+    if (!reworkedClean) return null;
+    const reworkViolations = validateDraft(reworkedClean);
+    if (reworkViolations.length > 0) return null; // 还是违规 · 放弃
+    return reworkedClean;
   } catch (e) {
     return null;  // 静默失败 · 不打断 prompt 流程
   }
+}
+
+// 用 LLM 重写一次 · 指明违规给它 · 让它拿走那几句
+async function llmRework(cfg, gitCtx, badDraft, violations) {
+  if (!cfg.llm || !cfg.llm.apiKey) return null;
+  const provider = cfg.llm.provider || 'anthropic';
+  const apiKey = cfg.llm.apiKey;
+  const prompt = `你刚才写的草稿里有"伪数据论断"——作者没收集过这种数据 · 你凭空编了。
+
+你的草稿:
+"""
+${badDraft}
+"""
+
+检测到的违规:
+${violations.map(v => '- ' + v).join('\n')}
+
+重写一次 · 拿走违规那几句 · 保留其他能讲清设计意图的部分。
+如果拿走后剩下的太少 / 没意思 · 直接返回 { "candidates": [] }。
+
+输出严格 JSON:
+{ "candidates": [ { "text": "...", "rationale": "..." } ] }`;
+
+  try {
+    let rawText;
+    if (provider === 'anthropic') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({ model: cfg.llm.model || 'claude-sonnet-4-5-20250929', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      rawText = d.content[0].text.trim();
+    } else if (provider === 'deepseek') {
+      const r = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: cfg.llm.model || 'deepseek-chat', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      rawText = d.choices[0].message.content.trim();
+    } else if (provider === 'openai') {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: cfg.llm.model || 'gpt-4o-mini', max_tokens: 1500, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } }),
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      rawText = d.choices[0].message.content.trim();
+    } else return null;
+
+    rawText = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    const parsed = JSON.parse(rawText);
+    if (!parsed.candidates || parsed.candidates.length === 0) return null;
+    return parsed.candidates[0].text || null;
+  } catch { return null; }
+}
+
+// 检测草稿里的"伪数据论断" · 返违规清单
+// 设计:这些 pattern 100% 需要数据才能说 · git 里没数据 = LLM 在编
+function validateDraft(text) {
+  if (!text) return [];
+  const violations = [];
+
+  // 用户反应类 (没问过用户)
+  if (/用户\s*(更|不)?\s*(喜欢|偏好|反映|说|觉得|想要|认为)/.test(text)) {
+    violations.push('"用户喜欢/反映/觉得 X" — 没问过用户');
+  }
+
+  // 跟"真人 / 之前 / 别的"做对比类
+  if (/(比|超过|远胜|低于|高于|不如)\s*(真人|人工|手动|之前|过去|普通|原来)/.test(text)) {
+    violations.push('"X 比 Y 好/差" 对比 — 没 benchmark');
+  }
+
+  // 跑下来 / 测下来 / 对比下来 (隐含实验)
+  if (/(实际|真实|真)\s*(跑|测|对比|跟|看)\s*(下来|过|完)/.test(text)) {
+    violations.push('"实际跑/测下来" — 没数据');
+  }
+
+  // 命中率 / 准确率 这类必须有数字的
+  if (/(成功率|准确率|命中率|转化率|留存率|完成率|响应率)/.test(text)) {
+    violations.push('"成功率/准确率" — 没指标');
+  }
+
+  // 百分比 / 数字效果
+  if (/[减少|增加|提升|降低|快|慢|多|少]\s*了?\s*\d+\s*%/.test(text)) {
+    violations.push('"X 了 Y%" — 没 benchmark');
+  }
+  if (/\d+\s*%(?!.*(已配|完成|目标|完工率|进度))/.test(text)) {
+    violations.push('"X%" — 没数据出处');
+  }
+
+  // 结果发现 / 出乎意料 / 数据显示 (经典 LLM 收尾)
+  if (/结果发现|出乎意料|数据显示|意外发现/.test(text)) {
+    violations.push('"结果发现/出乎意料/数据显示" — 这种事后观察 LLM 不该写');
+  }
+
+  // 已完成的不能说成"接下来想做" — git history 里出现的全是已完成
+  // 这个比较难检测 · 留到下次
+
+  return violations;
 }
 
 // 草稿后处理 · 抹掉最常见的 LLM tell
