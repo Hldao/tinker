@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tinker · refined v0.25 · 项目页 + 通知页打磨</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   tinker · refined v0.25
+   保留原 webapp 全部美学 token (vermilion / sepia / cream paper /
+   Newsreader + Fraunces serif / JetBrains Mono)。
+   只在节奏、间距、v0.4 新元素的视觉精度上打磨。
+   ============================================================ */
+
+:root {
+  --bg:          #faf8f3;
+  --paper:       #f5f1e8;
+  --ink:         #1c1917;
+  --ink-soft:    #44403c;
+  --sepia:       #78716c;
+  --sepia-light: #d6d3d1;
+  --rule:        #d6cfb8;
+  --rule-soft:   #e6decf;
+  --vermilion:   #c2410c;
+  --vermilion-soft: rgba(194, 65, 12, 0.08);
+  --vermilion-wash: rgba(194, 65, 12, 0.05);
+  --moss:        #15803d;
+  --amber:       #b45309;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.serif { font-family: 'Newsreader', 'Source Serif Pro', Georgia, serif; }
+.mono  { font-family: 'JetBrains Mono', ui-monospace, "SF Mono", monospace; font-variant-numeric: tabular-nums; }
+.display { font-family: 'Fraunces', 'Songti SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
+a { color: inherit; text-decoration: none; cursor: pointer; }
+
+/* ========== masthead ========== */
+.masthead {
+  border-bottom: 2px solid var(--ink);
+  background: var(--bg);
+  padding: 22px max(40px, 5vw) 18px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.masthead-left { display: flex; align-items: baseline; gap: 14px; }
+.masthead .title {
+  font-family: 'Newsreader', serif;
+  font-weight: 500;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.masthead .title-cn {
+  font-family: 'Newsreader', 'Songti SC', serif;
+  font-weight: 500;
+  font-size: 22px;
+  color: var(--ink);
+}
+.masthead .tagline {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  color: var(--sepia);
+  font-size: 14px;
+  margin-left: 8px;
+}
+.masthead-right {
+  display: flex;
+  gap: 22px;
+  font-family: 'Newsreader', serif;
+  font-size: 15px;
+  align-items: baseline;
+}
+.masthead-right a {
+  color: var(--ink);
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+  transition: border-color 0.18s ease;
+  position: relative;
+}
+.masthead-right a:hover { border-bottom-color: var(--ink); }
+.masthead-right a.active { border-bottom-color: var(--vermilion); color: var(--vermilion); }
+.masthead-right .badge {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--vermilion);
+  border-radius: 50%;
+  margin-left: 4px;
+  vertical-align: 2px;
+}
+
+/* ========== container ========== */
+.page {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 48px max(40px, 5vw) 96px;
+}
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ========== compare ribbon ========== */
+.compare-ribbon {
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px max(40px, 5vw);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--sepia);
+  letter-spacing: 0.08em;
+}
+.compare-ribbon strong { color: var(--ink); font-weight: 500; letter-spacing: 0.02em; }
+.compare-ribbon .dot {
+  display: inline-block;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--vermilion);
+}
+
+/* ===============================================================
+   PROJECT PAGE (打磨重点 · spec 最重要的页面)
+   =============================================================== */
+
+.crumbs {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 14.5px;
+  color: var(--sepia);
+  margin-bottom: 28px;
+}
+.crumbs a { border-bottom: 1px solid transparent; transition: border-color 0.18s; padding-bottom: 1px; }
+.crumbs a:hover { border-bottom-color: var(--sepia); color: var(--ink); }
+
+.pheader {
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 28px;
+  margin-bottom: 56px;
+}
+.pheader-meta-top {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--sepia);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.pheader-meta-top .status-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--amber);
+  font-weight: 500;
+}
+.pheader-meta-top .status-mark .dot { width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
+.pheader-meta-top .owner-action {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 13.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sepia);
+  border-bottom: 1px dotted var(--sepia-light);
+  padding-bottom: 1px;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s;
+}
+.pheader-meta-top .owner-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+.pname {
+  font-family: 'Fraunces', 'Songti SC', 'Newsreader', serif;
+  font-variation-settings: 'opsz' 144;
+  font-size: clamp(40px, 5.6vw, 56px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.02;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+.pdesc {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  color: var(--ink-soft);
+  font-size: 20px;
+  line-height: 1.5;
+  max-width: 60ch;
+  margin-bottom: 24px;
+}
+.pheader-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.try-cta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 11px 18px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: 'Newsreader', serif;
+  font-size: 16px;
+  font-weight: 500;
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s ease-out;
+}
+.try-cta:hover { background: var(--vermilion); border-color: var(--vermilion); }
+.try-cta:active { transform: translateY(1px); }
+.try-cta .arrow { font-weight: 400; }
+.try-cta .url {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  opacity: 0.62;
+  letter-spacing: 0.02em;
+  font-weight: 400;
+}
+
+/* section labels — 衬线斜体 · 重于分隔线 */
+.section-label {
+  font-family: 'Fraunces', 'Newsreader', serif;
+  font-variation-settings: 'opsz' 30;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: 28px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.section-label .meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--sepia);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 400;
+}
+.section-label .add-action {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 14.5px;
+  color: var(--vermilion);
+  border-bottom: 1px solid var(--vermilion);
+  padding-bottom: 1px;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s;
+}
+.section-label .add-action:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+.psect { margin-top: 64px; }
+
+/* ========== timeline ========== */
+.tl-entry {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 28px;
+  padding: 32px 0;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+  scroll-margin-top: 80px;
+}
+.tl-entry:first-child { padding-top: 12px; }
+.tl-entry:last-child { border-bottom: none; }
+/* 时间线竖线 — 比原版细 · 颜色比 rule 更淡 · 保留圆点 */
+.tl-entry::before {
+  content: '';
+  position: absolute;
+  left: 96px;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--rule-soft);
+}
+.tl-entry::after {
+  content: '';
+  position: absolute;
+  left: 92px;
+  top: 38px;
+  width: 9px; height: 9px;
+  background: var(--bg);
+  border: 1.5px solid var(--vermilion);
+  border-radius: 50%;
+  z-index: 1;
+  box-sizing: border-box;
+  transition: background 0.18s, transform 0.22s ease-out;
+}
+.tl-entry:hover::after { background: var(--vermilion); transform: scale(1.15); }
+
+.tl-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--sepia);
+  letter-spacing: 0.04em;
+  text-align: right;
+  padding-top: 4px;
+}
+.tl-time strong {
+  display: block;
+  font-weight: 500;
+  color: var(--ink-soft);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.tl-body { padding-left: 8px; }
+.tl-text {
+  font-family: 'Newsreader', serif;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+.tl-text .mention { color: var(--vermilion); font-weight: 600; }
+.tl-prompt-box {
+  margin-top: 14px;
+  border-left: 2px solid var(--vermilion);
+  padding: 12px 16px;
+  background: var(--paper);
+}
+.tl-prompt-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--vermilion);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-bottom: 8px;
+}
+.tl-prompt-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.tl-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.tl-action {
+  cursor: pointer;
+  border-bottom: 1px solid var(--sepia-light);
+  color: var(--ink);
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 14.5px;
+  padding-bottom: 1px;
+  transition: color 0.18s, border-color 0.18s;
+}
+.tl-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+.tl-action.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+.tl-used-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--sepia);
+  letter-spacing: 0.02em;
+}
+.tl-used-list {
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 1px dotted var(--rule);
+}
+.tl-used-list .row {
+  font-family: 'Newsreader', serif;
+  font-size: 14px;
+  color: var(--sepia);
+  font-style: italic;
+  line-height: 1.6;
+  padding: 2px 0;
+}
+.tl-used-list .nh {
+  color: var(--ink);
+  font-weight: 600;
+  font-style: normal;
+  cursor: pointer;
+  transition: color 0.18s;
+}
+.tl-used-list .nh:hover { color: var(--vermilion); }
+.tl-used-list .row .when {
+  font-family: 'JetBrains Mono', monospace;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--sepia-light);
+  letter-spacing: 0.06em;
+  margin-left: 6px;
+}
+
+/* small-action · owner 视角小入口 — 比原版克制 */
+.small-action {
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--sepia);
+  letter-spacing: 0.04em;
+  transition: color 0.18s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 14px;
+}
+.small-action:hover { color: var(--vermilion); }
+
+/* ========== reactions ========== */
+.sub-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--sepia);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+  margin-top: 32px;
+}
+.section-label + .sub-label { margin-top: 4px; }
+.sub-hint {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 13.5px;
+  color: var(--sepia);
+  margin-top: 6px;
+  margin-bottom: 18px;
+}
+
+.ref-entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: baseline;
+  font-family: 'Newsreader', serif;
+  font-size: 16px;
+  color: var(--ink);
+  padding: 14px 0;
+  border-bottom: 1px dotted var(--rule);
+  scroll-margin-top: 80px;
+}
+.ref-entry .arrow {
+  color: var(--vermilion);
+  margin-right: 10px;
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+}
+.ref-entry .ref-user {
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.18s;
+}
+.ref-entry .ref-user:hover { color: var(--vermilion); }
+.ref-entry .ref-name {
+  font-style: italic;
+  border-bottom: 1px solid var(--sepia-light);
+  padding-bottom: 1px;
+  transition: border-color 0.18s, color 0.18s;
+}
+.ref-entry .ref-name:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
+.ref-entry .meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--sepia);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ref-entry .retract {
+  cursor: pointer;
+  border-bottom: 1px dotted var(--sepia-light);
+  padding-bottom: 1px;
+  transition: color 0.18s, border-color 0.18s;
+}
+.ref-entry .retract:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+.want-list {
+  font-family: 'Newsreader', serif;
+  font-size: 16px;
+  padding: 6px 0;
+  line-height: 1.8;
+}
+.want-list a {
+  border-bottom: 1px solid var(--sepia-light);
+  padding-bottom: 1px;
+  margin-right: 14px;
+  transition: color 0.18s, border-color 0.18s;
+}
+.want-list a:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+.react-cta-line {
+  font-family: 'Newsreader', serif;
+  font-size: 16.5px;
+  padding: 10px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.react-cta-line .lead {
+  font-style: italic;
+  color: var(--sepia);
+}
+.react-cta {
+  cursor: pointer;
+  color: var(--ink);
+  border-bottom: 1px solid var(--sepia-light);
+  padding-bottom: 1px;
+  transition: color 0.18s, border-color 0.18s;
+}
+.react-cta:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+.react-cta.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+/* ========== notes wall ========== */
+.note-entry {
+  padding: 22px 0;
+  border-bottom: 1px dotted var(--rule);
+  scroll-margin-top: 80px;
+}
+.note-head {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--sepia);
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.note-head .nu {
+  font-family: 'Newsreader', serif;
+  color: var(--ink);
+  font-weight: 600;
+  font-style: italic;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+.note-text {
+  font-family: 'Newsreader', serif;
+  font-size: 17px;
+  color: var(--ink);
+  line-height: 1.55;
+  font-style: italic;
+}
+.note-text .mention { color: var(--vermilion); font-weight: 600; font-style: normal; }
+
+/* ========== anchor flash · v0.4 通知锚点定位 ========== */
+/* 原版用 0.18 浅 vermilion 整块染色 + 8px box-shadow · 太粗
+   新版用 vermilion 左侧滑入 thin bar + 极淡 wash · 报纸气质更对 */
+@keyframes flashRefined {
+  0%   {
+    background: var(--vermilion-wash);
+    box-shadow: -3px 0 0 var(--vermilion);
+  }
+  60%  {
+    background: rgba(194, 65, 12, 0.025);
+    box-shadow: -2px 0 0 rgba(194, 65, 12, 0.4);
+  }
+  100% {
+    background: transparent;
+    box-shadow: -1px 0 0 transparent;
+  }
+}
+.flash-anchor {
+  animation: flashRefined 1.8s ease-out 1;
+  padding-left: 14px;
+  margin-left: -14px;
+}
+
+/* ===============================================================
+   UPDATE MODAL — extras (v0.4 两个 checkbox 打磨)
+   =============================================================== */
+.modal-back {
+  position: fixed; inset: 0;
+  background: rgba(28, 25, 23, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 60;
+  padding: 24px;
+  animation: backIn 220ms ease-out;
+}
+@keyframes backIn { from { background: rgba(28, 25, 23, 0); } to { background: rgba(28, 25, 23, 0.4); } }
+.modal-back.hidden { display: none; }
+.modal-paper {
+  background: var(--bg);
+  border: 1.5px solid var(--ink);
+  padding: 36px;
+  max-width: 540px;
+  width: 100%;
+  animation: paperIn 280ms cubic-bezier(.2, .7, .3, 1);
+}
+@keyframes paperIn { from { opacity: 0; transform: translateY(12px) scale(0.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.modal-title {
+  font-family: 'Fraunces', 'Newsreader', serif;
+  font-variation-settings: 'opsz' 144;
+  font-weight: 500;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+.modal-sub {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  color: var(--sepia);
+  font-size: 14.5px;
+  margin-bottom: 22px;
+}
+.input-bare {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--sepia-light);
+  font-family: 'Newsreader', serif;
+  font-size: 17px;
+  padding: 10px 0;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.18s;
+  resize: vertical;
+}
+.input-bare:focus { border-bottom-color: var(--vermilion); }
+
+/* v0.4 update extras · 杂志气质 checkbox · 比原版的更克制 */
+.update-extras {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.update-extra-row {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+  align-items: start;
+  transition: opacity 0.18s;
+}
+.update-extra-row.disabled-row { opacity: 0.4; cursor: not-allowed; }
+.update-extra-row input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border: 1.5px solid var(--ink);
+  background: var(--bg);
+  cursor: inherit;
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+  transition: background 0.18s, border-color 0.18s;
+}
+.update-extra-row input:checked {
+  background: var(--vermilion);
+  border-color: var(--vermilion);
+}
+.update-extra-row input:checked::after {
+  content: '✓';
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--bg);
+  line-height: 1;
+}
+.update-extra-row:hover input:not(:checked) { border-color: var(--vermilion); }
+.update-extra-row .extra-title {
+  font-family: 'Newsreader', serif;
+  font-size: 15px;
+  color: var(--ink);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  display: block;
+  line-height: 1.4;
+}
+.update-extra-row .extra-sub {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 13px;
+  color: var(--sepia);
+  display: block;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.update-extra-row .audience {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--vermilion);
+  letter-spacing: 0.08em;
+  margin-left: 6px;
+  font-style: normal;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  margin-top: 28px;
+}
+.btn-cancel {
+  font-family: 'Newsreader', serif;
+  font-size: 15px;
+  color: var(--sepia);
+  cursor: pointer;
+  padding: 8px 4px;
+  border-bottom: 1px solid transparent;
+  transition: color 0.18s, border-color 0.18s;
+  background: transparent;
+  border-top: none; border-left: none; border-right: none;
+}
+.btn-cancel:hover { color: var(--ink); }
+.btn-submit {
+  font-family: 'Newsreader', serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--bg);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.12s ease-out;
+}
+.btn-submit:hover { background: var(--vermilion); border-color: var(--vermilion); }
+.btn-submit:active { transform: translateY(1px); }
+
+/* ===============================================================
+   NOTIFICATIONS SCREEN
+   原版用 grid 72px 1fr + unread 时 vermilion 时间戳
+   新版: 加左侧细线条 unread 标记 + 更克制的 hover + 头部 bulk 行更精
+   =============================================================== */
+
+.notif-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 18px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 36px;
+}
+.notif-head .title {
+  font-family: 'Fraunces', 'Newsreader', serif;
+  font-variation-settings: 'opsz' 144;
+  font-weight: 500;
+  font-size: 44px;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  color: var(--ink);
+}
+.notif-head .meta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--sepia);
+  letter-spacing: 0.06em;
+  text-align: right;
+}
+.notif-head .meta strong { color: var(--vermilion); font-weight: 500; }
+
+.notif-bulk-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  color: var(--sepia);
+  letter-spacing: 0.06em;
+}
+.notif-bulk-row .right {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 14px;
+  color: var(--sepia);
+  cursor: pointer;
+  border-bottom: 1px dotted var(--sepia-light);
+  padding-bottom: 1px;
+  transition: color 0.18s, border-color 0.18s;
+  letter-spacing: 0;
+}
+.notif-bulk-row .right:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+.notif-entry {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 24px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  transition: background 0.18s, padding 0.22s;
+  position: relative;
+}
+.notif-entry:hover {
+  background: var(--vermilion-wash);
+  padding-left: 14px;
+  margin-left: -14px;
+}
+.notif-entry.unread::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 30px;
+  bottom: 26px;
+  width: 2px;
+  background: var(--vermilion);
+}
+.notif-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  color: var(--sepia);
+  letter-spacing: 0.04em;
+  padding-top: 4px;
+  text-align: right;
+}
+.notif-time strong {
+  display: block;
+  color: var(--ink-soft);
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.notif-entry.unread .notif-time strong { color: var(--vermilion); }
+.notif-text {
+  font-family: 'Newsreader', serif;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.notif-text .nh {
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color 0.18s;
+}
+.notif-text .nh:hover { color: var(--vermilion); }
+.notif-text .verb-warm { color: var(--vermilion); font-style: italic; }
+.notif-text .verb-cool { color: var(--ink-soft); font-style: italic; }
+.notif-text .verb-grow { color: var(--moss); font-style: italic; }
+.notif-text .npj { font-style: italic; color: var(--ink-soft); }
+.notif-extra {
+  font-family: 'Newsreader', serif;
+  font-style: italic;
+  font-size: 14.5px;
+  color: var(--sepia);
+  margin-top: 6px;
+  padding-left: 14px;
+  border-left: 2px solid var(--rule);
+  line-height: 1.5;
+}
+
+/* ===============================================================
+   FLOATING controls — modal trigger + screen switcher
+   仅原型用 · 真正落地时不需要
+   =============================================================== */
+.proto-switcher {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--bg);
+  padding: 8px 12px;
+  border: 1px solid var(--ink);
+  display: flex;
+  gap: 0;
+  z-index: 40;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.15);
+}
+.proto-switcher button {
+  background: transparent;
+  border: none;
+  color: rgba(250, 248, 243, 0.6);
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: color 0.18s;
+}
+.proto-switcher button:hover { color: var(--bg); }
+.proto-switcher button.active { color: var(--vermilion); }
+.proto-switcher .sep { width: 1px; background: rgba(250, 248, 243, 0.2); margin: 0 4px; }
+
+/* ===============================================================
+   responsive
+   =============================================================== */
+@media (max-width: 720px) {
+  .tl-entry { grid-template-columns: 56px 1fr; gap: 18px; }
+  .tl-entry::before { left: 68px; }
+  .tl-entry::after { left: 64px; }
+  .notif-entry { grid-template-columns: 64px 1fr; gap: 16px; }
+  .pname { font-size: 36px; }
+  .notif-head .title { font-size: 32px; }
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-left">
+    <span class="title">Tinker</span>
+    <span class="title-cn">·  捣鼓</span>
+    <span class="tagline">— refined v0.25 (项目页 + 通知页打磨)</span>
+  </div>
+  <div class="masthead-right">
+    <a>主屏</a>
+    <a class="active">@daodao</a>
+    <a id="nav-notif">通知<span class="badge"></span></a>
+  </div>
+</header>
+
+<div class="compare-ribbon">
+  <span class="dot"></span>
+  <strong>原型对比</strong>
+  &nbsp;只动节奏 / 间距 / v0.4 新元素的视觉精度 · 不动 vermilion + Newsreader + cream paper 气质
+</div>
+
+<!-- ===================== SCREEN 1: PROJECT PAGE ===================== -->
+<main class="screen active page" id="screen-project">
+  <p class="crumbs">← <a>@daodao 的工作室</a></p>
+
+  <div class="pheader">
+    <div class="pheader-meta-top">
+      <span class="status-mark"><span class="dot"></span>项 目 · 卡 住</span>
+      <a class="owner-action">改状态</a>
+      <a class="owner-action">改项目</a>
+    </div>
+    <h1 class="pname">老张家饺子点单</h1>
+    <p class="pdesc">微信小程序 · 扫码点单 · 接通云开发。给老张家做的一个不会写代码的人也能跑通的点单流程。</p>
+    <div class="pheader-action-row">
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.06em;">
+        用 <strong style="color: var(--ink); font-weight: 500;">Cursor</strong> · <strong style="color: var(--ink); font-weight: 500;">WeChat MiniProgram</strong> · <strong style="color: var(--ink); font-weight: 500;">CloudBase</strong> 做的
+      </span>
+      <a class="try-cta">
+        <span>去试试</span>
+        <span class="arrow">→</span>
+        <span class="url">example.com/jiaozi-v2</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <section>
+    <div class="section-label">
+      <span>时间线 <span class="meta">· 4 条</span></span>
+      <a class="add-action" onclick="openUpdateModal()">+ 记一笔</a>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-time"><strong>3h</strong>18:42</div>
+      <div class="tl-body">
+        <div class="tl-text">云函数的 <span class="mention">wx.getOpenId</span> 拿不到正确的 openid · 又卡了。appid 在云开发环境里行为跟小程序端不一样,要传 cloudID 不是 appID,文档写得很绕。</div>
+        <div class="tl-actions">
+          <a class="tl-action">用了 · 跑通了</a>
+          <span class="tl-used-count">· 还没人用过</span>
+          <a class="small-action">改</a>
+          <a class="small-action">删</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry" id="update-watcher">
+      <div class="tl-time"><strong>12h</strong>06:14</div>
+      <div class="tl-body">
+        <div class="tl-text">试了云数据库的 <strong style="font-weight: 600;">watcher</strong> · 实时菜品库存更新到位。改一道菜立刻在所有桌的小程序里翻新,不用拉刷新。</div>
+        <div class="tl-prompt-box">
+          <div class="tl-prompt-label">prompt</div>
+          <div class="tl-prompt-text">wx.cloud.database().collection("dishes").watch({
+  onChange: snapshot => snapshot.docChanges.forEach(diff =>
+    refresh(diff.doc._id))
+})</div>
+        </div>
+        <div class="tl-actions">
+          <a class="tl-action active">✓ 你用过 · 跑通了</a>
+          <span class="tl-used-count">· 1 人用过这个方法</span>
+        </div>
+        <div class="tl-used-list">
+          <div class="row">· <span class="nh">@bob</span> "我也用 watcher 做菜单同步 · 真香" <span class="when">11h ago</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-time"><strong>17h</strong>10:30</div>
+      <div class="tl-body">
+        <div class="tl-text">主屏 + 菜单页跑通了 · 扫码进入到第一道菜的展示很流畅。</div>
+        <div class="tl-actions">
+          <a class="tl-action">用了 · 跑通了</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="tl-entry">
+      <div class="tl-time"><strong>3d</strong>开张</div>
+      <div class="tl-body">
+        <div class="tl-text" style="font-style: italic; color: var(--sepia); font-size: 16px;">「老张家饺子点单」这个项目挂上了 — 想给老张家做一个能扫码点单的小程序。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REACTIONS -->
+  <section class="psect">
+    <div class="section-label">
+      <span>反馈区</span>
+      <span class="meta">接走 1 · 想试试 2</span>
+    </div>
+
+    <div class="sub-label">接走过</div>
+    <div class="ref-entry" id="tinkered-alice">
+      <div>
+        <span class="arrow">→</span>
+        <a class="ref-user">@alice</a>
+        <span style="color: var(--sepia); font-style: italic;"> 做了 </span>
+        <a class="ref-name">「饺子点单 · React Native 版」</a>
+      </div>
+      <span class="meta">11h ago</span>
+    </div>
+    <div class="ref-entry">
+      <div>
+        <span class="arrow">→</span>
+        <a class="ref-user">@daodao</a>
+        <span style="color: var(--sepia); font-style: italic;"> 做了 </span>
+        <a class="ref-name">「饺子点单 · 测试版」</a>
+        <!-- v0.4 撤回 · 只有接走者本人看到 · 放右侧 meta 区更克制 -->
+      </div>
+      <span class="meta">
+        <span>1d ago</span>
+        <a class="retract">撤回</a>
+      </span>
+    </div>
+
+    <div class="sub-label">想试试</div>
+    <div class="want-list">
+      <a>@zoe</a>
+      <a>@kai</a>
+    </div>
+    <p class="sub-hint">你跑通了之后 ta 们会收到通知 · 显示具体是谁,不显示总数</p>
+
+    <div class="sub-label">↑ 你也来 (访客视角)</div>
+    <div class="react-cta-line">
+      <span class="lead">你 —</span>
+      <a class="react-cta">想试试</a>
+      <a class="react-cta">做了延伸版 →</a>
+    </div>
+  </section>
+
+  <!-- NOTES -->
+  <section class="psect">
+    <div class="section-label">
+      <span>便签墙 <span class="meta">· 2 条</span></span>
+      <a class="add-action">+ 留个便签</a>
+    </div>
+    <p class="sub-hint" style="margin-top: -16px; margin-bottom: 22px;">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
+
+    <div class="note-entry" id="note-pay-callback">
+      <div class="note-head"><span class="nu">@zoe</span> · 9h ago</div>
+      <p class="note-text">"<span class="mention">@daodao</span> 微信支付那个回调要在云函数里处理 · 不能直连小程序端。我之前踩过这个坑 · 是 wechatpay-axios-plugin 这个包。"</p>
+    </div>
+
+    <div class="note-entry">
+      <div class="note-head"><span class="nu">@kai</span> · 2d ago</div>
+      <p class="note-text">"扫码进入做了渐变挺好看 · 但桌号在左上不太直观 · 可以放大一倍居中显示。"</p>
+    </div>
+  </section>
+</main>
+
+<!-- ===================== SCREEN 2: NOTIFICATIONS ===================== -->
+<main class="screen page" id="screen-notif">
+  <div class="notif-head">
+    <h1 class="title">通知</h1>
+    <div class="meta">
+      <strong>3</strong> 条未读 · <span style="color: var(--sepia);">共 6 条</span><br>
+      <span style="font-size: 10px; letter-spacing: 0.1em;">SORTED REVERSE-CHRONO · NO ALGORITHM</span>
+    </div>
+  </div>
+
+  <div class="notif-bulk-row">
+    <span>点开任意一条会自动标已读 · 同时跳到反馈源头</span>
+    <a class="right">全部标已读 →</a>
+  </div>
+
+  <a class="notif-entry unread" onclick="onNotifClick('note-pay-callback', this)">
+    <div class="notif-time"><strong>9h</strong>09:48</div>
+    <div>
+      <div class="notif-text">
+        <span class="nh">@zoe</span>
+        <span class="verb-warm">在你的项目留了便签</span>
+        <span class="npj">「老张家饺子点单」</span>
+      </div>
+      <div class="notif-extra">"@daodao 微信支付那个回调要在云函数里处理 · 不能直连小程序端"</div>
+    </div>
+  </a>
+
+  <a class="notif-entry unread" onclick="onNotifClick('tinkered-alice', this)">
+    <div class="notif-time"><strong>11h</strong>14:12</div>
+    <div>
+      <div class="notif-text">
+        <span class="nh">@alice</span>
+        <span class="verb-warm">接走了你的</span>
+        <span class="npj">「老张家饺子点单」</span>
+      </div>
+      <div class="notif-extra">做了 「饺子点单 · React Native 版」</div>
+    </div>
+  </a>
+
+  <a class="notif-entry unread" onclick="onNotifClick('update-watcher', this)">
+    <div class="notif-time"><strong>15h</strong>11:33</div>
+    <div>
+      <div class="notif-text">
+        <span class="nh">@bob</span>
+        <span class="verb-warm">用了你的方法 · 跑通了</span>
+        <span class="npj">「老张家饺子点单」</span>
+      </div>
+      <div class="notif-extra">"我也用 watcher 做菜单同步 · 真香"</div>
+    </div>
+  </a>
+
+  <a class="notif-entry">
+    <div class="notif-time"><strong>YDA</strong>16:20</div>
+    <div>
+      <div class="notif-text">
+        <span class="nh">@kai</span>
+        <span class="verb-cool">想试试</span>
+        <span class="npj">「射箭赛事记分」</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="notif-entry">
+    <div class="notif-time"><strong>06.04</strong>2d</div>
+    <div>
+      <div class="notif-text">
+        <span class="nh">@alice</span>
+        <span class="verb-grow">跑通了 · 你之前说过想试试 · 现在能用了</span>
+        <span class="npj">「饺子点单 · React Native 版」</span>
+      </div>
+    </div>
+  </a>
+
+  <a class="notif-entry">
+    <div class="notif-time"><strong>06.03</strong>3d</div>
+    <div>
+      <div class="notif-text">
+        <span class="nh">@daodao</span>
+        <span class="verb-warm">换了产物链接</span>
+        <span class="npj">「老张家饺子点单」</span>
+      </div>
+      <div class="notif-extra">新链接 example.com/jiaozi-v2</div>
+    </div>
+  </a>
+</main>
+
+<!-- ===================== UPDATE MODAL ===================== -->
+<div class="modal-back hidden" id="modal-update">
+  <div class="modal-paper">
+    <h3 class="modal-title">记一笔</h3>
+    <p class="modal-sub">跑通了 X · 卡在 Y · 试了 Z 失败 — 写啥都行</p>
+
+    <textarea class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px;"></textarea>
+
+    <div class="update-extras">
+      <label class="update-extra-row">
+        <input type="checkbox">
+        <span>
+          <span class="extra-title">同时把状态改成「卡住」</span>
+          <span class="extra-sub">接走 / 想试试 你的人会被通知 · ta 们也许能搭把手 <span class="audience">· 3 人</span></span>
+        </span>
+      </label>
+      <label class="update-extra-row">
+        <input type="checkbox">
+        <span>
+          <span class="extra-title">通知「接走 / 想试试」你的人</span>
+          <span class="extra-sub">跑通了大版本 / 重要更新时勾 · 默认不发 <span class="audience">· 3 人</span></span>
+        </span>
+      </label>
+    </div>
+
+    <div class="modal-buttons">
+      <button class="btn-cancel" onclick="closeUpdateModal()">取消</button>
+      <button class="btn-submit" onclick="closeUpdateModal()">记上</button>
+    </div>
+  </div>
+</div>
+
+<!-- proto switcher -->
+<div class="proto-switcher">
+  <button class="active" data-screen="screen-project">项 目 页</button>
+  <span class="sep"></span>
+  <button data-screen="screen-notif">通 知 页</button>
+  <span class="sep"></span>
+  <button onclick="openUpdateModal()">+ 记一笔 modal</button>
+</div>
+
+<script>
+  // 屏切换
+  const buttons = document.querySelectorAll('.proto-switcher button[data-screen]');
+  const screens = document.querySelectorAll('.screen');
+  function show(id) {
+    screens.forEach(s => s.classList.toggle('active', s.id === id));
+    buttons.forEach(b => b.classList.toggle('active', b.dataset.screen === id));
+    document.querySelectorAll('.masthead-right a').forEach(a => a.classList.remove('active'));
+    if (id === 'screen-project') document.querySelectorAll('.masthead-right a')[1].classList.add('active');
+    if (id === 'screen-notif')   document.getElementById('nav-notif').classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  buttons.forEach(b => b.addEventListener('click', () => show(b.dataset.screen)));
+  document.getElementById('nav-notif').addEventListener('click', () => show('screen-notif'));
+  document.querySelectorAll('.masthead-right a')[1].addEventListener('click', () => show('screen-project'));
+
+  // 通知点击 · 跳到项目页 · scroll 到锚点 · 闪烁 (v0.4 锚点系统)
+  function onNotifClick(anchor, el) {
+    el.classList.remove('unread');
+    // 更新未读数
+    const left = document.querySelectorAll('.notif-entry.unread').length;
+    const metaStrong = document.querySelector('.notif-head .meta strong');
+    if (metaStrong) metaStrong.textContent = left;
+    // 如果全部已读 · 隐藏头部 badge
+    if (left === 0) document.querySelector('.masthead-right .badge').style.display = 'none';
+
+    show('screen-project');
+    setTimeout(() => {
+      const target = document.getElementById(anchor);
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      target.classList.remove('flash-anchor');
+      void target.offsetWidth;
+      target.classList.add('flash-anchor');
+    }, 80);
+  }
+
+  // update modal
+  function openUpdateModal() {
+    document.getElementById('modal-update').classList.remove('hidden');
+  }
+  function closeUpdateModal() {
+    document.getElementById('modal-update').classList.add('hidden');
+  }
+  document.getElementById('modal-update').addEventListener('click', (e) => {
+    if (e.target.id === 'modal-update') closeUpdateModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeUpdateModal();
+  });
+</script>
+</body>
+</html>

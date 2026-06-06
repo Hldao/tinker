@@ -3,10 +3,156 @@
 格式: [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)
 版本: SemVer · alpha 期 0.x.x
 
-## [Unreleased]
+---
 
-### Added
-- (留给下一个改动)
+## 版本号约定 (2026-06-06 起)
+
+**主版本号**: 整个产品 milestone
+- `0.x.x` alpha 阶段 (现在)
+- `0.x.0` minor 升级 = 一个 milestone 完成 (比如 0.4 反馈闭环 / 0.5 UI 体系化)
+- `0.x.y` patch = 主线合并时 +1
+- `1.0.0` 正式上线
+
+**子工作流** (内部使用): 两条/多条 work stream 并行时用，避免主版本号竞争
+- `ui.N` · 设计 / CSS 工作流 (我们这条线)
+- `feat.N` · 用户能感知的新功能
+- `be.N` · 后端 / 基础设施
+- `docs.N` · spec / 文档
+- 合并到 main 时这些子流的累积体现为主版本号 patch +1
+
+**git commit message 约定**:
+```
+[ui]       视觉 / CSS 改动
+[feat]     用户能感知的新功能
+[be]       后端实现 / 数据库 / API
+[docs]     spec / CHANGELOG / README
+[fix]      bug 修复
+[refactor] 不改行为的代码重构
+[test]     测试相关
+[infra]    部署 / docker / CI
+```
+
+**分支约定**:
+- `main` → 生产 (公网 alpha 部署)
+- `ui/*` → UI 工作流分支
+- `feat/*` / `be/*` → 功能 / 后端工作流分支
+- 各分支自治推进 · 合并到 main 时主版本号升 patch
+
+---
+
+## [Unreleased] / 0.5.x · UI 体系化打磨 (进行中)
+
+> Owner: 设计线 (ui.N)
+> 进展: webapp/index.html 累积 v0.27 → v0.44 共 18 个子段
+> 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
+> Build badge: webapp 右下角小角标 `ui · v0.44` (hover 显示完整 patch 历史)
+
+### [ui] 累积 patch 段 (CSS-only 优先)
+- **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
+- **v0.28** 收一档 + 4 处精度细节 (TIGHTENED) · 行高 1.7→1.6 · 圆点 hover · prompt-box hover · tabular-nums
+- **v0.29** 4 块全局/页面级 (EXTENDED) · 表单 pills 统一 · modal 通用打磨 · 关于页 · 入场仪式
+- **v0.29.1** 箭头乱用整改 · 删 "↑ 你也来" / "做了延伸版 →" / 面包屑 ← / 接走方向 → 退色
+- **v0.30** 中文 italic 大清洗 · 17 处副文字 + 6 处动作引导转链接气质 · 5 处保留引文 italic
+- **v0.31** 夜班 28 块深度修复 + markup 4 处减法 · 删 dev 按钮 / 空态卡片 / status amber 统一 / ESC hint
+- **v0.31.1** 小屏 + 收尾 · 720px / 480px 响应式 · 项目页 status dot
+- **v0.32** 借鉴朋友周报 5 块 · eyebrow thin bar / dot+halo / status tag tint / body 光晕颗粒 / 关于页首字下沉
+- **v0.32.1** 视觉强度提升 · chip 加边 + wash 加深 · 颗粒 0.03→0.05
+- **v0.33** 关于页只保留第二段下沉 + 主屏加 eyebrow `Dispatches · 今日工房` + entry-time Fraunces 强化 + filter wash 背景
+- **v0.34** feed/workshop 按日 group + 小日历 (.day-label · 同日 ≥ 2 条触发) · 配套 JS 改动: renderFeed + renderWorkshop
+- **v0.35** day-label 改横向 separator · 避免跟 entry-time 两条平行时间锚点
+- **v0.36** day-label 嵌入 entry left column · 学 Day One 时间轴 column 设计
+- **v0.37** day-label 退化为换天 separator · 跳过"第一个今天" label (masthead 已有日期)
+- **v0.38** 去掉"昨天/前天"字样 · 纯日历元素 · 用户洞察: 精确日期 = 历史感 + 成就感
+- **v0.39** 撕日历卡片 · 大胆方向 (太大被撤销) · markup 改造 + 诗意化注解
+- **v0.40** 主从重构 · 撤销 v0.39 卡片 · 主日历视觉锚点转移到 masthead-date · feed day-label 简化为横向 inline
+- **v0.41** 颜色对换实验 · 深色 masthead + cream main · 反差太重被撤销
+- **v0.42-v0.44** 温和 cream/paper 对换迭代 · 最终: main = cream (用户喜欢) · masthead = paper 偏粉做区分
+
+### [ui] markup 减法记录 (累积 5 处)
+所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
+1. 删 dev "重置原型数据" 按钮
+2. 工作室页 "你 的 工 作 室" → "你的工作室" + CSS letter-spacing 接管
+3. 项目页 "项 目 · 卡 住" → "项目 · 卡住"
+4. 项目页 "↑ 你也来" sub-label 整段 → dotted 顶分隔 react-line
+5. "做了延伸版 →" × 2 → "做了延伸版"
+
+### [ui] JS 改造记录 (v0.34+)
+- `renderFeed` / `renderWorkshop` 按日 group + `makeDayLabelEl` + 跳过今天 label
+- `groupEventsByDay` / `makeDateKey` / `makeDayDesc` / `pad2` 4 个 helper
+- `masthead-date` IIFE 改造 · 生成 dateline 4 段 markup (Sat · 06 · Jun · 2026)
+
+### [ui] preview 历史归档
+- 历史 preview 文件 (v0.27-v0.32) 已从 `webapp/` 移到 `prototypes/preview-history/`
+- 当前活跃 preview: `webapp/preview-v0.34.html` (跟 index.html 内容一致 · 同步看)
+
+### [ui] markup 减法记录 (累积 5 处)
+所有改动都标在 CSS 注释 v0.29.1 / v0.31 段开头:
+1. 删 dev "重置原型数据" 按钮
+2. 工作室页 "你 的 工 作 室" → "你的工作室" + CSS letter-spacing 接管
+3. 项目页 "项 目 · 卡 住" → "项目 · 卡住"
+4. 项目页 "↑ 你也来" sub-label 整段 → dotted 顶分隔 react-line
+5. "做了延伸版 →" × 2 → "做了延伸版"
+
+---
+
+## [0.4.0] — 2026-06-06 · 反馈闭环深度修复
+
+> Owner: feat 线 + be 线
+> 起点: 阶段 1-3 审计找到 8 处 🔴 闭环漏洞
+
+### Added (server)
+- `notifications.anchor` 列 + migration `002_notif_anchor.sql`
+- `markNotifRead` 单条已读 action (替代 markAllRead 进通知页时一口气全标)
+- `deleteTinkered` 接走方撤回延伸版 action
+- `editProject` 改 productLink → 给 tinkered + wantToTry 发 `projectMoved` 通知
+- `addUpdate` 加 `alsoStuck` flag · spec §5.3 "卡了"召回闭环
+- `addUpdate` 加 `notifyTinkered` flag · "跑通了大版本" 主动广播
+- `buildState` 通知输出加 `anchor` / `projectSlug` / `projectOwner`
+- updates / notes 暴露 `id` (给前端做锚点)
+
+### Changed (server)
+- `submitTinkered` 升级承诺时清掉旧 `wantToTry` 通知 (避免双通知)
+- `notify()` 统一接受 `anchor` 参数
+
+### Added (webapp)
+- `update modal` 加 v0.4 闭环 checkbox (同时改卡住 / 通知接走方) + 受众提示
+- 通知页 anchor scroll + flash 1.6s 高亮锚点位置
+- 接走者自己可见的"撤回延伸版"按钮
+- 通知未读改单条标已读 + 顶部"全部标已读"按钮
+- 6 类通知文案 verb 三色调 (warm/cool/grow)
+
+### Added (tests)
+- `server/test/actions-sql.test.js` 24 → 37 个测试 (13 新增)
+
+### Added (docs)
+- `docs/02-api.md` v0.4 全更新 · anchor 矩阵 · 新 action 文档
+
+---
+
+## [0.3.0] — 2026-06-05 · SQLite + 邮箱 magic link
+
+> Owner: be 线
+
+### Added (server)
+- SQLite 迁移 (better-sqlite3) · `migrations/runner.js` + `001_initial.sql`
+- 邮箱 magic link 认证 (`auth.js`) · token TTL 5min · session TTL 90 天
+- `email.js` SMTP 发送 (兼容阿里云邮件推送 / 任何 SMTP) · 无 SMTP 时 fallback 到 console
+- 用户邮箱预填 handle (`deriveHandle`) + welcome modal
+- 数据库 schema 完整: users / projects / updates / notes / reactions / tinkered / method_used / sessions / auth_tokens / notifications / starters / available_tools
+- `seed.js` 启动 seed (STARTERS + AVAILABLE_TOOLS)
+
+### Migrated
+- 从 JSON 文件迁移到 SQLite (`migrate-from-json.js` · 一次性)
+- 所有 actions 改成 SQL 版本 (`actions-sql.js` 替代 `actions.js`)
+
+### Added (webapp)
+- 邮箱登录 modal (两态: 输入邮箱 / 等待点链接)
+- welcome modal (第一次登录后改 handle + tagline)
+- 顶部刊头 "出去" 登出链接
+- "匿名浏览中" 视觉
+
+### Added (docs)
+- `docs/05-backend-design.md` · v0.3 后端设计
 
 ---
 
@@ -30,7 +176,7 @@
 - webapp 首次访问弹"你是谁?" modal
 - handle 存 `localStorage` · 顶部刊头点击可改
 - 新用户工作室空状态友好引导卡片
-- 关于页加 ALPHA 横幅 (说明 ngrok 临时性 + 求反馈)
+- 关于页加 ALPHA 横幅
 
 ### Added (真实时间戳)
 - server SEED 启动时把 `ago` 字符串转 `at` timestamp
@@ -41,9 +187,8 @@
 - `Dockerfile` (Node 20 alpine 多阶段 · 非 root)
 - `docker-compose.yml` (volume / env / healthcheck / 日志轮转)
 - `deploy/Caddyfile` (推荐 · 自动 HTTPS)
-- `deploy/nginx.conf` (备选 · 配 certbot)
-- `deploy/deploy.sh` (本地更新)
-- `deploy/setup-vps.sh` (新 VPS 一键 setup)
+- `deploy/nginx.conf` (备选)
+- `deploy/deploy.sh` / `deploy/setup-vps.sh`
 - 20 个 actions 测试 (node:test · 0 依赖)
 - prettier 配置
 
