@@ -122,13 +122,34 @@
   .workshop-name { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 48px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
   .workshop-tagline { font-family: 'Newsreader', serif; font-style: italic; color: var(--sepia); font-size: 19px; }
   .section-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 18px; }
-  .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
+  .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; position: relative; }
   .pcard:hover .pcard-name { color: var(--vermilion); }
-  .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
+  .pcard-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+  .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; flex: 1; min-width: 0; }
   .pcard-desc { color: var(--sepia); font-size: 14px; font-style: italic; margin-bottom: 8px; }
-  .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; }
+  .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
   .pcard-meta .stuck { color: var(--vermilion); }
   .pcard-meta .done { color: var(--moss); }
+  /* 状态小圆点 · 颜色按 status 变 · 替代之前的横线 */
+  .pcard-status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--sepia-light); margin-right: 8px; flex-shrink: 0; }
+  .pcard-status-dot.status-active  { background: var(--ink-soft); }
+  .pcard-status-dot.status-stuck   { background: var(--vermilion); }
+  .pcard-status-dot.status-done    { background: var(--moss); }
+  .pcard-status-dot.status-paused  { background: var(--sepia-light); }
+  .pcard-status-dot.status-archive { background: var(--sepia-light); }
+  /* 真实复用印章 · 只显示非零的 · 用真实手艺数据做差异化 · 不是包装 */
+  .pcard-stamps { display: flex; gap: 6px; flex-shrink: 0; }
+  .pcard-stamp {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--vermilion);
+    letter-spacing: 0.04em;
+    background: var(--paper);
+    padding: 2px 8px;
+    border: 1px dotted var(--vermilion);
+    border-radius: 2px;
+    white-space: nowrap;
+  }
 
   /* PROJECT */
   .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
@@ -3293,13 +3314,23 @@ function renderWorkshop(handle) {
     });
     methodsUsed.sort((a, b) => b.lastUsedAt - a.lastUsedAt);
   }
-  const renderPcards = (list) => list.map(p => `
-    <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
-      <div class="pcard-name">${escapeHtml(p.name)}</div>
-      <div class="pcard-desc">${escapeHtml(p.desc)}</div>
-      <div class="pcard-meta"><span class="${p.status}">— ${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
-    </div>
-  `).join('');
+  const renderPcards = (list) => list.map(p => {
+    const tinkeredCount = (p.reactions && p.reactions.tinkered) ? p.reactions.tinkered.length : 0;
+    const methodCount = (p.updates || []).reduce((acc, u) => acc + ((u.usedBy && u.usedBy.length) || 0), 0);
+    const stamps = [];
+    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过 ${tinkeredCount}</span>`);
+    if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用 ${methodCount}</span>`);
+    return `
+      <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
+        <div class="pcard-header">
+          <div class="pcard-name">${escapeHtml(p.name)}</div>
+          ${stamps.length > 0 ? `<div class="pcard-stamps">${stamps.join('')}</div>` : ''}
+        </div>
+        <div class="pcard-desc">${escapeHtml(p.desc)}</div>
+        <div class="pcard-meta"><span class="pcard-status-dot status-${p.status}"></span><span class="${p.status}">${statusText(p.status)}</span> &nbsp;·&nbsp; ${p.tools.slice(0,2).join(' · ')}</div>
+      </div>
+    `;
+  }).join('');
 
   const isDaodaoPortal = handle === 'daodao' && !isMe;
   root.innerHTML = `
@@ -3373,7 +3404,8 @@ function renderWorkshop(handle) {
           <div class="pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
             <div class="pcard-name">@${p.owner} / ${escapeHtml(p.name)}</div>
             <div class="pcard-meta">
-              <span style="color: var(--vermilion);">— ${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
+              <span class="pcard-status-dot status-${p.status}"></span>
+              <span style="color: var(--vermilion);">${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
             </div>
           </div>
         `).join('')}
