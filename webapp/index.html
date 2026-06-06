@@ -6097,8 +6097,8 @@ function renderFeed() {
   }
   // v0.37: day-label 退化为"换天信号" · 默认上下文是今天 (masthead 已有日期)
   // 只在"从今天 → 昨天" 等跨越时间边界时插入 label · 第一个"今天"group 不出现 label
+  // (todayKey 在上面 v0.58 stats 段已经声明 · 直接复用 · 否则同 scope 重复 const 会语法错)
   const groups = groupEventsByDay(events);
-  const todayKey = makeDateKey(new Date());
   groups.forEach(({ day, items, dateKey }, groupIdx) => {
     const skipLabel = (groupIdx === 0 && dateKey === todayKey);
     if (!skipLabel) {
