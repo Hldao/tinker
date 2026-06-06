@@ -853,6 +853,62 @@ async function cmdShip(opts) {
   } catch (e) { err(e.message); process.exit(1); }
 }
 
+// 一键更新到 git 最新版 · 适用于按"装 CLI 一键命令"那条进展装的人
+// 装的时候 git clone 到 ~/.tinker-src · update 就是 pull + 重新 npm install -g
+const SRC_DIR = path.join(os.homedir(), '.tinker-src');
+
+async function cmdUpdate() {
+  log('');
+  if (!fs.existsSync(SRC_DIR)) {
+    err('找不到 ' + sepia(SRC_DIR) + err('  这意味着你不是按官方一键命令装的'));
+    log('');
+    log(sepia('  如果你忘了当时怎么装的,可以重新跑一遍一键命令清装:'));
+    log('  ' + vermilion('git clone https://github.com/Hldao/tinker.git ~/.tinker-src && npm install -g ~/.tinker-src/cli'));
+    log('');
+    process.exit(1);
+  }
+
+  log(sepia('  拉最新代码 (git pull)...'));
+  let pullOut;
+  try {
+    pullOut = execSync('git pull --ff-only', { cwd: SRC_DIR, encoding: 'utf-8' });
+  } catch (e) {
+    err('git pull 失败:' + (e.message || ''));
+    log(sepia('  可能是网络问题,或者本地修改了文件 · 自己 cd 进 ' + SRC_DIR + ' 看看'));
+    process.exit(1);
+  }
+
+  if (pullOut.includes('Already up to date')) {
+    log(moss('  ✓ 已经是最新的 · 不用重装'));
+    log('');
+    return;
+  }
+  log(sepia('  ' + pullOut.split('\n').slice(0, 4).join('\n  ')));
+
+  log(sepia('  重装 CLI (npm install -g)...'));
+  try {
+    execSync('npm install -g ' + path.join(SRC_DIR, 'cli'), { stdio: 'inherit' });
+  } catch (e) {
+    err('npm install 失败');
+    log(sepia('  如果是权限问题,可能要 sudo · 或者改 npm prefix 到 ~/.npm-global'));
+    process.exit(1);
+  }
+
+  log('');
+  ok('CLI 升级完成');
+  // 最近几条更新内容(粗略)
+  try {
+    const recent = execSync('git log --since="7 days ago" --pretty=format:"  %s" -n 8 cli/', { cwd: SRC_DIR, encoding: 'utf-8' }).trim();
+    if (recent) {
+      log(sepia('  最近 CLI 的几个改动:'));
+      log(sepia(recent));
+    }
+  } catch (e) {}
+  log('');
+  log(sepia('  跑 ') + vermilion('tinker help') + sepia(' 看看新命令'));
+  log('');
+}
+
 function cmdHookInstall() {
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
@@ -911,6 +967,7 @@ function help() {
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
   log('  ' + vermilion('tinker config') + sepia('                      看当前配置'));
+  log('  ' + vermilion('tinker update') + sepia('                      拉最新代码 + 重装(需要按一键命令装的)'));
   log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook'));
   log('  ' + vermilion('tinker hook uninstall') + sepia('              卸 hook'));
   log('');
@@ -961,6 +1018,7 @@ async function main() {
       case 'push': await cmdPush(opts); break;
       case 'stuck': await cmdStuck(opts); break;
       case 'ship': await cmdShip(opts); break;
+      case 'update': await cmdUpdate(); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':
         if (args[1] === 'install') cmdHookInstall();
