@@ -60,9 +60,28 @@ function saveConfig(cfg) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
 }
-function mustHaveConfig() {
+// 默认 / 兜底 server URL (alpha 期生产 IP) · 旧 config 的 ngrok 地址会失效 · 这是 fallback
+const DEFAULT_SERVER_URL = 'http://120.26.46.217:8788';
+
+function mustHaveConfig(opts) {
+  const requireToken = !opts || opts.requireToken !== false;
   const cfg = loadConfig();
-  if (!cfg) { err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1); }
+  if (!cfg) {
+    err('还没配置 · 跑 ' + vermilion('tinker login'));
+    process.exit(1);
+  }
+  if (requireToken && !cfg.token) {
+    err('config 是老版的 · 没有钥匙(token)');
+    log(sepia('  原因:v0.1 alpha 时代用 handle 信任登录 · 现在改 Bearer token · 不兼容'));
+    log(sepia('  解法:'));
+    log(sepia('    1. 浏览器到 ') + vermilion(DEFAULT_SERVER_URL + '/#/w/<你的 handle>'));
+    log(sepia('    2. 在工作室 tagline 旁点 "CLI 钥匙" · 生成一把(只显示一次 · 复制下来)'));
+    log(sepia('    3. 跑 ' + vermilion('tinker login') + ' · 粘上钥匙'));
+    process.exit(1);
+  }
+  if (cfg.serverUrl && /ngrok/.test(cfg.serverUrl)) {
+    log(sepia('  ⚠ config 里的 server 还是 ngrok 临时地址 · 大概率已经死了 · 跑 ') + vermilion('tinker login') + sepia(' 会换成新的'));
+  }
   return cfg;
 }
 
@@ -73,25 +92,57 @@ function authHeaders(cfg) {
   if (!cfg.token) return { 'Content-Type': 'application/json' };
   return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token };
 }
+
+// 统一 fetch 包装 · 把 404/401/403/网络错误翻成 actionable 中文提示
+async function safeFetch(cfg, path, init) {
+  let res;
+  try {
+    res = await fetch(cfg.serverUrl + path, init);
+  } catch (e) {
+    throw new Error('连不上 server (' + cfg.serverUrl + ') · 网络不通或地址变了 · 跑 `tinker login` 重新配 server + 钥匙');
+  }
+  if (!res.ok) {
+    // 看响应体 · 但 404 时 server 可能返 HTML
+    let bodyErr = '';
+    try {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('json')) {
+        const data = await res.json();
+        bodyErr = data.error || '';
+      }
+    } catch (e) { /* swallow */ }
+    if (res.status === 404) {
+      throw new Error('404 · server 找不到这个接口 · 可能 config 里 server 地址旧了 · 跑 `tinker login` 重新配');
+    }
+    if (res.status === 401) {
+      throw new Error('401 · 钥匙过期或不对 · 跑 `tinker login` 重新粘一把新的');
+    }
+    if (res.status === 403) {
+      throw new Error('403 · 这把钥匙没权限做这件事 (比如 API token 不能管理 token)');
+    }
+    if (res.status === 429) {
+      throw new Error('429 · 请求太频繁 · 等 1 分钟再试');
+    }
+    throw new Error('server ' + res.status + ' · ' + (bodyErr || '(没具体错误信息)'));
+  }
+  return res;
+}
+
 async function apiState(cfg) {
-  const res = await fetch(cfg.serverUrl + '/api/state', { headers: authHeaders(cfg) });
-  if (!res.ok) throw new Error('server 返回 ' + res.status);
+  const res = await safeFetch(cfg, '/api/state', { headers: authHeaders(cfg) });
   return res.json();
 }
 async function apiMe(cfg) {
-  const res = await fetch(cfg.serverUrl + '/api/auth/me', { headers: authHeaders(cfg) });
-  if (!res.ok) throw new Error('/me 返回 ' + res.status);
+  const res = await safeFetch(cfg, '/api/auth/me', { headers: authHeaders(cfg) });
   return res.json();
 }
 async function apiAction(cfg, type, payload) {
-  const res = await fetch(cfg.serverUrl + '/api/action', {
+  const res = await safeFetch(cfg, '/api/action', {
     method: 'POST',
     headers: authHeaders(cfg),
     body: JSON.stringify({ type, payload }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'action 失败');
-  return data;
+  return res.json();
 }
 
 // =============================================
@@ -329,16 +380,27 @@ async function cmdLogin() {
 
 async function cmdConfig() {
   const cfg = loadConfig();
-  if (!cfg) { err('还没配置 · 先跑 tinker login'); process.exit(1); }
+  if (!cfg) { err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1); }
   log(sepia('\n  current config:'));
   log('    server     ' + bold(cfg.serverUrl));
-  log('    handle     ' + bold('@' + cfg.handle));
+  log('    handle     ' + bold('@' + (cfg.handle || '(未知 · 没填)')));
+  log('    token      ' + (cfg.token ? bold('tk_…' + cfg.token.slice(-4)) : sepia('(未配置)')));
   if (cfg.llm) {
     log('    llm        ' + bold(cfg.llm.provider) + sepia(' (key: ****' + cfg.llm.apiKey.slice(-4) + ')'));
   } else {
     log('    llm        ' + sepia('(未配置)'));
   }
-  log(sepia('    file       ' + CONFIG_FILE + '\n'));
+  log(sepia('    file       ' + CONFIG_FILE));
+  // 警告区
+  const warnings = [];
+  if (!cfg.token) warnings.push('钥匙没配 · v0.1 alpha 时代的旧 config · 跑 ' + vermilion('tinker login') + sepia(' 配新钥匙'));
+  if (cfg.serverUrl && /ngrok/.test(cfg.serverUrl)) warnings.push('server 还是 ngrok 临时地址 · 大概率已经死了 · 跑 ' + vermilion('tinker login') + sepia(' 换成生产地址'));
+  if (warnings.length > 0) {
+    log('');
+    log(sepia('  ⚠ 注意:'));
+    warnings.forEach(w => log(sepia('    · ' + w)));
+  }
+  log('');
 }
 
 async function cmdProjects() {
