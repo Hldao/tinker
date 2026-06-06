@@ -150,6 +150,34 @@
   .feed-cta-line { font-family: 'Newsreader', serif; font-size: 14px; color: var(--vermilion); cursor: pointer; border-bottom: 1px solid var(--vermilion); padding-bottom: 1px; transition: all 0.15s; display: inline-block; }
   .feed-cta-line:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
+  /* v0.60 革命 · 主屏视图切换 (动静 + 陈列馆合并的开关)
+     两个 pill 并列 · 比 filter-pill 视觉权重重一档 · 因为它换的不是数据 · 是整页布局 */
+  .main-view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 28px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 10px 0;
+  }
+  .main-view-pill {
+    font-family: 'Newsreader', serif;
+    font-size: 15px;
+    color: var(--sepia);
+    cursor: pointer;
+    padding: 2px 0;
+    border-bottom: 1px dotted transparent;
+    transition: all 0.15s;
+  }
+  .main-view-pill:hover {
+    color: var(--ink);
+  }
+  .main-view-pill.active {
+    color: var(--vermilion);
+    border-bottom: 1px solid var(--vermilion);
+    font-style: italic;
+  }
+
   .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
   .entry:hover { background: rgba(194, 65, 12, 0.04); }
   .entry-time { color: var(--sepia); font-size: 13px; padding-top: 4px; }
@@ -5079,14 +5107,13 @@
 <header class="masthead">
   <!-- v0.48 主行 · logo + 主 nav 3 项 + 独立 CTA -->
   <div class="max-w-3xl mx-auto px-8 py-5 masthead-main-row">
-    <div class="masthead-brand cursor-pointer" onclick="showScreen('feed')">
+    <div class="masthead-brand cursor-pointer" onclick="goHome()">
       <span class="title">Tinker</span>
       <span class="title-cn">捣鼓</span>
     </div>
     <div class="masthead-actions">
       <nav class="masthead-nav-primary">
-        <button onclick="showScreen('feed')">动静</button>
-        <button onclick="showScreen('showcase')">陈列馆</button>
+        <button onclick="goHome()">工坊</button>
         <button onclick="navMyWorkshop()">我的工作室</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
@@ -5109,10 +5136,16 @@
 
   <section class="screen active" id="screen-feed">
     <div class="mb-8">
+      <div class="workshop-eyebrow mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.3em;">工 坊</div>
       <h1 class="feed-title mb-3">今天有动静</h1>
-      <p class="feed-sub mb-2">路过看一眼别人在做什么 — 时间倒序,不是热门排名</p>
+      <p class="feed-sub mb-2">大家在做的、做出来的 — 路过看一眼别人在捣鼓什么</p>
       <span class="feed-cta-line" onclick="openPickProject()">或者你今天也来记一笔 →</span>
       <div id="feed-stats" class="feed-stats"></div>
+      <!-- v0.60 革命:动静 + 陈列馆合并 · 视图切换 pill 在这里 -->
+      <div class="main-view-toggle mt-6">
+        <span class="main-view-pill active" data-view="stream" onclick="switchMainView('stream')">时序看进展</span>
+        <span class="main-view-pill" data-view="gallery" onclick="switchMainView('gallery')">项目分组看积累</span>
+      </div>
     </div>
     <div class="filter-row mb-4">
       <div id="tool-filters" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
@@ -5228,12 +5261,14 @@
 
   <section class="screen" id="screen-showcase">
     <div class="mb-6">
-      <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">陈列馆</div>
+      <div class="workshop-eyebrow mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.3em;">工 坊</div>
       <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">Tinker 上所有人做完的、还能玩到的小作品都在这。时间倒序，<strong>不投票，不排行，看到喜欢的就去试用一下</strong>。</p>
+      <p class="feed-sub">大家在做的、做出来的 — 按项目分组,看每个作品的积累</p>
       <div id="showcase-stats" class="showcase-stats"></div>
-      <div class="showcase-publish-row">
-        <button class="showcase-publish-cta" onclick="openShipPick()">✦ 让你的作品也入馆</button>
+      <!-- v0.60 革命:跟动静屏共享视图切换 -->
+      <div class="main-view-toggle mt-6">
+        <span class="main-view-pill" data-view="stream" onclick="switchMainView('stream')">时序看进展</span>
+        <span class="main-view-pill active" data-view="gallery" onclick="switchMainView('gallery')">项目分组看积累</span>
       </div>
     </div>
     <div class="filter-row mb-4">
@@ -5245,7 +5280,7 @@
       </div>
     </div>
     <div id="showcase-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
-      — 陈列馆收三类:跑通的、还在打磨的原型、设计稿。在做的过程在主屏「动静」看 —
+      — 工坊里所有能玩到的项目都在这。时序看进展那一面在隔壁视图 —
     </div>
   </section>
 
@@ -5856,6 +5891,30 @@ async function refreshState() {
   state = await fetchState();
 }
 
+// v0.60 革命:主屏 (工坊) 两个视图 · feed=时序流 · showcase=项目分组
+// 用 localStorage stick 用户上一次的选择 · 让 home 按钮 / 入站 hash 都能回到对的视图
+function getStoredMainView() {
+  try { return localStorage.getItem('tinker_main_view') === 'gallery' ? 'gallery' : 'stream'; }
+  catch { return 'stream'; }
+}
+function setStoredMainView(v) {
+  try { localStorage.setItem('tinker_main_view', v); } catch {}
+}
+
+// 主屏入口 (顶 nav 的 "工坊" 按钮 + brand logo 点击)
+function goHome() {
+  const v = getStoredMainView();
+  if (v === 'gallery') showScreen('showcase');
+  else showScreen('feed');
+}
+
+// 视图切换 pill 点了走这里 · 切到对应屏 + 记忆
+function switchMainView(v) {
+  setStoredMainView(v);
+  if (v === 'gallery') showScreen('showcase');
+  else showScreen('feed');
+}
+
 function showScreen(name, ...args) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const t = document.getElementById('screen-' + name);
@@ -5873,6 +5932,9 @@ function showScreen(name, ...args) {
   if (location.hash !== newHash) {
     history.replaceState(null, '', newHash);
   }
+  // feed/showcase 是同一个"工坊"的两个视图 · 进任一屏都记忆
+  if (name === 'feed') setStoredMainView('stream');
+  else if (name === 'showcase') setStoredMainView('gallery');
 }
 
 // hash 路由 — 让项目页 / 工作室页有可分享 URL
@@ -5882,21 +5944,24 @@ function buildHash(name, args) {
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
-  if (name === 'showcase') return args && args[0] ? '#/showcase/' + encodeURIComponent(args[0]) : '#/showcase';
+  if (name === 'feed') return '#/';
+  // 项目分组视图 · 用短 hash /g · 老链接 /showcase 也兼容 (navigateFromHash 处)
+  if (name === 'showcase') return args && args[0] ? '#/g/' + encodeURIComponent(args[0]) : '#/g';
   return '#/';
 }
 
 function navigateFromHash() {
   const h = location.hash || '';
-  if (!h || h === '#/' || h === '#') return showScreen('feed');
+  if (!h || h === '#/' || h === '#') return goHome();  // 入站默认走记忆里的视图
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
   if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
   if (parts[0] === 'notifications') return showScreen('notifications');
   if (parts[0] === 'about') return showScreen('about');
   if (parts[0] === 'onboard') return showScreen('onboard');
-  if (parts[0] === 'showcase') return showScreen('showcase', parts[1]);
-  return showScreen('feed');
+  if (parts[0] === 'g') return showScreen('showcase', parts[1]);       // 新短 hash
+  if (parts[0] === 'showcase') return showScreen('showcase', parts[1]); // 老链接兼容
+  return goHome();
 }
 
 window.addEventListener('hashchange', navigateFromHash);
