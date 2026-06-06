@@ -747,11 +747,28 @@ function imageFromPath(filePath) {
 }
 
 // 调 microlink.io 抓 URL 截图 → 下载 → 转 base64 data URL
-// 免费 50 次/天,不需要 API key,16:9 viewport 跟陈列馆 figure 匹配
+// 免费 50 次/天, 不需要 API key, 16:9 viewport 跟陈列馆 figure 匹配
+// 参数取舍:
+// - viewport 1280x720 (16:9 桌面) · deviceScaleFactor=2 → 高清 retina
+// - waitUntil=networkidle0 · 等到没有网络请求才截 (SPA 必备)
+// - waitForTimeout=2500 · 多等 2.5s 让懒加载图片 / 字体 / 入场动画落地
+// - JPEG quality 85 · 文件大小 / 清晰度的甜蜜点
 async function screenshotUrl(url) {
-  const api = 'https://api.microlink.io/?url=' + encodeURIComponent(url) + '&screenshot=true&type=jpeg&viewport.width=1280&viewport.height=720&meta=false';
+  const params = new URLSearchParams({
+    url,
+    screenshot: 'true',
+    type: 'jpeg',
+    'viewport.width': '1280',
+    'viewport.height': '720',
+    'viewport.deviceScaleFactor': '2',
+    waitUntil: 'networkidle0',
+    waitForTimeout: '2500',
+    'screenshot.quality': '85',
+    meta: 'false',
+  });
+  const api = 'https://api.microlink.io/?' + params.toString();
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 30000); // 30s 超时
+  const timer = setTimeout(() => ctl.abort(), 45000); // 45s 超时 (deviceScale=2 + wait 更长 · 多留余地)
   let json;
   try {
     const res = await fetch(api, { signal: ctl.signal });

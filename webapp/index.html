@@ -5577,9 +5577,9 @@
     </div>
 
     <div class="mb-5">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">可访问产物链接 *</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">可访问产物链接 (可选)</label>
       <input id="np-link" class="input-bare" placeholder="https://...">
-      <div class="field-hint">v0 / Bolt / Lovable / Replit / GitHub / 自部署都行 — 陌生人不联系你就能玩到 = 合格</div>
+      <div class="field-hint">v0 / Bolt / Lovable / Replit / GitHub / 自部署都行 — 陌生人不联系你就能玩到 = 合格。微信小程序 / 桌面应用 / 还在审核, 可以暂时空着, 之后再补</div>
     </div>
 
     <div class="mb-5">
@@ -6328,13 +6328,14 @@ function renderProject(owner, slug) {
       </div>
       <h1 class="pname">${escapeHtml(p.name)}</h1>
       <p class="pdesc">${escapeHtml(p.desc)}</p>
+      ${p.productLink ? `
       <div class="pheader-action-row" style="justify-content: flex-end;">
         <a href="${p.productLink}" target="_blank" class="try-cta">
           <span>去试试</span>
           <span class="try-cta-arrow">→</span>
           <span class="try-cta-url">${p.productLink}</span>
         </a>
-      </div>
+      </div>` : ''}
     </div>
 
     <div class="mb-12">
@@ -6508,7 +6509,7 @@ function renderProject(owner, slug) {
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('xhs')">${ICONS.xhs}分享到小红书</span>
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('wechat')">${ICONS.wechat}分享到微信</span>
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('copy')">${ICONS.link}复制项目链接</span>
-        <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.external}只复制产物 URL</span>
+        ${p.productLink ? `<span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.external}只复制产物 URL</span>` : ''}
       </div>
     </div>
   `;
@@ -6915,7 +6916,8 @@ async function submitNewProject() {
 
   if (!name) { showToast('项目得有个名字'); return; }
   if (!desc) { showToast('一句话描述能让别人知道这是什么'); return; }
-  if (!isValidUrl(link)) { showToast('需要一个 https:// 的可访问产物链接 — 反 "AI 装大佬"'); return; }
+  // 链接可选(微信小程序 / 桌面应用 / 审核中的作品可以暂时空着) · 但填了就得是合法 URL
+  if (link && !isValidUrl(link)) { showToast('如果填了链接, 得是 https:// 开头的'); return; }
 
   // 编辑模式: 走 editProject · 不走 addProject
   if (editingProjectId) {

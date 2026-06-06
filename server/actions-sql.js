@@ -92,7 +92,9 @@ function renameHandle({ handle }, { currentUserId }) {
 function addProject({ name, desc, productLink, status = 'active', tools = [], githubLink }, { currentUserId }) {
   if (!name || !name.trim()) throw new Error('项目得有个名字');
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
-  if (!isValidUrl(productLink)) throw new Error('需要 https:// 的可访问产物链接');
+  // productLink 可选 · 但如果填了必须是合法 https URL(微信小程序 / 桌面应用 / 审核中的项目可以暂时空着)
+  const link = (productLink || '').trim();
+  if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 https:// 开头的可访问链接');
 
   const projectId = 'p-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const slug = makeSlug();
@@ -102,7 +104,7 @@ function addProject({ name, desc, productLink, status = 'active', tools = [], gi
     db.prepare(`
       INSERT INTO projects (id, owner_id, slug, name, desc, product_link, status, github_link, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(projectId, currentUserId, slug, name.trim(), desc.trim(), productLink.trim(),
+    `).run(projectId, currentUserId, slug, name.trim(), desc.trim(), link || null,
            status, githubLink || null, now, now);
 
     const insTool = db.prepare('INSERT INTO project_tools (project_id, tool) VALUES (?, ?)');
@@ -119,19 +121,21 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
   if (!projectId) throw new Error('projectId required');
   if (!name || !name.trim()) throw new Error('项目得有个名字');
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
-  if (!isValidUrl(productLink)) throw new Error('需要 https:// 的可访问产物链接');
+  // productLink 可选 · 但如果填了必须是合法 URL
+  const link = (productLink || '').trim();
+  if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 https:// 开头的可访问链接');
 
   const p = db.prepare('SELECT owner_id, product_link FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
   if (p.owner_id !== currentUserId) throw new Error('只能改自己的项目');
 
-  const linkChanged = p.product_link !== productLink.trim();
+  const linkChanged = (p.product_link || '') !== link;
 
   const txn = db.transaction(() => {
     db.prepare(`
       UPDATE projects SET name = ?, desc = ?, product_link = ?, updated_at = ?
       WHERE id = ?
-    `).run(name.trim(), desc.trim(), productLink.trim(), Date.now(), projectId);
+    `).run(name.trim(), desc.trim(), link || null, Date.now(), projectId);
 
     if (Array.isArray(tools)) {
       db.prepare('DELETE FROM project_tools WHERE project_id = ?').run(projectId);
@@ -159,7 +163,7 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
     for (const uid of targets) {
       notify({
         targetUserId: uid, fromUserId: currentUserId, type: 'projectMoved',
-        projectId, extra: productLink.trim(),
+        projectId, extra: link,
       });
     }
   }
