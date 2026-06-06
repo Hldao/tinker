@@ -53,6 +53,9 @@
   .feed-sub { color: var(--sepia); font-family: 'Newsreader', serif; font-size: 16px; }
   .filter-row { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 10px 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
   .filter-pill { color: var(--sepia); font-size: 13px; padding: 2px 0; margin-right: 18px; cursor: pointer; border-bottom: 1px solid transparent; transition: all 0.15s; font-family: 'JetBrains Mono', monospace; }
+  /* welcome modal handle 冲突时 · 可点击的建议 pill */
+  .handle-suggest-pill { display: inline-block; font-family: 'Newsreader', serif; font-size: 12px; color: var(--vermilion); background: var(--paper); border: 1px dotted var(--vermilion); padding: 1px 8px; border-radius: 2px; margin-left: 4px; cursor: pointer; transition: all 0.15s; }
+  .handle-suggest-pill:hover { background: var(--vermilion); color: var(--bg); }
   .filter-pill:hover { color: var(--ink); border-bottom-color: var(--sepia-light); }
   .filter-pill.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
   .tracking-toggle { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; transition: all 0.15s; white-space: nowrap; letter-spacing: 0.04em; }
@@ -4620,6 +4623,7 @@
     <div class="mb-4">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">@handle (字母 / 数字 / 下划线 / 中文)</label>
       <input id="sh-handle" class="input-bare" placeholder="比如 zhang3 / wangxiaoming">
+      <div id="sh-handle-hint" class="mono text-xs" style="margin-top: 4px; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; min-height: 18px;"></div>
     </div>
     <div class="mb-4">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">一句话 — 我在做的事 (可选)</label>
@@ -4878,7 +4882,12 @@ async function apiWelcome(handle, tagline) {
     body: JSON.stringify({ handle, tagline }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '保存失败');
+  if (!res.ok) {
+    const err = new Error(data.error || '保存失败');
+    if (data.code) err.code = data.code;
+    if (Array.isArray(data.suggestions)) err.suggestions = data.suggestions;
+    throw err;
+  }
   return data.user;
 }
 
@@ -7114,10 +7123,49 @@ function resetLoginForm() {
 
 // 打开 Welcome modal · 第一次登录用 (handle 已被 server 从邮箱预填)
 function openWelcomeAfterLogin() {
-  document.getElementById('sh-handle').value = currentUser.handle || '';
+  const handleEl = document.getElementById('sh-handle');
+  handleEl.value = currentUser.handle || '';
   document.getElementById('sh-tagline').value = '';
+  document.getElementById('sh-handle-hint').innerHTML = '';
   document.getElementById('modal-set-handle').classList.remove('hidden');
-  setTimeout(() => document.getElementById('sh-handle').focus(), 80);
+  // 边输边检查 handle 可用 · 350ms debounce
+  handleEl.oninput = () => debouncedHandleCheck(handleEl.value.trim());
+  setTimeout(() => handleEl.focus(), 80);
+  // 初始时也跑一次检查 · 让用户看到当前预填的状态
+  setTimeout(() => debouncedHandleCheck(handleEl.value.trim()), 200);
+}
+
+let _handleCheckTimer = null;
+function debouncedHandleCheck(handle) {
+  clearTimeout(_handleCheckTimer);
+  const hint = document.getElementById('sh-handle-hint');
+  if (!handle) { hint.innerHTML = ''; return; }
+  if (!/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) {
+    hint.innerHTML = '<span style="color: var(--vermilion);">handle 只能 1-20 字 · 字母/数字/下划线/中文</span>';
+    return;
+  }
+  hint.innerHTML = '<span style="color: var(--sepia-light);">检查中…</span>';
+  _handleCheckTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/auth/check-handle?handle=' + encodeURIComponent(handle), { credentials: 'same-origin' });
+      const data = await res.json();
+      if (data.available) {
+        hint.innerHTML = '<span style="color: var(--moss);">✓ 「' + escapeHtml(handle) + '」可以用</span>';
+      } else if (data.suggestions && data.suggestions.length > 0) {
+        const pills = data.suggestions.map(s => `<span class="handle-suggest-pill" onclick="pickHandleSuggestion('${escapeHtml(s).replace(/'/g,'&#39;')}')">${escapeHtml(s)}</span>`).join('');
+        hint.innerHTML = '<span style="color: var(--vermilion);">这个 handle 被占了 · 试试:</span> ' + pills;
+      } else {
+        hint.innerHTML = '<span style="color: var(--vermilion);">' + escapeHtml(data.reason || '不能用') + '</span>';
+      }
+    } catch (e) {
+      hint.innerHTML = '<span style="color: var(--sepia-light);">检查出错 · 直接提交也行 · 后端会再校一次</span>';
+    }
+  }, 350);
+}
+
+function pickHandleSuggestion(handle) {
+  document.getElementById('sh-handle').value = handle;
+  debouncedHandleCheck(handle);
 }
 
 async function submitWelcome() {
@@ -7144,7 +7192,17 @@ async function submitWelcome() {
       navigateFromHash();
     }
     showToast('开张了 · 你好 @' + handle);
-  } catch (e) { showToast(e.message); }
+  } catch (e) {
+    // handle 冲突 · 把建议显示在 hint 区里 · 而不是只 toast
+    const hint = document.getElementById('sh-handle-hint');
+    if (e.code === 'HANDLE_TAKEN' && Array.isArray(e.suggestions) && e.suggestions.length > 0 && hint) {
+      const pills = e.suggestions.map(s => `<span class="handle-suggest-pill" onclick="pickHandleSuggestion('${escapeHtml(s).replace(/'/g,'&#39;')}')">${escapeHtml(s)}</span>`).join('');
+      hint.innerHTML = '<span style="color: var(--vermilion);">这个 handle 被占了 · 试试:</span> ' + pills;
+      showToast('handle 被占了 · 看下面建议');
+    } else {
+      showToast(e.message);
+    }
+  }
 }
 
 // 导航辅助 · 互动入口

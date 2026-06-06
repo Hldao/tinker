@@ -210,8 +210,20 @@ app.post('/api/auth/welcome', auth.requireSession, (req, res) => {
     const updated = auth.completeWelcome({ userId: req.user.id, handle, tagline });
     res.json({ ok: true, user: updated });
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    const out = { error: e.message };
+    if (e.code) out.code = e.code;
+    if (Array.isArray(e.suggestions)) out.suggestions = e.suggestions;
+    res.status(400).json(out);
   }
+});
+
+// 实时检查 handle 是否可用 · 用户填 welcome / 改 handle 时调
+app.get('/api/auth/check-handle', (req, res) => {
+  const handle = String(req.query.handle || '').trim();
+  if (!handle) return res.json({ ok: false, available: false, reason: '不能空' });
+  const excludeUserId = req.user ? req.user.id : null;
+  const result = auth.checkHandleAvailability(handle, excludeUserId);
+  res.json(result);
 });
 
 // 登出

@@ -36,6 +36,40 @@ function findUniqueHandle(base) {
   return base + Date.now().toString(36).slice(-4); // fallback
 }
 
+// handle 已被占用时 · 生成几个替代候选给用户选 · 加数字 / 下划线 / 字母后缀
+function suggestHandles(base, count = 3) {
+  const exists = db.prepare('SELECT 1 FROM users WHERE handle = ?');
+  const out = [];
+  // 数字后缀 1-99
+  for (let i = 1; i < 100 && out.length < count; i++) {
+    const candidate = base + i;
+    if (!exists.get(candidate)) out.push(candidate);
+  }
+  // 下划线 · 再加些不同形态
+  if (out.length < count) {
+    const c = base + '_';
+    if (!exists.get(c)) out.push(c);
+  }
+  // 加 the / my 这种(英文 base 时偶尔有意义 · 中文场景没什么用 · 保留兼容)
+  if (out.length < count && !/[一-龥]/.test(base)) {
+    const c = 'the' + base;
+    if (!exists.get(c)) out.push(c);
+  }
+  return out.slice(0, count);
+}
+
+// 检查 handle 是否可用 · 不可用时附建议
+function checkHandleAvailability(handle, excludeUserId) {
+  if (!handle || !/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) {
+    return { ok: false, available: false, reason: 'handle 只能 1-20 字 · 字母/数字/下划线/中文' };
+  }
+  const existing = excludeUserId
+    ? db.prepare('SELECT id FROM users WHERE handle = ? AND id != ?').get(handle, excludeUserId)
+    : db.prepare('SELECT id FROM users WHERE handle = ?').get(handle);
+  if (!existing) return { ok: true, available: true };
+  return { ok: true, available: false, suggestions: suggestHandles(handle, 3) };
+}
+
 // ============================================
 // 1. 发 magic link
 // ============================================
@@ -241,13 +275,20 @@ function requireSession(req, res, next) {
 // ============================================
 function completeWelcome({ userId, handle, tagline }) {
   if (!handle || !/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) {
-    throw new Error('handle 只能 1-20 字 · 字母/数字/下划线/中文');
+    const e = new Error('handle 只能 1-20 字 · 字母/数字/下划线/中文');
+    e.code = 'INVALID_HANDLE';
+    throw e;
   }
   tagline = (tagline || '').trim().slice(0, 80);
 
   // handle 冲突检查 (不是自己)
   const existing = db.prepare('SELECT id FROM users WHERE handle = ? AND id != ?').get(handle, userId);
-  if (existing) throw new Error('这个 handle 被人用了 · 换一个');
+  if (existing) {
+    const e = new Error('这个 handle 被人用了 · 换一个');
+    e.code = 'HANDLE_TAKEN';
+    e.suggestions = suggestHandles(handle, 3);
+    throw e;
+  }
 
   db.prepare(`UPDATE users SET
     handle = ?, name = ?, tagline = ?, updated_at = ?
@@ -259,6 +300,7 @@ function completeWelcome({ userId, handle, tagline }) {
 }
 
 module.exports = {
+  checkHandleAvailability,
   sendMagicLink,
   verifyMagicLink,
   getSession,
