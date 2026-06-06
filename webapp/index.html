@@ -4370,9 +4370,14 @@
           <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">不是点赞,是「我用了你的方法 · 跑通了」。有人真的把你的东西接走用了,比 1000 个赞重要。</p>
         </div>
 
-        <div>
+        <div style="margin-bottom: 28px;">
           <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 作品必须挂可访问产物</div>
           <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">截图 + AI 文案 ≠ 作品。陌生人不联系你就能玩到的,才叫作品。这是反「AI 装大佬」的硬边界。</p>
+        </div>
+
+        <div>
+          <div class="display" style="color: var(--vermilion); font-size: 19px; margin-bottom: 6px; font-weight: 500;">— 做完的事也有位置</div>
+          <p class="serif" style="color: var(--ink-soft); font-size: 16px; line-height: 1.6; padding-left: 14px;">完工不是静默操作。改成「跑通了」时要写一句感想 · 进 <span class="react-action" onclick="showScreen('showcase')" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">陈列馆</span> · 让做完的小作品被看见。但仍然<strong>不投票 · 不排行</strong>·看到喜欢的就真的去试用。</p>
         </div>
       </div>
 
@@ -5459,6 +5464,7 @@ function renderProject(owner, slug) {
     <div class="pheader">
       <div class="mb-3 flex items-center gap-3 flex-wrap">
         <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">项目 · ${statusText(p.status)}</span>
+        ${p.status === 'done' ? `<span class="react-action mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; border-bottom-color: var(--vermilion);" onclick="showScreen('showcase')">在陈列馆里 →</span>` : ''}
         ${isMine ? `
           <span class="small-action" onclick="openStatusPicker('${p.id}')">${ICONS.gear}改状态</span>
           <span class="small-action" onclick="openEditProject('${p.id}')">${ICONS.edit}改项目</span>
@@ -6409,10 +6415,27 @@ POST /api/action
   }
 }
 
-### 3) 改项目状态
+### 3) 改项目状态(普通切换 · 不写感想)
 POST /api/action
 { "type": "changeProjectStatus", "payload": { "projectId": "...", "newStatus": "done" } }
 状态: active / stuck / done / paused / archive
+
+### 4) 完工 ceremony (重要 · "跑通了 / 做完了 / ship" 时用这个 · 不要用 changeProjectStatus)
+POST /api/action
+{
+  "type": "shipProject",
+  "payload": {
+    "projectId": "...",
+    "reflection": "<完工感想 · Tinker voice · 别凑数 · 最想说的那句>",
+    "seekingFeedback": true,
+    "feedbackAsk": "<可选 · 想知道什么>"
+  }
+}
+副作用:status → done · 记 shipped_at · 创建 kind=ship 的 update · 通知"想试试"的人 · 进陈列馆。
+
+判断:
+- 我说"跑通了 / 做完了 / 完工了 / ship it" → 用 shipProject
+- 我说"先归档 / 暂停 / 不做了" → 用 changeProjectStatus
 
 ## 找我的项目 + update id
 

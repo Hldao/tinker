@@ -53,7 +53,7 @@ POST /api/action
   }
 }
 
-### 3) 改项目状态
+### 3) 改项目状态(普通切换 · 不写感想)
 
 POST /api/action
 {
@@ -62,6 +62,28 @@ POST /api/action
 }
 
 状态有:active / stuck / done / paused / archive。
+
+### 4) 完工 ceremony (重要 · 跑通了一个东西时用这个 · 不要用 changeProjectStatus)
+
+完工不是普通状态切换 · 是一件值得仪式感的事。要写一句感想 · 这句话会进时间线 + 陈列馆。
+默认勾求反馈 · 让陈列馆里看到这个项目的人能给作者反馈。
+
+POST /api/action
+{
+  "type": "shipProject",
+  "payload": {
+    "projectId": "...",
+    "reflection": "<完工感想 · 200-400 字 · Tinker voice · 别凑数 · 最想说的那句>",
+    "seekingFeedback": true,
+    "feedbackAsk": "<可选 · 想知道什么·比如:5 秒内看得懂吗 / 流程哪里不顺>"
+  }
+}
+
+副作用:status → done · 记 shipped_at · 创建 kind=ship 的 update · 通知"想试试"的人。
+
+什么时候用 shipProject vs changeProjectStatus:
+- 我说"跑通了 / 做完了 / 完工了 / ship it" → 用 shipProject
+- 我说"先归档 / 暂停 / 不做了" → 用 changeProjectStatus
 
 ## 找我的项目 + update id
 

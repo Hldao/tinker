@@ -657,6 +657,65 @@ async function cmdStuck(opts) {
   }
 }
 
+async function cmdShip(opts) {
+  const cfg = mustHaveConfig();
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  // 完工只对当前不是 done 的项目有意义
+  const mine = state.projects.filter(p => p.owner === me && p.status !== 'done' && p.status !== 'archive');
+  if (mine.length === 0) {
+    err('你没有可以完工的项目 (都已 done 或 archive 了) · 去 ' + cfg.serverUrl + ' 看看');
+    process.exit(1);
+  }
+
+  let projectId;
+  if (opts.projectId) {
+    projectId = opts.projectId;
+  } else if (mine.length === 1) {
+    projectId = mine[0].id;
+    log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
+  } else {
+    const { select } = require('@inquirer/prompts');
+    projectId = await select({
+      message: '哪个项目完工了?',
+      choices: mine.map(p => ({
+        name: p.name + sepia('  ' + p.desc.slice(0, 40)),
+        value: p.id,
+      })),
+    });
+  }
+
+  let reflection = opts.text;
+  if (!reflection) {
+    const { input } = require('@inquirer/prompts');
+    reflection = await input({
+      message: '写一句完工感想 (会进时间线 · 也进陈列馆代表这件作品)',
+      default: undefined,
+    });
+  }
+  reflection = (reflection || '').trim();
+  if (!reflection) { err('完工感想不能空 — 说一句也行'); process.exit(1); }
+
+  // --feedback-ask "..." 启用求反馈 + 写问题 · --no-feedback 关求反馈
+  let seekingFeedback = true;
+  let feedbackAsk = '';
+  if (opts.noFeedback) seekingFeedback = false;
+  if (opts.feedbackAsk) feedbackAsk = opts.feedbackAsk;
+
+  const p = mine.find(x => x.id === projectId);
+  try {
+    await apiAction(cfg, 'shipProject', { projectId, reflection, seekingFeedback, feedbackAsk });
+    const wt = (p.reactions && p.reactions.wantToTry) ? p.reactions.wantToTry.length : 0;
+    log('');
+    ok(vermilion('✦ 完工 ') + '— ' + bold(p.name));
+    log(sepia('  感想: ') + reflection.slice(0, 80) + (reflection.length > 80 ? '…' : ''));
+    if (seekingFeedback) log(sepia('  求反馈: ') + (feedbackAsk || '勾上了 · 没填具体问题'));
+    if (wt > 0) log(sepia('  已通知 ') + bold(wt + '') + sepia(' 个想试试的人'));
+    log(sepia('  陈列馆: ') + cfg.serverUrl + '/#/showcase');
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
 function cmdHookInstall() {
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
@@ -705,6 +764,11 @@ function help() {
   log('  ' + vermilion('tinker push') + sepia('                        交互式 · 默认最近一条 commit 作为建议'));
   log('  ' + vermilion('tinker stuck -m "..."') + sepia('              标项目卡住 + 写"卡在哪" · 通知关心你的人'));
   log('');
+  log(sepia('  ') + vermilion('完工'));
+  log('  ' + vermilion('tinker ship -m "..."') + sepia('               改 done + 写完工感想 · 进时间线和陈列馆'));
+  log('  ' + vermilion('tinker ship -m "..." --feedback-ask "..."') + sepia(' · 加上"想知道"的具体问题'));
+  log('  ' + vermilion('tinker ship -m "..." --no-feedback') + sepia('    · 不勾求反馈'));
+  log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
   log('  ' + vermilion('tinker config') + sepia('                      看当前配置'));
@@ -728,6 +792,9 @@ function parseArgs(args) {
     else if (a === '-p' || a === '--project') opts.projectId = args[++i];
     else if (a.startsWith('--only=')) opts.only = a.slice('--only='.length);
     else if (a === '--only') opts.only = args[++i];
+    else if (a === '--feedback-ask') opts.feedbackAsk = args[++i];
+    else if (a.startsWith('--feedback-ask=')) opts.feedbackAsk = a.slice('--feedback-ask='.length);
+    else if (a === '--no-feedback') opts.noFeedback = true;
     // 不以 - 开头的第一个 positional 当成草稿文件路径
     else if (!a.startsWith('-') && !opts.draftFile) {
       // 必须是已存在的文件 / 以 .md 结尾
@@ -751,6 +818,7 @@ async function main() {
       case 'projects': case 'ls': await cmdProjects(); break;
       case 'push': await cmdPush(opts); break;
       case 'stuck': await cmdStuck(opts); break;
+      case 'ship': await cmdShip(opts); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':
         if (args[1] === 'install') cmdHookInstall();
