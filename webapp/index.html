@@ -5627,10 +5627,11 @@
    *    · ALPHA 段落沉底 · 小字 sepia · 无背景框
    *  ================================================================ */
 
-  /* —— 容器 —— */
+  /* —— 容器 · v0.66.1: 跟主容器 max-w-3xl 同宽 · 不再硬切窄 —— */
   #screen-about .about-container {
-    max-width: 560px;
+    width: 100%;
     margin: 0 auto;
+    /* 阅读舒适感靠段落内容控制 · 不靠强行收窄容器 */
   }
 
   /* —— Hero —— */
@@ -6474,10 +6475,10 @@
 <div id="toast" class="hidden fixed bottom-8 left-1/2 -translate-x-1/2 toast-paper z-50"></div>
 
 <!-- UI build badge · 右下角小标识 · hover 显示累积 patch 段数 -->
-<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.66 · 42 个子段 · 详见 CHANGELOG.md">
+<div class="ui-build-badge" title="UI patch 累积 v0.27 → v0.66.1 · 43 个子段 · 详见 CHANGELOG.md">
   <span class="bb-scope">ui</span>
   <span class="bb-sep">·</span>
-  <span class="bb-ver">v0.66</span>
+  <span class="bb-ver">v0.66.1</span>
 </div>
 
 <script>
