@@ -1088,28 +1088,30 @@ function triggerCumulativeCommits(opts = {}) {
   } catch { return { fired: false }; }
 }
 
-// B · 最近一条 commit message 含关键词 · 高信号
+// B · 最近一条 commit 标题 (第一行) 含关键词 · 高信号
+// 只看标题不看 body · body 里提到关键词 (比如"about 页讲的是卡住") 不算作者卡住
 function triggerKeywordMatch() {
   try {
-    const lastMsg = execSync('git log -1 --pretty=%B', { encoding: 'utf-8' }).trim();
-    if (!lastMsg) return { fired: false };
-    // 完工 / 原型 / 卡住 各自映射到不同 suggestion
-    const SHIP_WORDS = /(ship|done|完工|跑通|launch|deployed?|发布|上线|finish(ed)?)/i;
-    const PROTO_WORDS = /(prototype|原型|mockup|demo)/i;
-    const STUCK_WORDS = /(stuck|卡住|卡了|debug|hotfix|broken|挂了)/i;
+    // %s = subject (第一行) · 不是 %B (full message)
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    if (!title) return { fired: false };
+
+    const SHIP_WORDS = /(\bship\b|\bdone\b|完工|跑通|\blaunch(?:ed)?\b|\bdeployed?\b|发布|上线|\bfinish(?:ed)?\b)/i;
+    const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b|\bdemo\b)/i;
+    const STUCK_WORDS = /(\bstuck\b|卡住|卡了|\bhotfix\b|\bbroken\b|挂了)/i;
     const FIX_WORDS = /(\bfix(?:ed)?\b|修好|搞定|解决了)/i;
 
-    if (SHIP_WORDS.test(lastMsg)) {
-      return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `刚才那条 commit 像是完工: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要进陈列馆 + 写一句完工感想?' };
+    if (SHIP_WORDS.test(title)) {
+      return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `刚才那条 commit 像是完工: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要进陈列馆 + 写一句完工感想?' };
     }
-    if (PROTO_WORDS.test(lastMsg)) {
-      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `刚才那条 commit 像是原型节点: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要把原型挂上 · 顺便发一笔进展?' };
+    if (PROTO_WORDS.test(title)) {
+      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `刚才那条 commit 像是原型节点: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要把原型挂上 · 顺便发一笔进展?' };
     }
-    if (STUCK_WORDS.test(lastMsg)) {
-      return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `刚才那条像是卡了: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要标卡住 · 让在意的人能看到?' };
+    if (STUCK_WORDS.test(title)) {
+      return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `刚才那条像是卡了: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要标卡住 · 让在意的人能看到?' };
     }
-    if (FIX_WORDS.test(lastMsg)) {
-      return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim('"' + lastMsg.split('\n')[0].slice(0, 50) + '"')}`, suggestion: '要不要写一笔 · 说说这个坑?' };
+    if (FIX_WORDS.test(title)) {
+      return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim('"' + title.slice(0, 50) + '"')}`, suggestion: '要不要写一笔 · 说说这个坑?' };
     }
     return { fired: false };
   } catch { return { fired: false }; }
