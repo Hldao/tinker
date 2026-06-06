@@ -935,33 +935,258 @@ async function cmdUpdate() {
   log('');
 }
 
-function cmdHookInstall() {
+// =============================================
+// v0.63 PROACTIVE PROMPT 框架
+// post-commit hook 装上之后 · 每次 commit 自动跑 tinker check
+// check 评估触发器 · 满足条件才出 prompt · 否则安静退出
+// 默认全 opt-in · 不打分 · 不推送给别人 · 不烦人
+// =============================================
+
+const PROMPT_STATE_FILE = path.join(CONFIG_DIR, 'prompt-state.json');
+const HOOK_BEGIN = '# >>> tinker-hook-v2 >>>';
+const HOOK_END = '# <<< tinker-hook-v2 <<<';
+const HOOK_BLOCK = `${HOOK_BEGIN}
+# 装/改/卸: tinker hook install | uninstall
+command -v tinker >/dev/null 2>&1 && tinker check --from-hook || true
+${HOOK_END}
+`;
+
+function loadPromptState() {
+  try {
+    if (!fs.existsSync(PROMPT_STATE_FILE)) return {};
+    return JSON.parse(fs.readFileSync(PROMPT_STATE_FILE, 'utf-8'));
+  } catch { return {}; }
+}
+function savePromptState(s) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(PROMPT_STATE_FILE, JSON.stringify(s, null, 2));
+  } catch (e) { /* 容错 · 失败不影响 */ }
+}
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function loadRepoConfig() {
+  // 项目级 config · 告诉 check 这个 repo 关联哪个 Tinker 项目
+  const f = path.join(process.cwd(), '.tinker', 'repo.json');
+  if (!fs.existsSync(f)) return null;
+  try { return JSON.parse(fs.readFileSync(f, 'utf-8')); } catch { return null; }
+}
+function saveRepoConfig(obj) {
+  const dir = path.join(process.cwd(), '.tinker');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'repo.json'), JSON.stringify(obj, null, 2));
+}
+
+async function cmdHookInstall() {
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
+  const cfg = mustHaveConfig();
+
+  // 先让用户选 · 这个 repo 关联哪个 Tinker 项目
+  let repoCfg = loadRepoConfig();
+  if (!repoCfg) {
+    const state = await apiState(cfg);
+    const mine = state.projects.filter(p => p.owner === cfg.handle);
+    if (mine.length === 0) {
+      err('你在 Tinker 上还没项目 · 先去 ' + cfg.serverUrl + ' 开张');
+      process.exit(1);
+    }
+    const { select } = require('@inquirer/prompts');
+    const projectId = mine.length === 1 ? mine[0].id : await select({
+      message: '这个 git 仓库对应哪个 Tinker 项目?',
+      choices: mine.map(p => ({ name: p.name + sepia('  ' + (p.desc||'').slice(0, 40)), value: p.id })),
+    });
+    const picked = mine.find(p => p.id === projectId);
+    repoCfg = { projectId, projectName: picked.name, installedAt: Date.now() };
+    saveRepoConfig(repoCfg);
+    ok('记下了 · 这个 repo = ' + bold(picked.name));
+  }
+
+  // 装 hook · 不暴力覆盖 · 用 marker 块附加 · 兼容用户已有 hook
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
   const hookFile = path.join(gitDir, 'hooks', 'post-commit');
-  const script = `#!/bin/sh
-# tinker post-commit hook
-echo ""
-echo "  \\033[38;5;243m── tinker ──\\033[0m"
-read -p "  发到捣鼓? (y/N): " yn
-case "$yn" in
-  [Yy]* ) tinker push ;;
-  * ) echo "  跳过" ;;
-esac
-`;
-  fs.writeFileSync(hookFile, script);
+  let content = '';
+  if (fs.existsSync(hookFile)) {
+    content = fs.readFileSync(hookFile, 'utf-8');
+    // 移除旧 marker 块 (重装)
+    content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
+    content = content.replace(/^\s*#\s*tinker post-commit hook[\s\S]*?(?=\n#|\n[a-zA-Z]|$)/m, '');
+  } else {
+    content = '#!/bin/sh\n';
+  }
+  content = content.trimEnd() + '\n\n' + HOOK_BLOCK;
+  fs.writeFileSync(hookFile, content);
   fs.chmodSync(hookFile, 0o755);
-  ok('hook 装好了: ' + sepia(hookFile));
-  log(dim('  每次 git commit 后会问你 "发到捣鼓?" · y 触发 tinker push'));
+
+  ok('hook 装好了 · 触发器是: ' + sepia('60 分钟内累 3+ commit'));
+  log('');
+  log(sepia('  默认: 静默 · 满足触发条件才会出来问'));
+  log(sepia('  关:    ') + vermilion('tinker hook uninstall'));
+  log(sepia('  静音: ') + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('tinker mute today'));
 }
 
 function cmdHookUninstall() {
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
   const hookFile = path.join(gitDir, 'hooks', 'post-commit');
-  if (!fs.existsSync(hookFile)) { log(sepia('  hook 不存在 · 没事')); return; }
-  fs.unlinkSync(hookFile);
+  if (!fs.existsSync(hookFile)) { log(sepia('  没装 hook · 直接退')); return; }
+  let content = fs.readFileSync(hookFile, 'utf-8');
+  const before = content;
+  content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
+  // 老版本兜底 (v1 暴力 hook)
+  content = content.replace(/^.*tinker post-commit hook[\s\S]*?esac\s*\n/m, '');
+  content = content.trimEnd();
+  if (content === before.trimEnd()) {
+    log(sepia('  没找到 tinker 的 hook 块 · 别人的 hook 不动'));
+    return;
+  }
+  if (content === '#!/bin/sh' || content === '') {
+    fs.unlinkSync(hookFile);
+  } else {
+    fs.writeFileSync(hookFile, content + '\n');
+  }
   ok('hook 移除了');
+}
+
+// 触发器 A: 60 min 内累积 commit 数 >= 阈值
+function triggerCumulativeCommits(opts = {}) {
+  const windowMin = opts.windowMin || 60;
+  const threshold = opts.threshold || 3;
+  try {
+    const out = execSync(
+      `git log --since="${windowMin} minutes ago" --no-merges --pretty=format:"%h"`,
+      { encoding: 'utf-8' }
+    ).trim();
+    const count = out ? out.split('\n').length : 0;
+    if (count >= threshold) return { fired: true, count, reason: 'cumulative', msg: `今天累了 ${count} 个 commit (近 ${windowMin} 分钟)` };
+    return { fired: false };
+  } catch { return { fired: false }; }
+}
+
+async function cmdCheck(opts) {
+  if (!inGitRepo()) {
+    if (!opts.fromHook) err('不在 git 仓库');
+    return;
+  }
+  const fromHook = !!opts.fromHook;
+  const state = loadPromptState();
+  const now = Date.now();
+
+  // 静音 / 延后 / 已 dismiss 今日 · 全部直接退
+  if (state.mutedUntil && state.mutedUntil > now) {
+    if (!fromHook) log(sepia('  现在静音中 · 到 ' + new Date(state.mutedUntil).toLocaleString()));
+    return;
+  }
+  if (state.laterUntil && state.laterUntil > now) {
+    if (!fromHook) log(sepia('  延后到 ' + new Date(state.laterUntil).toLocaleString()));
+    return;
+  }
+  if (state.dismissedTodayKey === todayKey()) {
+    if (!fromHook) log(sepia('  今天已经选了不发 · 明天再问'));
+    return;
+  }
+  // 冷却 30 分钟 · 同一段时间不重复 prompt
+  if (state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000) {
+    return;
+  }
+
+  // 评估触发器 (这一版只有 A)
+  const result = triggerCumulativeCommits();
+  if (!result.fired) return;
+
+  // 知道是哪个项目 · 给 push 用
+  const repoCfg = loadRepoConfig();
+  if (!repoCfg) {
+    log(sepia('  这个 repo 还没绑定 Tinker 项目 · 先跑 ') + vermilion('tinker hook install'));
+    return;
+  }
+
+  // prompt 出来
+  log('');
+  log(sepia('  ── ') + vermilion('tinker') + sepia(' ──'));
+  log('  ' + bold(result.msg) + sepia(' · 在 ') + vermilion(repoCfg.projectName));
+  log('');
+  const { select } = require('@inquirer/prompts');
+  let choice;
+  try {
+    choice = await select({
+      message: '发一笔进展吗?',
+      choices: [
+        { name: '发 · 现在写一句', value: 'push' },
+        { name: '稍后 · 1 小时后再问', value: 'later' },
+        { name: '今天不发了 · 明天再问', value: 'skip-today' },
+        { name: '静音一段时间', value: 'mute' },
+      ],
+    });
+  } catch {
+    // 用户 Ctrl+C 退出 · 等价于 later
+    choice = 'later';
+  }
+
+  state.lastPromptedAt = now;
+
+  if (choice === 'push') {
+    savePromptState(state);
+    // 调用现有 push 流程 · 让用户写文本 (LLM 起草是 P1)
+    const { input } = require('@inquirer/prompts');
+    const text = (await input({ message: '一句话进展 (会发到 ' + repoCfg.projectName + ')' })).trim();
+    if (!text) { log(sepia('  没写内容 · 跳过')); return; }
+    const cfg = mustHaveConfig();
+    await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
+    ok('发出去了 → ' + cfg.serverUrl + '/#/p/' + cfg.handle + '/');
+  } else if (choice === 'later') {
+    state.laterUntil = now + 60 * 60 * 1000;
+    savePromptState(state);
+    log(sepia('  1 小时后再问'));
+  } else if (choice === 'skip-today') {
+    state.dismissedTodayKey = todayKey();
+    savePromptState(state);
+    log(sepia('  今天不再问 · 明天见'));
+  } else if (choice === 'mute') {
+    state.mutedUntil = now + 24 * 60 * 60 * 1000;
+    savePromptState(state);
+    log(sepia('  静音 24 小时 · 用 ') + vermilion('tinker mute off') + sepia(' 解除'));
+  }
+}
+
+function cmdMute(args) {
+  const arg = (args || '').trim();
+  const state = loadPromptState();
+  const now = Date.now();
+  if (arg === 'off' || arg === 'unmute') {
+    state.mutedUntil = null;
+    state.laterUntil = null;
+    state.dismissedTodayKey = null;
+    savePromptState(state);
+    ok('解除静音 · 触发器开启');
+    return;
+  }
+  const m = arg.match(/^(\d+)(m|h|d)$/);
+  let duration = 60 * 60 * 1000; // 默认 1h
+  let label = '1 小时';
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (m[2] === 'm') { duration = n * 60 * 1000; label = `${n} 分钟`; }
+    else if (m[2] === 'h') { duration = n * 60 * 60 * 1000; label = `${n} 小时`; }
+    else if (m[2] === 'd') { duration = n * 24 * 60 * 60 * 1000; label = `${n} 天`; }
+  } else if (arg === 'today') {
+    const d = new Date(); d.setHours(28, 0, 0, 0); // 明天凌晨 4:00
+    duration = d.getTime() - now;
+    label = '到明早 4 点';
+  } else if (arg === 'forever') {
+    state.mutedUntil = Number.MAX_SAFE_INTEGER;
+    savePromptState(state);
+    ok('永久静音 · 用 ' + vermilion('tinker mute off') + ' 解除');
+    return;
+  } else if (arg) {
+    err('用法: tinker mute [Nm|Nh|Nd|today|forever|off]');
+    process.exit(1);
+  }
+  state.mutedUntil = now + duration;
+  savePromptState(state);
+  ok('静音 ' + label + ' · 用 ' + vermilion('tinker mute off') + ' 解除');
 }
 
 function help() {
@@ -990,12 +1215,16 @@ function help() {
   log('  ' + vermilion('tinker ship -m "..." --image ./shot.png') + sepia('     · 用本地图当封面 (优先于自动截图)'));
   log('  ' + vermilion('tinker ship -m "..." --no-screenshot') + sepia('       · 不带封面'));
   log('');
+  log(sepia('  ') + vermilion('主动 prompt · 让 CLI 在合适的时间问你 (默认 opt-in)'));
+  log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook · 触发器是 60min 内累 3 commit'));
+  log('  ' + vermilion('tinker hook uninstall') + sepia('              卸 hook'));
+  log('  ' + vermilion('tinker check') + sepia('                       手动跑一次触发器评估 (hook 自动调这个)'));
+  log('  ' + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('today') + sepia(' / ') + vermilion('forever') + sepia(' / ') + vermilion('off') + sepia('   静音控制'));
+  log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
   log('  ' + vermilion('tinker config') + sepia('                      看当前配置'));
   log('  ' + vermilion('tinker update') + sepia('                      拉最新代码 + 重装(需要按一键命令装的)'));
-  log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook'));
-  log('  ' + vermilion('tinker hook uninstall') + sepia('              卸 hook'));
   log('');
   log(sepia('  voice 覆盖: 在项目里建 ') + vermilion('.tinker/voice.md') + sepia(' · LLM 起草时会用这个气质'));
   log(sepia('  --since 支持: ') + dim('30m / 2h / 1d / today / yesterday / git 能理解的格式'));
@@ -1047,10 +1276,12 @@ async function main() {
       case 'update': await cmdUpdate(); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':
-        if (args[1] === 'install') cmdHookInstall();
+        if (args[1] === 'install') await cmdHookInstall();
         else if (args[1] === 'uninstall') cmdHookUninstall();
         else { err('用法: tinker hook install | uninstall'); process.exit(1); }
         break;
+      case 'check': await cmdCheck({ fromHook: opts.fromHook || args.includes('--from-hook') }); break;
+      case 'mute': cmdMute(args[1]); break;
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default: err('未知命令: ' + cmd); help(); process.exit(1);
     }
