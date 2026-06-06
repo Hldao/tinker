@@ -35,7 +35,8 @@
     white-space: nowrap;
   }
   /* renderRichText 自动识别 URL · 让粘在正文里的预览链接一点就走
-     mono 字号收一档 · vermilion + 虚线下划线 · 安静不吵 · hover 时实线 */
+     mono 字号收一档 · vermilion + 虚线下划线 · 安静不吵 · hover 时实线
+     ↗ 后缀跟陈列馆 / 项目页的 → 箭头形成箭头家族 · 行内 ↗=跳出去, 块级 →=动作 */
   .inline-link {
     color: var(--vermilion);
     text-decoration: none;
@@ -47,6 +48,11 @@
   }
   .inline-link:hover {
     border-bottom-style: solid;
+  }
+  .inline-link::after {
+    /* \00a0 = 不可断空格 · 让 ↗ 永远跟 URL 末尾贴在一起, 不会被 word-break 折下行 */
+    content: '\00a0↗';
+    font-size: 0.85em;
   }
   /* Fraunces — 大字号 hero 专用 · variable opsz 144 让大字渲染最优雅 */
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
