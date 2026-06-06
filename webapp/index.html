@@ -34,6 +34,20 @@
     border: 1px solid var(--rule);
     white-space: nowrap;
   }
+  /* renderRichText 自动识别 URL · 让粘在正文里的预览链接一点就走
+     mono 字号收一档 · vermilion + 虚线下划线 · 安静不吵 · hover 时实线 */
+  .inline-link {
+    color: var(--vermilion);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--vermilion);
+    word-break: break-all;
+    transition: border-bottom-style 0.2s ease;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.92em;
+  }
+  .inline-link:hover {
+    border-bottom-style: solid;
+  }
   /* Fraunces — 大字号 hero 专用 · variable opsz 144 让大字渲染最优雅 */
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
 
@@ -5947,6 +5961,14 @@ function renderRichText(text) {
   const paragraphs = String(text).split(/\n{2,}/);
   return paragraphs.map(para => {
     let s = escapeHtml(para);
+    // URL 自动链接 (放最前 · 在 markdown 之前 · 让 URL 里的 *` 之类不被误判)
+    // 尾巴上的 .,;:!?)] 不算 URL 一部分 · 算句末标点
+    s = s.replace(/(https?:\/\/[^\s<>"]+)/g, (match) => {
+      let url = match, suffix = '';
+      const m = match.match(/^(.+?)([.,;:!?\)\]]+)$/);
+      if (m) { url = m[1]; suffix = m[2]; }
+      return `<a href="${url}" target="_blank" rel="noopener" class="inline-link" onclick="event.stopPropagation()">${url}</a>${suffix}`;
+    });
     s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
     s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
