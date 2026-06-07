@@ -118,6 +118,24 @@
     transition: opacity 0.15s;
   }
   .entry-seeking-cta:hover { opacity: 0.7; }
+  /* v0.75 feed entry 非 seeking 时的产物直链 · 跟 entry-seeking-cta 拉视觉层级
+     (后者是作者求反馈的强调态 · 试用是中性入口) */
+  .entry-try-link {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.05em;
+    border-bottom: 1px dotted var(--sepia-light);
+    padding-bottom: 1px;
+    text-decoration: none;
+    transition: all 0.15s;
+  }
+  .entry-try-link:hover {
+    color: var(--vermilion);
+    border-bottom-color: var(--vermilion);
+    border-bottom-style: solid;
+  }
   /* 动静 feed entry "在陈列馆" 小链接 (项目 done 时显示) */
   .entry-showcase-link {
     font-family: 'JetBrains Mono', monospace;
@@ -7311,6 +7329,7 @@ function getFeedEvents() {
     p.updates.forEach((u, idx) => {
       events.push({
         owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
+        updateId: u.id,
         text:u.text, at:u.at, agoOrder:parseAgoOrder(u.at),
         tools:p.tools, status:p.status,
         images: u.images || null,
@@ -7448,7 +7467,10 @@ function makeEntryEl(e) {
   entry.className = 'entry' + (e.status === 'stuck' ? ' entry-stuck' : '');
   entry.onclick = (ev) => {
     if (ev.target.classList.contains('entry-handle')) return;
+    // v0.75: feed 卡片承诺的是"这条进展" · 落地后定位到对应 update 并高亮
+    // 跟通知页跳转一致的体验 (50ms 等 render · 然后 flashAnchor 1.6s 高亮)
     showScreen('project', e.owner, e.projectSlug);
+    if (e.updateId) setTimeout(() => flashAnchor('update-' + e.updateId), 50);
   };
   const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
   const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
@@ -7476,7 +7498,9 @@ function makeEntryEl(e) {
       <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};">
         <span>${e.tools.slice(0,3).join('、')}</span>
         ${e.status === 'done' ? `<span class="entry-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${e.projectId}')">✦ 在陈列馆</span>` : ''}
-        ${seeking && e.productLink ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+        ${e.productLink ? (seeking
+          ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>`
+          : `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-try-link" onclick="event.stopPropagation();">试用 →</a>`) : ''}
       </div>
     </div>
   `;
