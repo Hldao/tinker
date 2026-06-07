@@ -133,6 +133,16 @@
     border-bottom-color: var(--vermilion);
     border-bottom-style: solid;
   }
+  /* v0.79 没产物的 feed 卡片显式标 "待补产物" · 补 v0.69 ③ 反 AI 装大佬完整覆盖
+     占 entry-try-link 同位置 · 不可点击 · 比 try-link 更弱化 */
+  .entry-try-empty {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    opacity: 0.65;
+    letter-spacing: 0.04em;
+  }
   /* 动静 feed entry "在陈列馆" 小链接 (项目 done 时显示) */
   .entry-showcase-link {
     font-family: 'JetBrains Mono', monospace;
@@ -7475,7 +7485,7 @@ function makeEntryEl(e) {
         ${e.status === 'done' ? `<span class="entry-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${e.projectId}')">✦ 在陈列馆</span>` : ''}
         ${e.productLink ? (seeking
           ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>`
-          : `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-try-link" onclick="event.stopPropagation();">试用 →</a>`) : ''}
+          : `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-try-link" onclick="event.stopPropagation();">试用 →</a>`) : `<span class="entry-try-empty">待补产物</span>`}
       </div>
     </div>
   `;
