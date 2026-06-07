@@ -207,8 +207,18 @@
   .view-pill.active .view-icon { opacity: 1; }
   .view-pill:hover .view-icon { opacity: 1; }
 
-  .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; }
+  .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; position: relative; }
   .entry:hover { background: rgba(194, 65, 12, 0.04); }
+  /* v0.70 stuck 事件视觉标记 · 取代 chip filter · 互助信号自己流动到用户面前 · spec §5.3 */
+  .entry-stuck::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 28px;
+    bottom: 28px;
+    width: 2px;
+    background: var(--vermilion);
+  }
   .entry-time { color: var(--sepia); font-size: 13px; padding-top: 4px; }
   .entry-headline { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
   .entry-handle { font-weight: 600; color: var(--ink); font-size: 15px; }
@@ -6301,7 +6311,6 @@
       </div>
     </div>
     <div class="filter-row mb-4">
-      <div id="tool-filters" style="display: flex; align-items: center; flex-wrap: wrap;"></div>
       <div id="tracking-toggle-wrap"></div>
     </div>
     <div id="feed-list">
@@ -7011,7 +7020,9 @@ let state;
 // v0.3: currentUser 从 /api/auth/me 拉 · 不再走 localStorage handle
 const currentUser = { id: null, handle: null, email: null };
 let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
-let currentStatusFilter = 'all';
+// v0.70 主屏 feed 砍掉 chip filter · 第一性原理: filter 解的是"信噪比下降"问题, alpha 阶段 feed 量级根本不需要
+// 工具维度违反 §10 反技术中心化; 状态维度不是浏览意图. 「卡住了」互助信号改成 entry 卡片本身视觉标记 (vermilion 左竖线)
+// 保留 toggle (我跟进的 · 只看求反馈) 是 mode 不是 filter
 let trackingMode = false;
 let seekingFeedbackOnly = false;
 let pendingImages = [];
@@ -7277,22 +7288,7 @@ function getFeedEvents() {
 }
 
 function renderFeed() {
-  const filters = document.getElementById('tool-filters');
-  filters.innerHTML = '';
-  // 按状态筛选 · 跟项目本身的状态对齐 · 让用户能选"想看跑通了的"/"想看谁卡住"
-  [
-    { key: 'all',    label: '全部' },
-    { key: 'active', label: '在做' },
-    { key: 'stuck',  label: '卡住了' },
-    { key: 'done',   label: '跑通了' },
-    { key: 'paused', label: '暂停' },
-  ].forEach(({ key, label }) => {
-    const span = document.createElement('span');
-    span.className = 'filter-pill' + (currentStatusFilter===key?' active':'');
-    span.textContent = label;
-    span.onclick = () => { currentStatusFilter = key; renderFeed(); };
-    filters.appendChild(span);
-  });
+  let events = getFeedEvents();
 
   // 切换:我跟进的 + 只看求反馈 · "求反馈"对所有人(包括匿名)可见
   const toggleWrap = document.getElementById('tracking-toggle-wrap');
@@ -7305,10 +7301,8 @@ function renderFeed() {
     toggleWrap.innerHTML = parts.join('<span style="color: var(--sepia-light); margin: 0 10px;">·</span>');
   }
 
-  let events = getFeedEvents();
-
   // v0.58 今日集体统计 · 跟陈列馆/工作室 mini-stats 系统呼应
-  // 算在所有筛选之前 · 反映"今天本站真实活跃度"
+  // 算在所有筛选之前 · 反映"今天本站真实活跃度" (events 已在顶部获取)
   const todayKey = makeDateKey(new Date());
   const todayEvents = events.filter(e => makeDateKey(new Date(e.at)) === todayKey);
   const feedStatsEl = document.getElementById('feed-stats');
@@ -7325,9 +7319,6 @@ function renderFeed() {
     }
   }
 
-  if (currentStatusFilter !== 'all') {
-    events = events.filter(e => e.status === currentStatusFilter);
-  }
   if (seekingFeedbackOnly) {
     events = events.filter(e => e.feedbackAsk !== undefined);
   }
@@ -7348,14 +7339,9 @@ function renderFeed() {
   const list = document.getElementById('feed-list');
   list.innerHTML = '';
   if (events.length === 0) {
-    // 文案随当前筛选 · 让空状态有解释
-    let msg;
-    if (seekingFeedbackOnly) {
-      msg = '现在没人在求反馈，等你做完一个，回来勾一下「求看看」';
-    } else {
-      const labels = { all: '今天还没什么动静', active: '现在没人在做的项目', stuck: '没人卡住 · 好事', done: '还没有跑通的项目', paused: '没暂停的项目' };
-      msg = labels[currentStatusFilter] || '没东西';
-    }
+    const msg = seekingFeedbackOnly
+      ? '现在没人在求反馈，等你做完一个，回来勾一下「求看看」'
+      : '今天还没什么动静';
     list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">${msg}</div>`;
     return;
   }
@@ -7423,7 +7409,7 @@ function makeDayLabelEl(day, count) {
 
 function makeEntryEl(e) {
   const entry = document.createElement('div');
-  entry.className = 'entry';
+  entry.className = 'entry' + (e.status === 'stuck' ? ' entry-stuck' : '');
   entry.onclick = (ev) => {
     if (ev.target.classList.contains('entry-handle')) return;
     showScreen('project', e.owner, e.projectSlug);
