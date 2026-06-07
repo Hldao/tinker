@@ -5674,13 +5674,23 @@ function cmdSchema(opts = {}) {
         { flag: '--check-only', purpose: '只刷新 cache 不真升级' },
       ], jsonOutput: false, example: 'tinker update' },
       { name: 'login', purpose: '配置 server / handle / token / LLM (交互)', args: [], jsonOutput: false, example: 'tinker login' },
-      { name: 'borrow', purpose: '搜方法 + 踩坑经验 (任意人的 update · is_method / is_experience 优先)', args: [
+      { name: 'borrow', purpose: '搜方法 + 踩坑经验 + 上手指南 (任意人的 update · is_method / is_experience / is_learning 优先)', args: [
         { arg: '<关键词>', purpose: '查询词 · 可中英混杂 · 1-200 字' },
         { flag: '--methods-only', purpose: '只看作者标方法的' },
         { flag: '--kind method|experience|learning', purpose: '过滤 · experience 只搜踩坑经验 · learning 只搜上手指南' },
         { flag: '--limit N', purpose: '返回条数 · 默认 10 · 上限 50' },
         { flag: '--json', purpose: 'machine-readable 输出' },
-      ], jsonOutput: true, example: 'tinker borrow "阿里云 邮件" --kind experience' },
+      ], jsonOutput: true, example: 'tinker borrow "supabase realtime" --kind learning' },
+      { name: 'mark-experience', alias: 'mark-exp', purpose: '把自己一条 update 标为踩坑经验 (给 AI 检索时优先取)', args: [
+        { arg: '<updateId>', purpose: '不传默认拿最近一条 push' },
+        { flag: '--unmark <updateId>', purpose: '取消经验标' },
+        { flag: '--json', purpose: 'machine-readable 输出' },
+      ], jsonOutput: true, example: 'tinker mark-experience u-xxx' },
+      { name: 'mark-learning', alias: 'mark-learn', purpose: '把自己一条 update 标为上手指南 (给 AI 检索入门新技术用)', args: [
+        { arg: '<updateId>', purpose: '不传默认拿最近一条 push' },
+        { flag: '--unmark <updateId>', purpose: '取消上手指南标' },
+        { flag: '--json', purpose: 'machine-readable 输出' },
+      ], jsonOutput: true, example: 'tinker mark-learning u-xxx' },
       { name: 'contribute', purpose: '标方法 · 现有 update 升格 / 或从 markdown 文件按段批量发', args: [
         { arg: '<updateId>', purpose: '不传默认拿最近一条 push' },
         { flag: '--unmark <updateId>', purpose: '取消方法标' },
@@ -5752,13 +5762,13 @@ async function main() {
       case 'mute': cmdMute(args[1]); break;
       case 'borrow': {
         // borrow 接所有 positional 参数当查询词 · 跳过 --xxx flag
-        // tinker borrow "supabase 邮箱" --methods-only
+        // tinker borrow "supabase 邮箱" --kind learning
         const qParts = [];
         for (let i = 1; i < args.length; i++) {
           const a = args[i];
           if (a.startsWith('--')) {
-            // 跳过 flag · 如果是 --limit / --unmark 这种带参 flag 再跳一个
-            if (a === '--limit' || a === '--unmark') i++;
+            // 带参 flag 要再跳一个 (不能把它的值当成 query)
+            if (['--limit', '--unmark', '--kind', '--file'].includes(a)) i++;
             continue;
           }
           qParts.push(a);
