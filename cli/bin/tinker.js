@@ -1845,17 +1845,12 @@ function triggerKeywordMatch() {
 
     // 检查顺序很重要 · 同时命中时早的先返回 · 跟 priority 不是一个概念
     // 排序逻辑:
-    //   FRUSTRATED 第一 · 情绪信号最优先 · v0.2 priority 95 → 101 · 真的最高
+    //   v0.90 FRUSTRATED 从这里搬走 · 改看 reflog 行为 (triggerFrustrationBehavior)
+    //   原因: commit msg 是计划文字 · "靠 X 实现" 不是骂人 · "测试崩了" 不是个人崩溃
     //   SHIP / STUCK / PROTOTYPE · 显式仪式词 · 信号最直接 priority 100
     //   BREAKTHROUGH · "终于明白" 不含跑通 · 没被 SHIP 吃掉才到这 95
     //   DECISION · v0.2 新加 · 工具链选型 priority 85 · 比 fix 长期价值高
     //   FIX / TINKER / DISCOVERY · 弱信号最后
-
-    // FRUSTRATED (炸毛 / 破防) · 文案 / 选项跟其他都不一样 · v0.2 priority 101 真的最高
-    const FRUSTRATED_WORDS = /(\bfuck(?:ing|in')?\b|\bshit\b|\bdamn\b|\bwtf\b|\bhell\b|\bf+k\b|我操|卧槽|妈的|尼玛|\btmd\b|\btm\b|靠|崩了|炸了|废了|服了|醉了|无语|算了|弃了|不做了|不想做了|给爷整不会|不会了|不行了|\bgive up\b|\bdone with\b|\bover it\b|\bfed up\b|我傻|我蠢|智障|脑残|\bsb\b|我有病|累死|烦死|头大|头疼)/i;
-    if (FRUSTRATED_WORDS.test(scanText)) {
-      return { fired: true, priority: 101, reason: 'keyword-frustrated', kind: 'frustrated', msg: `气头上的 commit: ${dim(titleSnippet)}`, suggestion: '不打分。不告诉别人。看你想怎么处理。' };
-    }
 
     // SHIP (仪式信号 · 完工) · 优先级 100 · 同时命中时盖过 BREAKTHROUGH
     const SHIP_WORDS = /(\bship(?:ped|s|it)?\b|\bdone\b|\bmerged?\b|\bdeployed?\b|\breleased?\b|\blaunch(?:ed)?\b|\brolled out\b|完工|跑通|发布|上线|上架|完成|\bfinished?\b)/i;
@@ -2473,6 +2468,49 @@ function triggerFirstCommitOfDay(state) {
   } catch { return { fired: false }; }
 }
 
+// v0.90 行为信号 FRUSTRATED · 替代 v0.2 keyword-frustrated 列表
+// 老设计看 commit msg · 但 commit msg 是计划写出来的描述文字 · 不是当下情绪
+// "靠 X 实现" 的"靠"会被当骂人 · "测试崩了"的"崩"会被当个人崩溃 · 误触发率天花板
+// 真破防的人短时间会 reset --hard / amend 反复 / revert 来回 · 这才是行为信号
+function triggerFrustrationBehavior() {
+  try {
+    const out = execSync('git reflog --date=unix -n 100', { encoding: 'utf-8' }).trim();
+    if (!out) return { fired: false };
+    const windowMs = 30 * 60 * 1000; // 30 分钟密度窗口
+    const now = Date.now();
+    const minThreshold = 3;
+    let undoCount = 0;
+    let hardResetCount = 0;
+    for (const line of out.split('\n')) {
+      // 格式: <sha> HEAD@{<unix_ts>}: <action>
+      const m = line.match(/HEAD@\{(\d+)\}:\s*(.+)$/);
+      if (!m) continue;
+      const ts = parseInt(m[1], 10) * 1000;
+      if (now - ts > windowMs) break; // reflog 时间倒序 · 越窗口就停
+      const op = m[2];
+      // 撤销类: reset / commit (amend) / revert · 真"卷在哪了"的信号
+      if (/^reset:/.test(op) || /^commit \(amend\)/.test(op) || /^revert:/.test(op)) {
+        undoCount++;
+        if (/^reset:/.test(op)) hardResetCount++;
+      }
+    }
+    if (undoCount >= minThreshold) {
+      const what = hardResetCount >= 2
+        ? `reset 来回 ${hardResetCount} 次`
+        : `${undoCount} 次撤销操作`;
+      return {
+        fired: true,
+        priority: 101,
+        reason: 'behavior-undo-spree',
+        kind: 'frustrated',
+        msg: `近 30 分钟 ${what} · 卡在哪了`,
+        suggestion: '不打分。不告诉别人。看你想怎么处理。'
+      };
+    }
+    return { fired: false };
+  } catch { return { fired: false }; }
+}
+
 // === UI session 管理 ===
 // 设计:一波 UI 改动当成一个 session 整体看 · 不每个 commit 都问
 // 起点: 第一个 UI commit (无 session 时) · 抓 BEFORE 快照 · 静默
@@ -2703,6 +2741,7 @@ function evaluateAllTriggersDetailed(state, repoCfg, cfg) {
   const uiResult = evaluateUiSession(state, cfg);
   const results = [
     triggerKeywordMatch(),
+    triggerFrustrationBehavior(),
     triggerAiDebugBreakthrough(),
     triggerDocsEdit(),
     triggerCleverFix(),
@@ -4206,28 +4245,20 @@ function templateAutopsy({ dossier, lifecycleType = 'struggle', signalLines, fix
   const productTag = isDesignLoop ? 'decision' : isLearning ? 'learning' : 'experience';
 
   if (isDesignLoop) {
-    return `## 我在想什么
+    return `(LLM 没起草 · template 兜底 · 把下面信息组成一段工作日志气质的连贯散文 · 不用 markdown 标题)
 
-(待补 · 看下面时序自己写一句这次推演的核心问题)
+刚理清楚一件事 (待补 · 看下面信号补具体在想什么)。
 
-## 考虑过哪几种方案
-
-(待补 · 列你真实推演过的所有路径 · 不是事后修饰)
-
+想过几种走法:
 ${signalLines || '(信号不足 · 自己回忆补一下)'}
 
-## 各自权衡
+最后决定 (待补 · 选了哪种 · 决定性理由是什么)。
 
-(待补 · 每个方案的优缺点 / 适用边界 · 这一段最有 product sense 价值)
-
-## 选了哪种 · 为什么
-
-(待补 · 最终决策 + 决定性理由)
-${fixTitle ? '\\n相关 commit:\\n' + fixTitle : ''}
+${fixTitle ? '相关 commit: ' + fixTitle : ''}
 
 ---
 
-(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-${productTag}\`)
+(LLM 没起草 · 这是 template 兜底 · 改成连贯散文再发 · \`tinker push <这个文件> --as-${productTag}\`)
 `;
   }
 
