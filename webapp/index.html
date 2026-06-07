@@ -243,7 +243,8 @@
   .entry-status { margin-left: auto; font-size: 12px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.04em; font-family: 'JetBrains Mono', monospace; }
   .entry-status.stuck { color: var(--vermilion); }
   .entry-status.done { color: var(--moss); }
-  .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; }
+  /* v0.79 feed 卡片文本最多 6 行 · 超出 ... 截断 · 点卡片进项目页看全文 */
+  .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; text-overflow: ellipsis; }
   .entry-meta { color: var(--sepia); font-size: 12px; font-family: 'JetBrains Mono', monospace; display: flex; gap: 14px; align-items: center; }
 
   /* feed 缩略图 — 田野笔记气质 · max-height 200px */
@@ -7324,9 +7325,13 @@ function getFeedEvents() {
   const events = [];
   // spec §5.2 + status-picker 文案: 「归档」从 feed 移除
   // active / stuck / done / paused 都在 feed · archive 不在
+  // v0.79 沉淀方法 (isMethod=true) 不进首页 feed · 那是给 AI 看的 markdown · 不是 "今天发生了什么"
+  // 想看的人去项目页"沉淀方法"区 · 或者用 tinker borrow 搜
+  // proven (usedBy ≥3) 留在 feed · 因为它原本就是真实进展 · 只是被认证为方法
   state.projects.forEach(p => {
     if (p.status === 'archive') return;
     p.updates.forEach((u, idx) => {
+      if (u.isMethod) return;
       events.push({
         owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
         updateId: u.id,
