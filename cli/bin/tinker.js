@@ -4083,6 +4083,24 @@ async function cmdSituationBackfill(opts) {
     process.exit(1);
   }
 
+  // post-commit hook 每次 commit 都后台 spawn backfill · 密集 commit 时会同一段事件生成多份草稿
+  // quiet 模式 (hook 触发) 加 30 分钟 per-(cwd, type) 节流 · 手动跑不受影响
+  if (opts.quiet) {
+    const ps = loadPromptState();
+    ps.lastBackfillAtByKey = ps.lastBackfillAtByKey || {};
+    const key = type + '|' + process.cwd();
+    const last = ps.lastBackfillAtByKey[key];
+    const now = Date.now();
+    const cooldownMs = 30 * 60 * 1000;
+    if (last && (now - last) < cooldownMs) {
+      try { logTriggerEvent('backfill-' + type, 'cooled_down', { remaining_ms: cooldownMs - (now - last) }); } catch {}
+      return;
+    }
+    ps.lastBackfillAtByKey[key] = now;
+    savePromptState(ps);
+    try { logTriggerEvent('backfill-' + type, 'fired', { cooldown_min: 30 }); } catch {}
+  }
+
   if (!opts.quiet) {
     log('');
     log(bold('━━━ tinker situation backfill ━━━'));
