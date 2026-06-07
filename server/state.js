@@ -102,6 +102,12 @@ function buildState({ targetUserId } = {}) {
   const methodsByProject = groupBy(methodsRows.filter(m => m.project_id), 'project_id');
   const methodsByOwner = groupBy(methodsRows, 'owner_id');
 
+  // v0.84 每条 method 的被借次数 · 一次性 GROUP BY 算完 · 不 N+1
+  // 让 hero / 方法库 / 工作室 都能按 borrowCount 排 · "经过验证的方法浮上来"
+  const borrowCounts = {};
+  db.prepare(`SELECT method_id, COUNT(*) AS cnt FROM borrow_log WHERE method_id IS NOT NULL GROUP BY method_id`).all()
+    .forEach(r => { borrowCounts[r.method_id] = r.cnt; });
+
   // 组装 projects · webapp 期望的形状
   const projectsOut = projectsRows.map(p => {
     const projectUpdates = (updatesByProject[p.id] || []).map(u => {
@@ -150,6 +156,8 @@ function buildState({ targetUserId } = {}) {
       projectId: m.project_id,
       sourceUpdateId: m.source_update_id || null,
       sourceDocPath: m.source_doc_path || null,
+      borrowCount: borrowCounts[m.id] || 0,
+      tags: m.tags ? (() => { try { return JSON.parse(m.tags); } catch { return []; } })() : [],
     }));
     return {
       id: p.id,
@@ -215,6 +223,7 @@ function buildState({ targetUserId } = {}) {
     projectId: m.project_id || null,
     sourceUpdateId: m.source_update_id || null,
     sourceDocPath: m.source_doc_path || null,
+    borrowCount: borrowCounts[m.id] || 0,
   }));
 
   // starters + tools
