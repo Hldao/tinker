@@ -1608,6 +1608,12 @@ function todayKey() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
+// v0.88 工作日 key · 凌晨 0-4 算前一天的 tail · 给 maybe-goodnight 和 goodnight 标记用
+function workdayKey() {
+  const d = new Date();
+  if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 
 // 记录最近一次 push 到 Tinker 的时间 (按项目) · 给触发器 C "长时间未发" 用
 function recordPushAt(projectId) {
@@ -3666,9 +3672,10 @@ async function cmdGoodnight(opts = {}) {
 
   // v0.88 给 maybe-goodnight 用 · 标记今天已收尾 · 让对话触发器今晚不再 prompt
   // 仅今日范围 · --week / --month 不算今日收尾
+  // 用 workdayKey · 凌晨 23:50 跑 / 凌晨 00:30 又说晚安 应该算同一天
   if (daysBack === 1) {
     const ps = loadPromptState();
-    ps.lastGoodnightDate = todayKey();
+    ps.lastGoodnightDate = workdayKey();
     savePromptState(ps);
   }
 
@@ -3683,13 +3690,13 @@ async function cmdGoodnight(opts = {}) {
 function cmdMaybeGoodnight() {
   // 今日已 goodnight 过 → 静默
   const ps = loadPromptState();
-  if (ps.lastGoodnightDate === todayKey()) return;
+  if (ps.lastGoodnightDate === workdayKey()) return;
   // 不在 git repo → 静默 · 没法判断今日活动
   if (!inGitRepo()) return;
-  // 今日 commit 数 (本地今日 4am 起算 · todayKey 返回本地日期 · 不走 toISOString UTC 坑)
+  // "工作日" commit 数 · 凌晨 0-4 算前一天 (不然 since=今日4am 是未来时间 · git 返回 0)
   let commitCount = 0;
   try {
-    const since = `${todayKey()} 04:00`;
+    const since = `${workdayKey()} 04:00`;
     const out = execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' }).toString().trim();
     commitCount = out ? out.split('\n').length : 0;
   } catch { return; }
