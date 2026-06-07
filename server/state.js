@@ -211,7 +211,7 @@ function buildState({ targetUserId } = {}) {
   }
 
   // v0.81 全站 methods 数组 · webapp 工作室页 / 全站方法库浏览页都从这里 filter
-  // 字段跟 project.methods 一致
+  // 字段跟 project.methods 一致 · 包括 v0.84 tags
   const methodsOut = methodsRows.map(m => ({
     id: m.id,
     owner: idToHandle[m.owner_id],
@@ -224,6 +224,7 @@ function buildState({ targetUserId } = {}) {
     sourceUpdateId: m.source_update_id || null,
     sourceDocPath: m.source_doc_path || null,
     borrowCount: borrowCounts[m.id] || 0,
+    tags: m.tags ? (() => { try { return JSON.parse(m.tags); } catch { return []; } })() : [],
   }));
 
   // starters + tools

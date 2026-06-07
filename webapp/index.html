@@ -10021,25 +10021,30 @@ async function deleteUpdate(projectId, updateIdx) {
   } catch (e) { showToast(e.message); }
 }
 
-// v0.13 方法长内容折叠 · 默认收 150px · 点开看全文
 // v0.81 沉淀方法区独立卡片 · 方法是 first-class entity · 数据结构跟 update 不同
-// 跟 makeMethodEntryEl (feed 卡片) 同视觉语言 · 但在项目页方法区里
-// owner 看到 复制 markdown / 删 (删后 method 直接删除 · 不是 toggle flag)
+// v0.85 强封装 · 不论 markdown 长短一律默认完全收起 · 卡片只露 scenario 当标题
+// 理由: 方法 markdown 是给 AI 看的 · 用户看 scenario 一句话就够 · 短方法平铺
+// 一样会刷出 markdown 标题/列表/代码块 · 看着像"没标题封装"
+// scenario 缺失时 · fallback 用 text 第一行 (去掉 markdown 标记) 当标题
 function renderMethodFirstClass(m, isMine) {
-  const isLong = (m.text || '').length >= 400;
   const textJson = JSON.stringify(m.text).replace(/"/g, '&quot;');
+  const fallbackTitle = m.scenario
+    ? null
+    : (m.text || '').split('\n').map(s => s.trim()).find(s => s.length > 0) || '';
+  const titleEl = m.scenario
+    ? `<div class="tl-scenario"><span class="tl-scenario-label">用于</span>${escapeHtml(m.scenario)}</div>`
+    : (fallbackTitle
+        ? `<div class="tl-scenario"><span class="tl-scenario-label">片段</span>${escapeHtml(fallbackTitle.replace(/^#+\s*/, '').slice(0, 80))}</div>`
+        : '');
   return `
     <div class="tl-entry" id="method-${m.id}">
       <div class="tl-time">${shortAgo(m.at)}</div>
       <div>
         <div class="tl-method-badge">✤ 方法</div>
-        ${m.scenario ? `
-          <div class="tl-scenario">
-            <span class="tl-scenario-label">用于</span>${escapeHtml(m.scenario)}
-          </div>
-        ` : ''}
-        <div class="tl-text ${isLong ? 'tl-text-collapsed-strong' : ''}" id="tl-text-${m.id}">${renderRichText(m.text)}</div>
-        ${isLong ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${m.id}')">展开看完整 markdown (给你的 AI 用) ↓</span>` : ''}
+        ${titleEl}
+        ${renderMethodTagRow(m)}
+        <div class="tl-text tl-text-collapsed-strong" id="tl-text-${m.id}">${renderRichText(m.text)}</div>
+        <span class="tl-text-fold-toggle" onclick="toggleFold('${m.id}')">展开看完整 markdown (给你的 AI 用) ↓</span>
         <div class="tl-actions">
           <span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
           ${isMine ? `<span class="small-action" onclick="deleteMethodEntity('${m.id}')">${ICONS.trash}删</span>` : ''}
