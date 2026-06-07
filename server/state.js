@@ -134,6 +134,7 @@ function buildState({ targetUserId } = {}) {
       desc: p.desc,
       productLink: p.product_link,
       status: p.status,
+      updatedAt: p.updated_at || undefined,
       shippedAt: p.shipped_at || undefined,
       pinnedUpdateId: p.pinned_update_id || undefined,
       hiddenFromShowcase: !!p.hidden_from_showcase,

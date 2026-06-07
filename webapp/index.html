@@ -387,6 +387,22 @@
   .react-action:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
   .react-action.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
 
+  /* v0.69 wantToTry → tinkered 两阶段渐进承诺 · spec §5.1 反馈动作 */
+  .react-line-upgrade { display: flex; flex-direction: column; gap: 12px; }
+  .upgrade-status { display: flex; align-items: center; gap: 12px; font-family: 'Newsreader', serif; font-size: 15px; color: var(--ink-soft); flex-wrap: wrap; }
+  .upgrade-status-mark { font-family: 'JetBrains Mono', monospace; color: var(--moss); font-weight: 500; }
+  .upgrade-cta-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: rgba(194, 65, 12, 0.04); border-left: 2px solid var(--vermilion); font-family: 'Newsreader', serif; flex-wrap: wrap; }
+  .upgrade-arrow { color: var(--vermilion); font-size: 16px; }
+  .upgrade-hint { font-size: 15px; color: var(--ink); flex: 1; min-width: 200px; }
+  .upgrade-action { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--vermilion); border-bottom: 1px solid var(--vermilion); cursor: pointer; font-weight: 500; padding-bottom: 1px; }
+  .upgrade-action:hover { opacity: 0.7; }
+
+  /* 通知页 projectDone 卡片下方升级 CTA · 跟上面同一套语言 */
+  .notif-upgrade-cta { display: inline-flex; align-items: center; gap: 10px; margin-top: 8px; padding: 6px 12px; background: rgba(194, 65, 12, 0.04); border-left: 2px solid var(--vermilion); font-family: 'Newsreader', serif; font-size: 14px; }
+  .notif-upgrade-cta .upgrade-arrow { font-size: 14px; }
+  .notif-upgrade-cta .upgrade-hint { color: var(--ink-soft); flex: 0; min-width: 0; }
+  .notif-upgrade-cta .upgrade-action { font-size: 13.5px; }
+
   .ref-entry { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); padding: 8px 0; border-bottom: 1px dotted var(--rule); }
   .ref-entry .arrow { color: var(--vermilion); margin-right: 8px; }
   .ref-entry .ref-user { font-weight: 600; }
@@ -7653,6 +7669,39 @@ function renderProject(owner, slug) {
     p.reactions.tinkered.find(t=>t.user===me) ? 'tinkered' :
     p.reactions.wantToTry.includes(me) ? 'wantToTry' : null;
 
+  // v0.69 反馈按钮组 helper · spec §5.1 两阶段渐进承诺
+  // - none: 两按钮并排 (想试试 / 做了延伸版)
+  // - wantToTry: 已承诺态 + 升级 CTA 阶梯感
+  // - tinkered: 不显示 (反馈区里已有 ref-entry + 撤回入口 · 不重复)
+  const renderReactionLine = (isEmpty) => {
+    if (myReaction === 'tinkered') return '';
+    const containerStyle = isEmpty
+      ? 'padding: 4px 0;'
+      : 'padding: 18px 0 0; margin-top: 20px; border-top: 1px dotted var(--rule);';
+    if (myReaction === 'wantToTry') {
+      return `
+        <div class="react-line-upgrade" style="${containerStyle}">
+          <div class="upgrade-status">
+            <span class="upgrade-status-mark">✓</span>
+            <span>你说过想试试</span>
+            <span class="small-action" style="color: var(--sepia);" onclick="reactToProject('wantToTry')">撤回</span>
+          </div>
+          <div class="upgrade-cta-row">
+            <span class="upgrade-arrow">→</span>
+            <span class="upgrade-hint">跑通了, 来挂上你的延伸版</span>
+            <span class="upgrade-action" onclick="openTinkered()">挂上 →</span>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="react-line" style="${containerStyle}">
+        <span class="react-action" onclick="reactToProject('wantToTry')">想试试</span>
+        <span class="react-action" onclick="openTinkered()">做了延伸版</span>
+      </div>
+    `;
+  };
+
   // Figure counter for the project — count across all updates with images
   let figureIdx = 0;
 
@@ -7787,10 +7836,7 @@ function renderProject(owner, slug) {
         return `
           <div class="mb-12" style="padding-top: 12px;">
             <p style="color: var(--sepia); font-size: 14px; margin-bottom: 12px;">还没人留反馈 · 你也试试?</p>
-            <div class="react-line" style="padding: 4px 0;">
-              <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
-              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版</span>
-            </div>
+            ${renderReactionLine(true)}
           </div>
         `;
       }
@@ -7816,12 +7862,7 @@ function renderProject(owner, slug) {
               ${p.reactions.wantToTry.map(u=>`<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
             </div>
           ` : ''}
-          ${!isMine ? `
-            <div class="react-line" style="padding: 18px 0 0; margin-top: 20px; border-top: 1px dotted var(--rule);">
-              <span class="react-action ${myReaction==='wantToTry'?'active':''}" onclick="reactToProject('wantToTry')">想试试</span>
-              <span class="react-action ${myReaction==='tinkered'?'active':''}" onclick="openTinkered()">做了延伸版</span>
-            </div>
-          ` : ''}
+          ${!isMine ? renderReactionLine(false) : ''}
         </div>
       `;
     })()}
@@ -8162,6 +8203,15 @@ function renderNotifications() {
             <span class="npj">「${escapeHtml(n.projectName || '(项目已删除)')}」</span>
           </div>
           ${n.extra ? `<div class="notif-extra">${n.type === 'tinkered' ? '做了 「' + escapeHtml(n.extra) + '」' : (n.type === 'projectMoved' ? '新链接 ' + escapeHtml(n.extra) : '"' + escapeHtml(n.extra) + '"')}</div>` : ''}
+          ${n.type === 'projectDone' && (() => {
+            const proj = state.projects.find(pr => pr.id === n.projectId);
+            return proj && !proj.reactions.tinkered.some(t => t.user === me);
+          })() ? `
+            <div class="notif-upgrade-cta" onclick="event.stopPropagation(); openTinkeredFromNotif('${n.id}', '${argOwner}', '${argSlug}');">
+              <span class="upgrade-arrow">→</span>
+              <span class="upgrade-action">挂上你的延伸版</span>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -8214,6 +8264,21 @@ function onNotifClick(notifId, projectOwner, projectSlug, anchor) {
   if (anchor) {
     setTimeout(() => flashAnchor(anchor), 50);
   }
+}
+
+// v0.69 通知里"挂上你的延伸版" 升级入口 · spec §5.1 两阶段渐进承诺
+function openTinkeredFromNotif(notifId, projectOwner, projectSlug) {
+  const localN = (state.notifications || []).find(x => x.id === notifId);
+  if (localN) localN.read = true;
+  apiAction('markNotifRead', { notifId }).catch(() => {});
+  updateUnreadBadge();
+  if (!projectOwner || !projectSlug) {
+    showToast('这个项目已经被删了 · 通知已标已读');
+    renderNotifications();
+    return;
+  }
+  showScreen('project', projectOwner, projectSlug);
+  setTimeout(() => openTinkered(), 0);
 }
 
 // scroll 到 DOM id · 加 .flash-anchor 类闪烁 1.6s 提示
