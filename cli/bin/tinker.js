@@ -3320,6 +3320,12 @@ async function cmdCheck(opts) {
     state.lastPromptedAtByReason[result.reason] = now;
     if (result.priority < 70) state.lowFiredTodayKey = todayKey();
     savePromptState(state);
+    // v0.17 bridge auto-ping · 用户开了的话自动通知团队
+    // 失败静默 · 不阻塞 hook
+    try {
+      const cfg2 = (() => { try { return loadConfig(); } catch { return null; } })();
+      if (cfg2 && cfg2.serverUrl && cfg2.token) await maybeAutoPing(result, repoCfg, cfg2);
+    } catch {}
     // 输出结构化 JSON 给调用方解析
     const out = {
       fired: true,
@@ -4838,6 +4844,93 @@ function writePendingReminders(arr) {
   try {
     fs.writeFileSync(pendingRemindersPath(), arr.map(r => JSON.stringify(r)).join('\n') + (arr.length > 0 ? '\n' : ''));
   } catch { /* 失败静默 */ }
+}
+
+// v0.17 bridge auto-ping config · post-commit hook 命中触发器后自动发 bridge ping
+// 默认 disabled · 用户主动开 + 选 kinds + 选目标 handle (null = 广播给团队所有人)
+// 触发流程: cmdCheck --json 命中 → appendPendingReminder → maybeAutoPing → fetch /api/bridge/send
+function autoPingConfigPath() { return path.join(CONFIG_DIR, 'bridge-auto-ping.json'); }
+function loadAutoPingConfig() {
+  if (!fs.existsSync(autoPingConfigPath())) {
+    return { enabled: false, kinds: ['ship', 'stuck'], toHandle: null };
+  }
+  try { return JSON.parse(fs.readFileSync(autoPingConfigPath(), 'utf-8')); }
+  catch { return { enabled: false, kinds: ['ship', 'stuck'], toHandle: null }; }
+}
+function saveAutoPingConfig(c) {
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+  fs.writeFileSync(autoPingConfigPath(), JSON.stringify(c, null, 2));
+}
+
+// 触发器命中后 · 看配置 · 命中就 ping
+// 失败静默 · 不阻塞 hook · 不影响 commit
+async function maybeAutoPing(triggerResult, repoCfg, cfg) {
+  try {
+    const apCfg = loadAutoPingConfig();
+    if (!apCfg.enabled) return;
+    // result.kind 是 trigger kind (ship / stuck / clever-fix / decision 等)
+    // result.reason 也行 · 比如 keyword-ship · 取前缀
+    const kind = triggerResult.kind || (triggerResult.reason || '').replace(/^keyword-/, '');
+    if (!apCfg.kinds.includes(kind)) return;
+    const bridgeLib = require('../lib/bridge');
+    if (!bridgeLib.hasSecret()) return;  // 没设暗号 · 静默放弃
+    const secret = bridgeLib.loadSecret();
+    const title = `[auto] ${kind} · @${cfg.handle}`;
+    const body = `${triggerResult.msg || ''}\n${triggerResult.suggestion || ''}\n${repoCfg.projectName || ''}`.trim();
+    const level = (kind === 'stuck' || kind === 'frustrated') ? 'warn' : (kind === 'ship' ? 'ok' : 'info');
+    const obj = { v: 1, title, body, level, at: Date.now(), autoPing: true, triggerKind: kind };
+    const payload = bridgeLib.encrypt(JSON.stringify(obj), secret);
+    const res = await fetch(cfg.serverUrl + '/api/bridge/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+      body: JSON.stringify({ to: apCfg.toHandle || null, kind: 'noti', payload }),
+    });
+    if (!res.ok) return;  // 失败静默
+    // 成功 → log 一行 (hook stdout 会被丢 · 但 trigger-log 记一笔)
+    logTriggerEvent(kind, 'auto_pinged', { to: apCfg.toHandle || 'broadcast' });
+  } catch { /* 任何错都静默 · 不阻塞 hook */ }
+}
+
+// tinker bridge auto-ping --enable/--disable/--status [--kinds ship,stuck] [--to @maomao]
+function cmdBridgeAutoPing(opts) {
+  const apCfg = loadAutoPingConfig();
+  if (opts.disable) {
+    apCfg.enabled = false;
+    saveAutoPingConfig(apCfg);
+    ok('bridge auto-ping 已停用 · post-commit hook 命中触发器不再 ping');
+    return;
+  }
+  if (opts.enable) {
+    apCfg.enabled = true;
+    if (opts.kinds && opts.kinds.length > 0) apCfg.kinds = opts.kinds;
+    if (opts.toHandle !== undefined) apCfg.toHandle = opts.toHandle || null;
+    saveAutoPingConfig(apCfg);
+    const bridgeLib = require('../lib/bridge');
+    const hasSecret = bridgeLib.hasSecret();
+    log('');
+    ok('bridge auto-ping 已启用');
+    log(sepia('  触发 kinds: ') + vermilion(apCfg.kinds.join(' / ')));
+    log(sepia('  目标:       ') + vermilion(apCfg.toHandle ? '@' + apCfg.toHandle : '广播 (团队所有人)'));
+    if (!hasSecret) {
+      log('');
+      log(vermilion('  ⚠ 还没设暗号 · 跑 ') + vermilion('tinker secret <暗号>') + sepia(' 后 auto-ping 才会真发出去'));
+    }
+    log('');
+    return;
+  }
+  // --status / 默认
+  log('');
+  log(bold('  bridge auto-ping 状态'));
+  log(sepia('  启用:    ') + (apCfg.enabled ? vermilion('是') : sepia('否')));
+  log(sepia('  kinds:   ') + vermilion(apCfg.kinds.join(' / ')));
+  log(sepia('  目标:    ') + vermilion(apCfg.toHandle ? '@' + apCfg.toHandle : '广播 / 未设'));
+  log('');
+  if (!apCfg.enabled) {
+    log(sepia('  启用: ') + vermilion('tinker bridge auto-ping --enable [--kinds ship,stuck] [--to @maomao]'));
+  } else {
+    log(sepia('  停用: ') + vermilion('tinker bridge auto-ping --disable'));
+  }
+  log('');
 }
 
 // strip ANSI 颜色码 · JSON 里不该带终端控制符
@@ -6613,6 +6706,14 @@ function help() {
   log('  ' + vermilion('tinker project new --name "..." --desc "..."') + sepia(' 建项目 [--link <url>] [--tool x --tool y]'));
   log('  ' + vermilion('tinker project edit <projectId>') + sepia('     改项目 [--name] [--desc] [--link] [--tool]'));
   log('');
+  log(sepia('  ') + vermilion('看别人在做什么 / 团队联动'));
+  log('  ' + vermilion('tinker feed @<handle>') + sepia('             看 ta 最近 update / method / 项目状态 [--limit N] [--watch]'));
+  log('  ' + vermilion('tinker feed @<handle> --watch') + sepia('      每 30s 拉一次新进展 · 命令行里持续看 ta 在干啥'));
+  log('  ' + vermilion('tinker bridge auto-ping --enable') + sepia('   触发器命中 ship/stuck 时自动 ping 团队 [--kinds ...] [--to @who]'));
+  log(sepia('                                        ') + dim('需要先 tinker secret <暗号>'));
+  log('  ' + vermilion('tinker bridge auto-ping --status') + sepia('   看当前配置'));
+  log('  ' + vermilion('tinker bridge auto-ping --disable') + sepia('  停用'));
+  log('');
   log(sepia('  ') + vermilion('voice · 写作风格学习'));
   log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
   log('  ' + vermilion('tinker voice teach --from-claude') + sepia('    从 Claude Code 对话历史抽样本'));
@@ -6649,6 +6750,7 @@ function help() {
   log(sepia('  用户开新项目                       → ') + vermilion('tinker project new --name "..." --desc "..."'));
   log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
   log(sepia('  查 post-commit hook 触发的待处理      → ') + vermilion('tinker pending --json'));
+  log(sepia('  用户问"猫猫在做什么 / 到哪一步了"      → ') + vermilion('tinker feed @maomao --json'));
   log(sepia('  ') + dim('  LLM 主动调:session 开头 / 用户问"今天怎么样" / commit 之后 · 看有没有漏掉的 ship / clever-fix 等'));
   log(sepia('  非 Claude Code (Cursor/Aider 等) · 没有 hook → ') + vermilion('tinker maybe-check --text "<用户消息>" --json'));
   log(sepia('  ') + dim('  上面这个跟 Claude Code hook 共用词典 + 冷却 · LLM 主动调拿命中 reminder'));
@@ -7215,6 +7317,10 @@ async function main() {
       case 'maybe-ship':          cmdMaybe('ship'); return;
       case 'maybe-check':         cmdMaybeCheck(opts); return;
       case 'pending':             cmdPending(opts); return;
+      case 'bridge':
+        if (args[1] === 'auto-ping') { cmdBridgeAutoPing(opts); return; }
+        err('用法: tinker bridge auto-ping [--enable|--disable|--status] [--kinds X,Y] [--to @who]');
+        process.exit(1);
 
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
