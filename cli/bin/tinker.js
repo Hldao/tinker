@@ -4239,9 +4239,9 @@ async function cmdContributeFromFile(cfg, opts) {
     }
   }
 
-  // JSON 模式必须指定 --section · 否则没法非交互运行
-  if (opts.json && !opts.section) {
-    return errJson('--json 模式需要 --section "<标题>"', 'NO_SECTION_IN_JSON');
+  // JSON 模式必须 --section 或 --auto · 否则没法非交互运行
+  if (opts.json && !opts.section && !opts.auto) {
+    return errJson('--json 模式需要 --section "<标题>" 或 --auto', 'NO_SECTION_IN_JSON');
   }
 
   // 选段

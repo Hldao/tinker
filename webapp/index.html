@@ -361,6 +361,12 @@
   .tl-ship-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); letter-spacing: 0.28em; margin-bottom: 10px; font-weight: 500; }
   /* 方法标 (v0.12 · 方法库) · 比 ship 低调 · 苔色 + 极细外框 · 提示性而非主角 */
   .tl-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.22em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-bottom: 10px; font-weight: 500; }
+  /* v0.13 长方法折叠 · 默认收起 · 点开看全文 */
+  .tl-text-foldable { max-height: 150px; overflow: hidden; position: relative; }
+  .tl-text-foldable.expanded { max-height: none; }
+  .tl-text-foldable:not(.expanded)::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 50px; background: linear-gradient(transparent, var(--paper) 80%); pointer-events: none; }
+  .tl-text-fold-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--moss); cursor: pointer; user-select: none; margin-top: 6px; display: inline-block; }
+  .tl-text-fold-toggle:hover { text-decoration: underline; }
   .tl-method-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; color: var(--ink-soft); }
   .tl-method-toggle:hover { color: var(--moss); }
   .tl-method-toggle.active { color: var(--moss); }
@@ -7818,7 +7824,14 @@ function renderProject(owner, slug) {
                   ${u.feedbackAsk ? `<div class="tl-feedback-ask-text"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
                 </div>
               ` : ''}
-              <div class="tl-text">${renderRichText(u.text)}</div>
+              ${(() => {
+                // v0.13 方法标的长内容默认折叠 (≥400 字才折)
+                const isLongMethod = u.isMethod && (u.text || '').length >= 400;
+                return `
+                  <div class="tl-text ${isLongMethod ? 'tl-text-foldable' : ''}" id="tl-text-${u.id}">${renderRichText(u.text)}</div>
+                  ${isLongMethod ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整方法 ↓</span>` : ''}
+                `;
+              })()}
               ${u.prompt ? `
                 <div class="tl-prompt-box">
                   <div class="tl-prompt-label">开场</div>
@@ -7828,6 +7841,7 @@ function renderProject(owner, slug) {
               ` : ''}
               ${imagesHtml}
               <div class="tl-actions">
+                ${u.isMethod ? `<span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>` : ''}
                 ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
                 <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
@@ -9536,6 +9550,17 @@ async function deleteUpdate(projectId, updateIdx) {
     renderProject(p.owner, p.slug);
     showToast('删了');
   } catch (e) { showToast(e.message); }
+}
+
+// v0.13 方法长内容折叠 · 默认收 150px · 点开看全文
+function toggleFold(id) {
+  const el = document.getElementById('tl-text-' + id);
+  if (!el) return;
+  const toggle = el.nextElementSibling;
+  el.classList.toggle('expanded');
+  if (toggle && toggle.classList.contains('tl-text-fold-toggle')) {
+    toggle.textContent = el.classList.contains('expanded') ? '收起 ↑' : '展开看完整方法 ↓';
+  }
 }
 
 // 方法标 (v0.12 方法库) · 让作者把自己一条 update 升格成"方法"
