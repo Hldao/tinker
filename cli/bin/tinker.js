@@ -2722,6 +2722,10 @@ async function cmdCheck(opts) {
   // (cache TTL 24h · 重复跑也只在过期时真发 GitHub 请求 · 浪费小)
   spawnUpdateCheckAsync();
 
+  // 顺手清理 30 天前的 struggle dossier · 失败容错
+  // 调用频率高 (每次 hook) · cleanOldDossiers 内部判 mtime 不重读不必要文件 · 几乎零成本
+  try { getStruggleModule().cleanOldDossiers({ keepDays: 30 }); } catch {}
+
   // 静音 / 延后 / 已 dismiss 今日 · 全部直接退
   if (state.mutedUntil && state.mutedUntil > now) {
     if (!fromHook) log(sepia('  现在静音中 · 到 ' + new Date(state.mutedUntil).toLocaleString()));
@@ -5119,12 +5123,43 @@ function help() {
   log('  ' + vermilion('tinker ship -m "..." --no-screenshot') + sepia('       · 不带封面'));
   log('');
   log(sepia('  ') + vermilion('主动 prompt · 让 CLI 在合适的时间问你 (默认 opt-in)'));
-  log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook · 9 个触发器分优先级'));
+  log('  ' + vermilion('tinker hook install') + sepia('                装 git post-commit hook · 25 个触发器分优先级'));
   log('  ' + vermilion('tinker hook uninstall') + sepia('              卸 hook'));
   log('  ' + vermilion('tinker check') + sepia('                       手动跑一次触发器评估 (hook 自动调这个)'));
+  log('  ' + vermilion('tinker triggers') + sepia('                    自检 · 看每个触发器的状态 + 当前 winner'));
+  log('  ' + vermilion('tinker resolve <choice> -m "..."') + sepia('    响应 pending prompt (push / ship / stuck 等)'));
   log('  ' + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('today') + sepia(' / ') + vermilion('forever') + sepia(' / ') + vermilion('off') + sepia('   静音控制'));
   log('  ' + vermilion('tinker session status') + sepia(' / ') + vermilion('end') + sepia('     看 UI session 状态 / 手动结束'));
   log('  ' + vermilion('tinker llm set') + sepia(' / ') + vermilion('status') + sepia(' / ') + vermilion('off') + sepia('       配 / 看 / 清 LLM key (给自动起草用)'));
+  log('');
+  log(sepia('  ') + vermilion('收尾 · 沉淀'));
+  log('  ' + vermilion('tinker goodnight') + sepia('                   今日总结 (commit + push + Claude Code token + 方法被借)'));
+  log('  ' + vermilion('tinker goodnight --week') + sepia(' / ') + vermilion('--month') + sepia('     周报 / 月报'));
+  log('  ' + vermilion('tinker goodnight --narrate') + sepia('          让 LLM 替你说一句'));
+  log('');
+  log(sepia('  ') + vermilion('踩坑跟踪 · 自动整理经验贴'));
+  log('  ' + vermilion('tinker struggle') + sepia('                    看当前是不是在折腾 + 最近的踩坑列表'));
+  log('  ' + vermilion('tinker struggle off') + sepia(' / ') + vermilion('on') + sepia('             24h 关跟踪 / 重新开'));
+  log(sepia('  ') + dim('Claude Code 对话里反复挣扎 → CLI 自动记 dossier → 破局后后台整理成草稿 → 一键发'));
+  log('');
+  log(sepia('  ') + vermilion('方法库 · 让别人借 / 借别人的'));
+  log('  ' + vermilion('tinker borrow "<关键词>"') + sepia('            搜方法库 (作者标方法的排前)'));
+  log('  ' + vermilion('tinker borrow ... --methods-only') + sepia('    只看作者标方法的'));
+  log('  ' + vermilion('tinker contribute [updateId]') + sepia('        标自己一条 update 为方法'));
+  log('  ' + vermilion('tinker contribute --from-file <md>') + sepia('  从 markdown 按段交互选 contribute · 隐私扫描'));
+  log('  ' + vermilion('tinker contribute --from-file <md> --auto') + sepia(' LLM 看完帮挑 3 段 · 一键确认'));
+  log('');
+  log(sepia('  ') + vermilion('voice · 写作风格学习'));
+  log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
+  log('  ' + vermilion('tinker voice teach --from-claude') + sepia('    从 Claude Code 对话历史抽样本'));
+  log('  ' + vermilion('tinker voice teach --review') + sepia('         逐条 y/n/skip 自监督 (good / bad 池)'));
+  log('');
+  log(sepia('  ') + vermilion('给 AI 用 (machine-readable)'));
+  log('  ' + vermilion('tinker schema --json') + sepia('               CLI 自身能力 schema · AI 读这个知道怎么用'));
+  log('  ' + vermilion('tinker state --json') + sepia('                读 prompt-state 当前快照'));
+  log('  ' + vermilion('tinker stream <resource>') + sepia('            长跑 NDJSON 事件流 (triggers / today)'));
+  log('  ' + vermilion('tinker mcp') + sepia('                          启 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool'));
+  log(sepia('  ') + dim('几乎所有命令支持 --json · 错误统一 { ok: false, error, code } 形态'));
   log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
