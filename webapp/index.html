@@ -332,6 +332,11 @@
   .tl-feedback-ask-block { margin-bottom: 14px; padding: 10px 14px 11px; background: var(--paper); border: 1px solid var(--vermilion); border-left-width: 3px; border-radius: 2px; }
   /* 完工 ship update · 视觉强调 · 跟普通进展区分 */
   .tl-ship-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); letter-spacing: 0.28em; margin-bottom: 10px; font-weight: 500; }
+  /* 方法标 (v0.12 · 方法库) · 比 ship 低调 · 苔色 + 极细外框 · 提示性而非主角 */
+  .tl-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.22em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-bottom: 10px; font-weight: 500; }
+  .tl-method-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; color: var(--ink-soft); }
+  .tl-method-toggle:hover { color: var(--moss); }
+  .tl-method-toggle.active { color: var(--moss); }
   .tl-entry-ship .tl-time { color: var(--vermilion); }
   .tl-entry-ship .tl-text { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 96; font-size: 18px; line-height: 1.55; }
 
@@ -798,7 +803,14 @@
   /* ONBOARD */
   .onboard-num { font-family: 'Newsreader', serif; font-style: italic; font-size: 60px; color: var(--vermilion); line-height: 1; }
   .onboard-h1 { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); }
+  /* v0.71 入场仪式分类选择 · 4 类 × 3 道 · 让用户主动选方向 */
+  .onboard-category-row { padding-bottom: 24px; }
+  .onboard-category-hint { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+  .category-pill { color: var(--sepia); cursor: pointer; font-family: 'Newsreader', serif; font-size: 18px; padding: 4px 0; border-bottom: 1px solid transparent; margin-right: 28px; transition: all 0.15s; display: inline-block; }
+  .category-pill:hover { color: var(--ink); }
+  .category-pill.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
   .starter-card { padding: 28px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 80px 1fr; gap: 24px; }
+  .starter-card:first-child { border-top: 1px solid var(--rule); }
   .starter-title { font-family: 'Newsreader', serif; font-size: 22px; margin-bottom: 12px; }
   .starter-prompt { border-left: 2px solid var(--rule); padding: 4px 16px; margin-bottom: 14px; font-family: 'Newsreader', serif; font-style: italic; color: var(--ink-soft); font-size: 15px; line-height: 1.5; }
 
@@ -6453,7 +6465,7 @@
       <h1 class="onboard-h1 mb-4">先做一个小东西</h1>
       <p class="serif italic text-lg" style="color: var(--sepia);">不是看完教程才能进来 — 我们觉得"做出来"比"学会了"更接近 vibe coding 的本质。挑一个,5 分钟。</p>
     </div>
-    <div id="onboard-starters" class="border-t" style="border-color: var(--rule);"></div>
+    <div id="onboard-starters"></div>
     <div class="mt-12 pt-8 border-t-2" style="border-color: var(--ink);">
       <p class="serif italic mb-4" style="color: var(--sepia);">做完了?</p>
       <button onclick="openWorkshopSetup()" class="btn-act-primary">挂上我的产物 · 开张工作室</button>
@@ -7766,6 +7778,7 @@ function renderProject(owner, slug) {
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
               ${u.kind === 'ship' ? `<div class="tl-ship-badge">✦ 完工</div>` : ''}
+              ${u.isMethod ? `<div class="tl-method-badge">✿ 方法</div>` : ''}
               ${u.feedbackAsk !== undefined ? `
                 <div class="tl-feedback-ask-block">
                   <div class="tl-feedback-ask-label">求反馈</div>
@@ -7785,6 +7798,7 @@ function renderProject(owner, slug) {
                 ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
                 <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
+                  <span class="small-action tl-method-toggle ${u.isMethod ? 'active' : ''}" onclick="toggleMethodFlag('${u.id}', ${u.isMethod ? 'true' : 'false'})">${u.isMethod ? '取消方法标' : '标方法'}</span>
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
@@ -7909,21 +7923,51 @@ function renderProject(owner, slug) {
 }
 
 /* ============ ONBOARD ============ */
+// v0.71 入场仪式分类 · spec §5.2 "starter 题目定期换 不变成考试模板" 的轻量落地
+// 不做系统轮换 · 让用户自己选"想给谁做" · 4 类 × 3 道 · 同一人切方向就看到不同 3 道
+let selectedStarterCategory = 'self';
+const STARTER_CATEGORY_LABELS = {
+  self:   '给自己用',
+  others: '给身边的人',
+  work:   '工作或学习',
+  play:   '纯好玩',
+};
+const STARTER_CATEGORY_ORDER = ['self', 'others', 'work', 'play'];
+
+function setStarterCategory(cat) {
+  selectedStarterCategory = cat;
+  renderOnboard();
+}
+
 function renderOnboard() {
-  const list = document.getElementById('onboard-starters');
-  list.innerHTML = state.starters.map((s, i) => `
-    <div class="starter-card">
-      <div class="onboard-num serif italic">${i+1}</div>
-      <div>
-        <h3 class="starter-title">${escapeHtml(s.title)}</h3>
-        <div class="starter-prompt">"${escapeHtml(s.prompt)}"</div>
-        <div class="flex gap-5 items-center">
-          <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
-          <a href="${s.toolUrl}" target="_blank" class="react-action serif" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">打开 ${s.toolName} →</a>
+  const container = document.getElementById('onboard-starters');
+  const pills = STARTER_CATEGORY_ORDER.map(cat =>
+    `<span class="category-pill${selectedStarterCategory === cat ? ' active' : ''}" onclick="setStarterCategory('${cat}')">${STARTER_CATEGORY_LABELS[cat]}</span>`
+  ).join('');
+  const filtered = (state.starters || []).filter(s => (s.category || 'self') === selectedStarterCategory);
+  const cards = filtered.length > 0
+    ? filtered.map((s, i) => `
+        <div class="starter-card">
+          <div class="onboard-num serif italic">${i+1}</div>
+          <div>
+            <h3 class="starter-title">${escapeHtml(s.title)}</h3>
+            <div class="starter-prompt">"${escapeHtml(s.prompt)}"</div>
+            <div class="flex gap-5 items-center">
+              <span class="react-action serif" onclick="copyText(this, ${JSON.stringify(s.prompt).replace(/"/g,'&quot;')})">复制提示词</span>
+              <a href="${s.toolUrl}" target="_blank" class="react-action serif" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">打开 ${s.toolName} →</a>
+            </div>
+          </div>
         </div>
-      </div>
+      `).join('')
+    : '<p class="serif py-10 text-center" style="color: var(--sepia);">这个方向还没题目 · 试试别的</p>';
+
+  container.innerHTML = `
+    <div class="onboard-category-row">
+      <div class="onboard-category-hint">你想给谁做?</div>
+      <div>${pills}</div>
     </div>
-  `).join('');
+    <div>${cards}</div>
+  `;
 }
 
 /* ============ SHOWCASE 陈列馆 ============ */
@@ -9417,6 +9461,27 @@ async function deleteUpdate(projectId, updateIdx) {
     await apiAction('deleteUpdate', { projectId, updateIdx });
     renderProject(p.owner, p.slug);
     showToast('删了');
+  } catch (e) { showToast(e.message); }
+}
+
+// 方法标 (v0.12 方法库) · 让作者把自己一条 update 升格成"方法"
+// 被标的进入方法库 FTS 搜索时排在前面 · 别人 tinker borrow 能优先看到
+async function toggleMethodFlag(updateId, isCurrentlyMethod) {
+  try {
+    if (isCurrentlyMethod) {
+      await apiAction('unmarkMethod', { updateId });
+      showToast('取消方法标了');
+    } else {
+      await apiAction('markAsMethod', { updateId });
+      showToast('已标为方法 · 别人 borrow 时能搜到');
+    }
+    // 重新渲染当前项目页 · 简单方式: 找到这条 update 所属项目重新 render
+    for (const p of state.projects) {
+      if ((p.updates || []).some(u => u.id === updateId)) {
+        renderProject(p.owner, p.slug);
+        break;
+      }
+    }
   } catch (e) { showToast(e.message); }
 }
 

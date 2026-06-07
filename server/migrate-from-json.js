@@ -141,8 +141,8 @@ function migrateFromJson({ jsonPath, force = false, log = console.log, warn = co
 
     // 4. starters
     log('━ starters');
-    const insStarter = db.prepare(`INSERT INTO starters (title, prompt, tool_name, tool_url, position) VALUES (?, ?, ?, ?, ?)`);
-    (data.starters || []).forEach((s, idx) => insStarter.run(s.title, s.prompt, s.toolName, s.toolUrl, idx));
+    const insStarter = db.prepare(`INSERT INTO starters (title, prompt, tool_name, tool_url, category, position) VALUES (?, ?, ?, ?, ?, ?)`);
+    (data.starters || []).forEach((s, idx) => insStarter.run(s.title, s.prompt, s.toolName, s.toolUrl, s.category || 'self', idx));
     log('  · ' + (data.starters || []).length + ' 条');
 
     // 5. available_tools

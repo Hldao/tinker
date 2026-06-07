@@ -102,6 +102,7 @@ function buildState({ targetUserId } = {}) {
       if (u.prompt) out.prompt = u.prompt;
       if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
       if (u.kind) out.kind = u.kind;
+      if (u.is_method) out.isMethod = true;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;
       const usedBy = usedByMap[u.id];
@@ -177,7 +178,7 @@ function buildState({ targetUserId } = {}) {
   }
 
   // starters + tools
-  const starters = db.prepare('SELECT title, prompt, tool_name AS toolName, tool_url AS toolUrl FROM starters ORDER BY position').all();
+  const starters = db.prepare('SELECT title, prompt, tool_name AS toolName, tool_url AS toolUrl, category FROM starters ORDER BY position').all();
   const availableTools = db.prepare('SELECT tool FROM available_tools ORDER BY position').all().map(r => r.tool);
 
   return {
