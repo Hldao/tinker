@@ -115,34 +115,6 @@
     transition: opacity 0.15s;
   }
   .entry-seeking-cta:hover { opacity: 0.7; }
-  /* v0.75 feed entry 非 seeking 时的产物直链 · 跟 entry-seeking-cta 拉视觉层级
-     (后者是作者求反馈的强调态 · 试用是中性入口) */
-  .entry-try-link {
-    margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--sepia);
-    letter-spacing: 0.05em;
-    border-bottom: 1px dotted var(--sepia-light);
-    padding-bottom: 1px;
-    text-decoration: none;
-    transition: all 0.15s;
-  }
-  .entry-try-link:hover {
-    color: var(--vermilion);
-    border-bottom-color: var(--vermilion);
-    border-bottom-style: solid;
-  }
-  /* v0.79 没产物的 feed 卡片显式标 "待补产物" · 补 v0.69 ③ 反 AI 装大佬完整覆盖
-     占 entry-try-link 同位置 · 不可点击 · 比 try-link 更弱化 */
-  .entry-try-empty {
-    margin-left: auto;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--sepia);
-    opacity: 0.65;
-    letter-spacing: 0.04em;
-  }
   /* 动静 feed entry "在陈列馆" 小链接 (项目 done 时显示) */
   .entry-showcase-link {
     font-family: 'JetBrains Mono', monospace;
@@ -7497,9 +7469,7 @@ function makeEntryEl(e) {
       <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};">
         <span>${e.tools.slice(0,3).join('、')}</span>
         ${e.status === 'done' ? `<span class="entry-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${e.projectId}')">✦ 在陈列馆</span>` : ''}
-        ${e.productLink ? (seeking
-          ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>`
-          : `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-try-link" onclick="event.stopPropagation();">试用 →</a>`) : `<span class="entry-try-empty">待补产物</span>`}
+        ${seeking && e.productLink ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
       </div>
     </div>
   `;
