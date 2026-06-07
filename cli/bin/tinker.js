@@ -6200,6 +6200,118 @@ async function cmdRecent(opts) {
   });
 }
 
+// v0.17 tinker feed @<handle> · 看指定 handle 的最近 update + method · 公开 update 流
+// 跟 bridge 不冲突:bridge 是私信加密 · feed 是公开进展流 · 两者互补
+// 使用场景:想知道 ta 在做什么 / 到哪一步了 · 不靠 ta 主动 ping
+async function cmdFeed(handleArg, opts) {
+  const cfg = mustHaveConfig();
+  if (!handleArg) {
+    if (opts.json) return errJson('用法: tinker feed @<handle>', 'NO_HANDLE');
+    err('用法: ' + vermilion('tinker feed @<handle>') + sepia(' [--limit N] [--watch]'));
+    process.exit(1);
+  }
+  const handle = handleArg.replace(/^@/, '');
+  const limit = opts.limit && opts.limit > 0 ? opts.limit : 10;
+
+  async function fetchEvents() {
+    const state = await apiState(cfg);
+    const userInfo = (state.users && state.users[handle]) || null;
+    const events = [];
+    for (const p of state.projects) {
+      if (p.owner !== handle) continue;
+      for (const u of (p.updates || [])) {
+        events.push({
+          type: 'update', at: u.at, projectName: p.name, projectSlug: p.slug,
+          projectStatus: p.status, text: u.text, kind: u.kind, id: u.id,
+          isMethod: !!u.isMethod, isExperience: !!u.isExperience,
+          isLearning: !!u.isLearning, isDecision: !!u.isDecision,
+        });
+      }
+      for (const m of (p.methods || [])) {
+        events.push({
+          type: 'method', at: m.at, projectName: p.name, scenario: m.scenario,
+          title: m.title, id: m.id, borrowCount: m.borrowCount || 0,
+        });
+      }
+    }
+    events.sort((a, b) => b.at - a.at);
+    return { userInfo, events, projects: state.projects.filter(p => p.owner === handle) };
+  }
+
+  function renderHeader(userInfo, projects) {
+    log('');
+    log(bold('  @' + handle + ' · ' + (userInfo?.name || handle)));
+    if (userInfo?.tagline) log(sepia('  ' + userInfo.tagline));
+    const active = projects.filter(p => ['active', 'stuck'].includes(p.status));
+    const stuck = projects.filter(p => p.status === 'stuck');
+    const done = projects.filter(p => p.status === 'done');
+    const parts = [];
+    if (active.length > 0) parts.push('在做 ' + active.length);
+    if (stuck.length > 0) parts.push(vermilion('卡住 ' + stuck.length));
+    if (done.length > 0) parts.push('完工 ' + done.length);
+    if (parts.length > 0) log(sepia('  ') + parts.join(sepia(' · ')));
+    log('');
+  }
+
+  function renderEvent(e) {
+    const t = new Date(e.at).toLocaleString();
+    if (e.type === 'method') {
+      log(vermilion('  ✤ 方法') + sepia(' · ' + t + ' · ') + bold(e.projectName)
+          + (e.borrowCount > 0 ? sepia(' · 被借 ') + e.borrowCount : ''));
+      if (e.scenario) log(sepia('    场景:') + ' ' + e.scenario);
+    } else {
+      const badges = [];
+      if (e.kind === 'ship') badges.push(vermilion('✦ 完工'));
+      if (e.projectStatus === 'stuck') badges.push(vermilion('⚠ 卡住'));
+      if (e.isMethod) badges.push(sepia('[方法]'));
+      if (e.isExperience) badges.push(sepia('[经验]'));
+      if (e.isLearning) badges.push(sepia('[上手指南]'));
+      if (e.isDecision) badges.push(sepia('[决策]'));
+      const badgeStr = badges.length ? ' ' + badges.join(' ') : '';
+      log(sepia('  ' + t + ' · ') + bold(e.projectName) + badgeStr);
+      const snippet = (e.text || '').replace(/\n/g, ' ').slice(0, 120);
+      log('    ' + snippet + ((e.text || '').length > 120 ? sepia('...') : ''));
+    }
+    log('');
+  }
+
+  let { userInfo, events, projects } = await fetchEvents();
+  if (!userInfo && projects.length === 0) {
+    if (opts.json) return errJson('找不到 @' + handle, 'NOT_FOUND');
+    err('找不到 @' + handle + ' · 拼写对吗?');
+    process.exit(1);
+  }
+  if (opts.json) {
+    return outputJson({ ok: true, handle, name: userInfo?.name || handle,
+      tagline: userInfo?.tagline || '', events: events.slice(0, limit),
+      projects: projects.map(p => ({ id: p.id, slug: p.slug, name: p.name, status: p.status })),
+    });
+  }
+  renderHeader(userInfo, projects);
+  if (events.length === 0) {
+    log(sepia('  还没有公开 update'));
+    return;
+  }
+  for (const e of events.slice(0, limit)) renderEvent(e);
+
+  if (opts.watch) {
+    log(sepia('  ── watch 模式 · 每 30s 拉一次新进展 · Ctrl+C 退出 ──'));
+    let lastTs = events[0]?.at || Date.now();
+    while (true) {
+      await new Promise(r => setTimeout(r, 30 * 1000));
+      try {
+        const next = await fetchEvents();
+        const fresh = next.events.filter(e => e.at > lastTs);
+        if (fresh.length > 0) {
+          log(sepia('  ── ' + new Date().toLocaleTimeString() + ' · ' + fresh.length + ' 条新 ──'));
+          for (const e of fresh) renderEvent(e);
+          lastTs = fresh[0].at;
+        }
+      } catch (e) { log(sepia('  poll 失败: ' + e.message)); }
+    }
+  }
+}
+
 // v0.12 标某条 update 为"踩坑经验" · 给 AI 检索池
 // tinker mark-experience <updateId>  /  --unmark <id>
 // 不带参数时 · 拿最近一条 push 的 update
@@ -6584,6 +6696,14 @@ function parseArgs(args) {
     else if (a === '--inspired-by') opts.inspiredBy = args[++i];
     else if (a.startsWith('--inspired-by=')) opts.inspiredBy = a.slice('--inspired-by='.length);
     else if (a === '--undo') opts.undo = true;
+    else if (a === '--watch') opts.watch = true;
+    else if (a === '--enable') opts.enable = true;
+    else if (a === '--disable') opts.disable = true;
+    else if (a === '--status') opts.status = true;
+    else if (a === '--to' || a === '-t') opts.toHandle = (args[++i] || '').replace(/^@/, '');
+    else if (a.startsWith('--to=')) opts.toHandle = a.slice('--to='.length).replace(/^@/, '');
+    else if (a === '--kinds') opts.kinds = (args[++i] || '').split(',').map(s => s.trim()).filter(Boolean);
+    else if (a.startsWith('--kinds=')) opts.kinds = a.slice('--kinds='.length).split(',').map(s => s.trim()).filter(Boolean);
     else if (a === '--check') opts.check = true;
     else if (a === '--clear') opts.clear = true;
     else if (a === '--mark-handled') opts.markHandled = args[++i];
@@ -7054,6 +7174,7 @@ async function main() {
       }
       case 'contribute': await cmdContribute(args[1], opts); break;
       case 'recent': await cmdRecent(opts); break;
+      case 'feed': await cmdFeed(args[1], opts); break;
       case 'react': await cmdReact(args[1], opts); break;
       case 'tinkered': await cmdTinkered(args[1], opts); break;
       case 'used': await cmdUsed(args[1], opts); break;

@@ -25,6 +25,7 @@ const { logger } = require('./logger');
 const db = require('./db');                  // SQLite · 启动时自动跑 migrations
 const { buildState } = require('./state');
 const actions = require('./actions-sql');
+const bridge = require('./bridge');
 const auth = require('./auth');
 
 // ============================================
@@ -363,6 +364,42 @@ app.post('/api/action', actionLimiter, auth.requireSession, async (req, res) => 
     res.json({ ok: true, result, state: newState });
   } catch (e) {
     req.log.warn({ action: type, err: e.message }, 'action rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ============================================
+// bridge · 加密私信通道 (v0.16)
+// 跟 /api/action 分开 · 不捎带 buildState · 减少噪声
+// ============================================
+
+// 发 · POST { to (handle 或空 = 广播), kind ('noti'|'file'|'task'), payload (AES 密文 base64) }
+app.post('/api/bridge/send', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = bridge.bridgeSend(req.body || {}, { currentUserId: req.user.id });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'bridge send rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 收 · GET ?since=<seq> · 长轮询 (没新消息挂 25s · 期间被唤醒立刻返)
+app.get('/api/bridge/poll', stateLimiter, auth.requireSession, async (req, res) => {
+  try {
+    const since = parseInt(req.query.since || '0', 10);
+    const handle = req.user.handle;
+    if (!handle) return res.status(400).json({ error: '需要 handle (用户没补完 onboarding?)' });
+
+    let messages = bridge.bridgePoll({ since, handle });
+    if (messages.length === 0) {
+      await bridge.waitForMessages(handle, 25000);
+      messages = bridge.bridgePoll({ since, handle });
+    }
+    const lastSeq = messages.length ? messages[messages.length - 1].seq : since;
+    res.json({ ok: true, since: lastSeq, messages });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'bridge poll rejected');
     res.status(400).json({ error: e.message });
   }
 });
