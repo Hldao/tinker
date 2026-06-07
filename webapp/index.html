@@ -274,6 +274,11 @@
   .pcard.tracking-pcard { padding: 14px 0; border-bottom: 1px dotted var(--rule); }
   .pcard.tracking-pcard .pcard-name { font-size: 17px; color: var(--ink-soft); }
   .pcard.tracking-pcard:hover .pcard-name { color: var(--vermilion); }
+  /* v0.74 工作室 pcard 内嵌进展 · 项目-进展归属一目了然 · 取代底部独立 timeline */
+  .pcard-updates { margin-top: 12px; padding-top: 12px; border-top: 1px dotted var(--rule); display: flex; flex-direction: column; gap: 6px; }
+  .pcard-update-entry { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: baseline; }
+  .pcard-update-time { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; }
+  .pcard-update-text { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; }
 
   /* PROJECT */
   .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
@@ -7496,9 +7501,7 @@ function renderWorkshop(handle) {
   const recent    = projects.filter(p => inFlight(p) && !isStale(p));
   const alsoDoing = projects.filter(p => p.status === 'paused' || (inFlight(p) && isStale(p)));
   const done      = projects.filter(p => ['done','archive'].includes(p.status));
-  const recentEvents = [];
-  projects.forEach(p => p.updates.slice(0,2).forEach(u => recentEvents.push({projectName:p.name,projectSlug:p.slug,text:u.text,at:u.at,agoOrder:parseAgoOrder(u.at)})));
-  recentEvents.sort((a,b)=>a.agoOrder-b.agoOrder);
+  // v0.74: recentEvents 跨项目 timeline 不再独立成 section · 进展嵌入对应 pcard 里
   const isMe = handle === currentUser.handle;
 
   // v0.56 跟进的 · 对外可见硬信号 (接走 + 方法被用) · 别人也能看
@@ -7551,6 +7554,18 @@ function renderWorkshop(handle) {
     // v0.69: 在「也在做」区,自动沉(非 paused)的项目显示"一段时间没动",避免"进行中却出现在也在做"的语义冲突
     const autoSunk = opts.region === 'alsoDoing' && inFlight(p) && isStale(p);
     const statusLabel = autoSunk ? '一段时间没动' : statusText(p.status);
+    // v0.74: 内嵌最近 2 条进展预览 · 项目-进展关联 · 取代底部独立 timeline
+    const recentUpdates = opts.showUpdates ? (p.updates || []).slice(0, 2) : [];
+    const updatesHtml = recentUpdates.length > 0 ? `
+      <div class="pcard-updates">
+        ${recentUpdates.map(u => `
+          <div class="pcard-update-entry">
+            <span class="pcard-update-time">${shortAgo(u.at)}</span>
+            <span class="pcard-update-text">${escapeHtml((u.text || '').replace(/\s+/g, ' ').slice(0, 120))}${(u.text || '').length > 120 ? '…' : ''}</span>
+          </div>
+        `).join('')}
+      </div>
+    ` : '';
     return `
     <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
       <div class="pcard-name">${escapeHtml(p.name)}</div>
@@ -7560,6 +7575,7 @@ function renderWorkshop(handle) {
         ${(p.tools || []).length > 0 ? ` &nbsp;·&nbsp; ${p.tools.slice(0,2).join('、')}` : ''}
         ${exCfg ? ` &nbsp;·&nbsp; <span class="pcard-showcase-link" style="color: ${exCfg.badgeColor}; border-bottom-color: ${exCfg.badgeColor};" onclick="event.stopPropagation(); showScreen('showcase','${p.id}')">${exCfg.glyph} 在陈列馆 · ${exCfg.name}</span>` : ''}
       </div>
+      ${updatesHtml}
     </div>
   `;}).join('');
   // v0.56 做过的简化为索引 chip 行 · 不再重复陈列馆的 reflection 详卡
@@ -7617,13 +7633,8 @@ function renderWorkshop(handle) {
             <span class="react-action serif" style="color: var(--sepia); font-size: 14px;" onclick="showScreen('onboard')">或先去入场仪式做个 5 分钟的</span>
           </div>
         </div>
-      ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent)}
+      ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent, {showUpdates: true})}
     </div>
-    ${recentEvents.length > 0 ? `
-      <div class="mb-12" id="workshop-recent-events">
-        <div class="section-label">最近的动静</div>
-      </div>
-    ` : ''}
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing, {region: 'alsoDoing'})}</div>` : ''}
     ${done.length > 0 ? `
       <div class="mb-12">
@@ -7648,33 +7659,6 @@ function renderWorkshop(handle) {
       </div>
     ` : ''}
   `;
-
-  // v0.37: 最近的动静 同样跳过"第一个今天"的 label · 只在换天时出现 separator
-  const recentRoot = root.querySelector('#workshop-recent-events');
-  if (recentRoot) {
-    const recent5 = recentEvents.slice(0, 5);
-    const groups = groupEventsByDay(recent5);
-    const todayKey = makeDateKey(new Date());
-    groups.forEach(({ day, items, dateKey }, groupIdx) => {
-      const skipLabel = (groupIdx === 0 && dateKey === todayKey);
-      if (!skipLabel) {
-        recentRoot.appendChild(makeDayLabelEl(day, items.length));
-      }
-      items.forEach(e => {
-        const entry = document.createElement('div');
-        entry.className = 'entry';
-        entry.onclick = () => showScreen('project', handle, e.projectSlug);
-        entry.innerHTML = `
-          <div class="entry-time mono">${shortAgo(e.at)}</div>
-          <div>
-            <div class="mono text-xs mb-1" style="color: var(--sepia);">在「${escapeHtml(e.projectName)}」</div>
-            <div class="entry-text">${renderRichText(e.text)}</div>
-          </div>
-        `;
-        recentRoot.appendChild(entry);
-      });
-    });
-  }
 }
 
 /* ============ PROJECT ============ */
