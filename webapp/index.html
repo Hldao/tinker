@@ -255,6 +255,16 @@
   .entry-status.done { color: var(--moss); }
   /* v0.79 feed 卡片文本最多 6 行 · 超出 ... 截断 · 点卡片进项目页看全文 */
   .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; text-overflow: ellipsis; }
+  /* v0.80 方法 first-class feed 卡片 · 跟进展同尺寸但结构不同 (scenario 主 / markdown 走 CTA) */
+  .entry-method { /* 跟普通 entry 同 padding · 不降级 */ }
+  .entry-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-left: 8px; font-weight: 500; }
+  .entry-method-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 17px; line-height: 1.55; color: var(--ink); margin-bottom: 12px; padding: 12px 16px; background: rgba(120, 113, 108, 0.06); border-left: 3px solid var(--moss); border-radius: 2px; }
+  .entry-method-scenario-label { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; text-transform: uppercase; margin-right: 10px; vertical-align: middle; }
+  .entry-method-meta { gap: 18px; }
+  .entry-method-cta-copy { cursor: pointer; color: var(--moss); display: inline-flex; align-items: center; gap: 5px; transition: color 0.15s; }
+  .entry-method-cta-copy:hover { color: var(--vermilion); }
+  .entry-method-cta-view { cursor: pointer; color: var(--sepia); transition: color 0.15s; }
+  .entry-method-cta-view:hover { color: var(--vermilion); }
   .entry-meta { color: var(--sepia); font-size: 12px; font-family: 'JetBrains Mono', monospace; display: flex; gap: 14px; align-items: center; }
 
   /* feed 缩略图 — 田野笔记气质 · max-height 200px */
@@ -7448,6 +7458,10 @@ function makeDayLabelEl(day, count) {
 }
 
 function makeEntryEl(e) {
+  // v0.80 方法 first-class · 跟进展同等 feed 权重 · 走独立卡片模板
+  // 产品定位: GitHub 沉淀代码 · Tinker 沉淀方法 · 方法 = 工艺人的手艺资产
+  if (e.isMethod) return makeMethodEntryEl(e);
+
   const entry = document.createElement('div');
   entry.className = 'entry' + (e.status === 'stuck' ? ' entry-stuck' : '');
   entry.onclick = (ev) => {
@@ -7486,6 +7500,47 @@ function makeEntryEl(e) {
         ${e.productLink ? (seeking
           ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>`
           : `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-try-link" onclick="event.stopPropagation();">试用 →</a>`) : `<span class="entry-try-empty">待补产物</span>`}
+      </div>
+    </div>
+  `;
+  return entry;
+}
+
+// v0.80 方法 first-class feed 卡片
+// 视觉跟进展卡同尺寸 (entry class) · 但内容结构强调 "这是给 AI 用的方法资产":
+// - headline 加 ✤ 方法 苔色标 (跟 ✦ 完工 / 求反馈 等同级)
+// - scenario 是主内容 (替代 entry-text · 衬线字 + 苔色块) · 用户看一句话决定要不要展开
+// - 主 CTA: 复制 markdown 直接给 AI 用 (零摩擦让方法变成资产)
+// - 次 CTA: 看完整方法 → 进项目页定位
+// - 不渲染 markdown 全文 · 也不渲染图片 (方法是文字资产 · 不是图片故事)
+function makeMethodEntryEl(e) {
+  const entry = document.createElement('div');
+  entry.className = 'entry entry-method';
+  entry.onclick = (ev) => {
+    // 点空白处进项目页方法区 · 但点 button 不触发
+    if (ev.target.closest('.entry-method-cta-copy') || ev.target.closest('.entry-method-cta-view')) return;
+    if (ev.target.classList.contains('entry-handle')) return;
+    showScreen('project', e.owner, e.projectSlug);
+    if (e.updateId) setTimeout(() => flashAnchor('update-' + e.updateId), 50);
+  };
+  const textJson = JSON.stringify(e.text).replace(/"/g,'&quot;');
+  entry.innerHTML = `
+    <div class="entry-time mono">${shortAgo(e.at)}</div>
+    <div>
+      <div class="entry-headline">
+        <span class="entry-handle" onclick="event.stopPropagation(); showScreen('workshop','${e.owner}')">@${e.owner}</span>
+        <span class="entry-slash">/</span>
+        <span class="entry-project">${escapeHtml(e.projectName)}</span>
+        <span class="entry-method-badge">✤ 方法</span>
+      </div>
+      ${e.scenario ? `
+        <div class="entry-method-scenario">
+          <span class="entry-method-scenario-label">用于</span>${escapeHtml(e.scenario)}
+        </div>
+      ` : `<div class="entry-text" style="font-style: italic; color: var(--sepia);">这条方法暂时没有用例说明 · 点开看正文</div>`}
+      <div class="entry-meta entry-method-meta">
+        <span class="entry-method-cta-copy" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown · 喂给我的 AI</span>
+        <span class="entry-method-cta-view" onclick="event.stopPropagation(); showScreen('project', '${e.owner}', '${e.projectSlug}'); setTimeout(() => flashAnchor('update-${e.updateId}'), 50);">看完整方法 →</span>
       </div>
     </div>
   `;
