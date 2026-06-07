@@ -3119,6 +3119,151 @@ async function cmdResolve(choice, opts) {
 // v0.4 Phase 2 · 读 ~/.tinker/style-pool/good/*.md · 调 LLM 总结作者真实 voice fingerprint
 // 输出到 当前 cwd 的 .tinker/voice-fingerprint.md
 // 之后 tinker draft 应该读这个 fingerprint 加进 prompt (Phase 3 · 暂未做)
+// v0.9 voice teach · 主动喂样本到 style-pool
+// 用法:
+//   tinker voice teach --from-claude        从 Claude Code 对话历史抽 user message
+//   tinker voice teach --from-claude --limit 50   自定义条数 (默认 100)
+//   tinker voice teach --file path/to/file.md     从单个文件读
+async function cmdVoiceTeach(opts) {
+  const cfg = mustHaveConfig();
+
+  if (!opts.fromClaude && !opts.file) {
+    log(sepia('  用法:'));
+    log(sepia('    ') + vermilion('tinker voice teach --from-claude'));
+    log(sepia('      从 Claude Code 对话历史抽你说过的话当 sample (默认 100 条最近的)'));
+    log(sepia('    ') + vermilion('tinker voice teach --from-claude --limit 50'));
+    log(sepia('      自定义条数'));
+    log(sepia('    ') + vermilion('tinker voice teach --file <path>'));
+    log(sepia('      从单个文件读 sample (整个文件当一篇)'));
+    return;
+  }
+
+  // 模式 1 · 从 Claude Code 对话历史抽
+  if (opts.fromClaude) {
+    const claudeBase = path.join(os.homedir(), '.claude', 'projects');
+    if (!fs.existsSync(claudeBase)) {
+      err('找不到 ' + claudeBase + ' · 没有 Claude Code 对话历史');
+      process.exit(1);
+    }
+
+    const messages = [];
+    function walk(dir) {
+      try {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) walk(full);
+          else if (e.name.endsWith('.jsonl')) {
+            try {
+              const lines = fs.readFileSync(full, 'utf-8').split('\n').filter(Boolean);
+              for (const line of lines) {
+                try {
+                  const obj = JSON.parse(line);
+                  if (obj.type === 'user' && obj.message && obj.message.content) {
+                    let content = '';
+                    if (typeof obj.message.content === 'string') {
+                      content = obj.message.content;
+                    } else if (Array.isArray(obj.message.content)) {
+                      content = obj.message.content
+                        .filter(c => c.type === 'text' && c.text)
+                        .map(c => c.text)
+                        .join('\n');
+                    }
+                    if (content) {
+                      const ts = obj.timestamp ? new Date(obj.timestamp).getTime() : 0;
+                      messages.push({ text: content, ts });
+                    }
+                  }
+                } catch {}
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+
+    log(sepia('  扫 ~/.claude/projects/ ...'));
+    walk(claudeBase);
+    log(sepia(`  找到 ${messages.length} 条 user message`));
+
+    // 过滤
+    const filtered = messages
+      .map(m => ({ ...m, text: m.text.trim() }))
+      .filter(m => m.text.length >= 30 && m.text.length <= 500)
+      .filter(m => !m.text.startsWith('/'))             // skip slash command
+      .filter(m => /[一-鿿]/.test(m.text))      // 含中文
+      .filter(m => !/^[\s\d\W]*$/.test(m.text));        // 非纯符号 / 数字
+
+    log(sepia(`  过滤后 ${filtered.length} 条候选 (长度 30-500 · 含中文 · 非 slash command)`));
+    if (filtered.length === 0) {
+      log(sepia('  没有合适的样本'));
+      return;
+    }
+
+    // 按时间倒序 · 取最近 N 条
+    filtered.sort((a, b) => b.ts - a.ts);
+    const N = opts.limit && opts.limit > 0 ? opts.limit : 100;
+    const picked = filtered.slice(0, N);
+
+    log('');
+    log(vermilion(`  预览前 5 条 (将从这 ${picked.length} 条里全部加进 pool):`));
+    picked.slice(0, 5).forEach((m, i) => {
+      const preview = m.text.replace(/\n/g, ' ').slice(0, 100);
+      log(sepia(`  ${i + 1}. `) + preview + (m.text.length > 100 ? sepia('...') : ''));
+    });
+    log('');
+
+    let go;
+    try {
+      const { confirm } = require('@inquirer/prompts');
+      go = await confirm({ message: `把这 ${picked.length} 条加进 ~/.tinker/style-pool/good/ 吗?`, default: true });
+    } catch { go = false; }
+    if (!go) { log(sepia('  取消了')); return; }
+
+    const dir = path.join(CONFIG_DIR, 'style-pool', 'good');
+    fs.mkdirSync(dir, { recursive: true });
+    picked.forEach((m, i) => {
+      const ts = m.ts || Date.now();
+      const stamp = new Date(ts).toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      const file = path.join(dir, `${stamp}-teach-claude-${String(i).padStart(3, '0')}.md`);
+      const meta = [
+        '---',
+        `handle: ${cfg.handle || ''}`,
+        `at: ${new Date(ts).toISOString()}`,
+        'choice: teach-claude',
+        'source: Claude Code 对话历史',
+        '---',
+      ].join('\n');
+      fs.writeFileSync(file, `${meta}\n\n${m.text}\n`);
+    });
+    log('');
+    ok(`已加 ${picked.length} 条到 ~/.tinker/style-pool/good/`);
+    log(sepia('  下一步: ') + vermilion('tinker voice analyze') + sepia(' 生成 fingerprint'));
+    return;
+  }
+
+  // 模式 2 · 从单个文件读
+  if (opts.file) {
+    if (!fs.existsSync(opts.file)) { err('文件不存在: ' + opts.file); process.exit(1); }
+    const raw = fs.readFileSync(opts.file, 'utf-8').trim();
+    if (!raw) { err('文件是空的'); process.exit(1); }
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    const dir = path.join(CONFIG_DIR, 'style-pool', 'good');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${stamp}-teach-file.md`);
+    const meta = [
+      '---',
+      `handle: ${cfg.handle || ''}`,
+      `at: ${new Date().toISOString()}`,
+      'choice: teach-file',
+      `source: ${opts.file}`,
+      '---',
+    ].join('\n');
+    fs.writeFileSync(file, `${meta}\n\n${raw}\n`);
+    ok('已加 1 条到 ~/.tinker/style-pool/good/');
+    log(sepia('  下一步: ') + vermilion('tinker voice analyze') + sepia(' 生成 fingerprint'));
+  }
+}
+
 async function cmdVoiceAnalyze() {
   const cfg = mustHaveConfig();
   if (!cfg.llm || !cfg.llm.apiKey) {
@@ -3340,6 +3485,11 @@ function parseArgs(args) {
     else if (a === '--no-screenshot') opts.noScreenshot = true;
     else if (a === '--json') opts.json = true;
     else if (a === '--from-hook') opts.fromHook = true;
+    else if (a === '--from-claude') opts.fromClaude = true;
+    else if (a === '--file') opts.file = args[++i];
+    else if (a.startsWith('--file=')) opts.file = a.slice('--file='.length);
+    else if (a === '--limit') opts.limit = parseInt(args[++i], 10);
+    else if (a.startsWith('--limit=')) opts.limit = parseInt(a.slice('--limit='.length), 10);
     // 不以 - 开头的第一个 positional 当成草稿文件路径
     else if (!a.startsWith('-') && !opts.draftFile) {
       // 必须是已存在的文件 / 以 .md 结尾
@@ -3375,7 +3525,16 @@ async function main() {
       case 'resolve': await cmdResolve(args[1], opts); break;
       case 'voice':
         if (args[1] === 'analyze') await cmdVoiceAnalyze();
-        else { log(sepia('  用法: ') + vermilion('tinker voice analyze')); log(sepia('  把过去发过的 update 喂给 LLM 总结 fingerprint')); }
+        else if (args[1] === 'teach') await cmdVoiceTeach(opts);
+        else {
+          log(sepia('  用法:'));
+          log(sepia('    ') + vermilion('tinker voice analyze'));
+          log(sepia('      用 pool 里的样本生成 fingerprint'));
+          log(sepia('    ') + vermilion('tinker voice teach --from-claude'));
+          log(sepia('      从 Claude Code 对话历史抽样本 (默认 100 条最近)'));
+          log(sepia('    ') + vermilion('tinker voice teach --file <path>'));
+          log(sepia('      从单个文件读样本'));
+        }
         break;
       case 'mute': cmdMute(args[1]); break;
       case 'session': await cmdSession(args[1]); break;
