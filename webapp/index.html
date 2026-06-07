@@ -78,9 +78,6 @@
   .handle-suggest-pill:hover { background: var(--vermilion); color: var(--bg); }
   .filter-pill:hover { color: var(--ink); border-bottom-color: var(--sepia-light); }
   .filter-pill.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
-  .tracking-toggle { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; transition: all 0.15s; white-space: nowrap; letter-spacing: 0.04em; }
-  .tracking-toggle:hover { color: var(--ink); border-bottom-color: var(--ink); }
-  .tracking-toggle.active { color: var(--vermilion); border-bottom: 1px solid var(--vermilion); }
   /* feed entry 的"求反馈"印章 + ask + 试用 CTA */
   .entry-seeking-badge {
     font-family: 'JetBrains Mono', monospace;
@@ -6367,9 +6364,6 @@
         <span id="feed-stats" class="ribbon-stats"></span>
       </div>
     </div>
-    <div class="filter-row mb-4">
-      <div id="tracking-toggle-wrap"></div>
-    </div>
     <div id="feed-list">
       <div class="loading-initial text-center py-16 serif italic" style="color: var(--sepia);">
         在拉取动静 ·
@@ -7084,23 +7078,12 @@ let state;
 // v0.3: currentUser 从 /api/auth/me 拉 · 不再走 localStorage handle
 const currentUser = { id: null, handle: null, email: null };
 let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
-// v0.70 主屏 feed 砍掉 chip filter · 第一性原理: filter 解的是"信噪比下降"问题, alpha 阶段 feed 量级根本不需要
-// 工具维度违反 §10 反技术中心化; 状态维度不是浏览意图. 「卡住了」互助信号改成 entry 卡片本身视觉标记 (vermilion 左竖线)
-// 保留 toggle (我跟进的 · 只看求反馈) 是 mode 不是 filter
-let trackingMode = false;
-let seekingFeedbackOnly = false;
+// v0.70 主屏 feed 砍掉 chip filter · v0.77 砍 mode toggle · 第一性原理:
+// filter / toggle 解的都是 "信噪比下降" 问题, alpha 阶段 feed 量级不需要;
+// 求反馈的卡片自带 vermilion badge · 视觉信号已经在卡片上 · toggle 是多余强化
 let pendingImages = [];
 let notePendingImages = [];
 let shipPendingImages = [];
-
-function toggleTrackingMode() {
-  trackingMode = !trackingMode;
-  renderFeed();
-}
-function toggleSeekingFeedbackOnly() {
-  seekingFeedbackOnly = !seekingFeedbackOnly;
-  renderFeed();
-}
 let npStatus = 'active';
 let npTools = new Set();
 
@@ -7355,17 +7338,6 @@ function getFeedEvents() {
 function renderFeed() {
   let events = getFeedEvents();
 
-  // 切换:我跟进的 + 只看求反馈 · "求反馈"对所有人(包括匿名)可见
-  const toggleWrap = document.getElementById('tracking-toggle-wrap');
-  if (toggleWrap) {
-    const parts = [];
-    parts.push(`<span class="tracking-toggle${seekingFeedbackOnly ? ' active' : ''}" onclick="toggleSeekingFeedbackOnly()">${seekingFeedbackOnly ? '✓ 只看求反馈' : '只看求反馈'}</span>`);
-    if (currentUser.handle) {
-      parts.push(`<span class="tracking-toggle${trackingMode ? ' active' : ''}" onclick="toggleTrackingMode()">${trackingMode ? '✓ 只看我跟进的' : '只看我跟进的'}</span>`);
-    }
-    toggleWrap.innerHTML = parts.join('<span style="color: var(--sepia-light); margin: 0 10px;">·</span>');
-  }
-
   // v0.58 今日集体统计 · 跟陈列馆/工作室 mini-stats 系统呼应
   // 算在所有筛选之前 · 反映"今天本站真实活跃度" (events 已在顶部获取)
   const todayKey = makeDateKey(new Date());
@@ -7384,30 +7356,10 @@ function renderFeed() {
     }
   }
 
-  if (seekingFeedbackOnly) {
-    events = events.filter(e => e.feedbackAsk !== undefined);
-  }
-  if (trackingMode) {
-    const me = currentUser.handle;
-    const trackingPids = new Set();
-    state.projects.forEach(p => {
-      if (p.owner === me) return;
-      if (p.reactions.tinkered.find(t => t.user === me) ||
-          p.reactions.wantToTry.includes(me) ||
-          p.updates.some(u => u.usedBy && u.usedBy.find(x => x.user === me))) {
-        trackingPids.add(p.id);
-      }
-    });
-    events = events.filter(e => trackingPids.has(e.projectId));
-  }
-
   const list = document.getElementById('feed-list');
   list.innerHTML = '';
   if (events.length === 0) {
-    const msg = seekingFeedbackOnly
-      ? '现在没人在求反馈，等你做完一个，回来勾一下「求看看」'
-      : '今天还没什么动静';
-    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">${msg}</div>`;
+    list.innerHTML = `<div class="text-center py-16 serif" style="color: var(--sepia);">今天还没什么动静</div>`;
     return;
   }
   // v0.37: day-label 退化为"换天信号" · 默认上下文是今天 (masthead 已有日期)
