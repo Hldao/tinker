@@ -431,6 +431,42 @@
   .try-cta-arrow { font-weight: 400; }
   .try-cta-url { font-family: 'JetBrains Mono', monospace; font-size: 11px; opacity: 0.65; font-weight: 400; letter-spacing: 0.02em; }
 
+  /* v0.69 待补产物占位 · spec §3 反 AI 装大佬: 让"没产物"在 UI 上不隐形 · 但克制不羞辱 */
+  .try-cta-empty {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+    padding: 11px 18px;
+    background: transparent;
+    border: 1px dashed var(--rule);
+    font-family: 'Newsreader', serif;
+    font-size: 16px;
+    color: var(--sepia);
+  }
+  .try-cta-empty-label { font-weight: 500; }
+  .try-cta-empty-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    opacity: 0.7;
+    letter-spacing: 0.04em;
+  }
+  .try-cta-empty-action {
+    font-family: 'Newsreader', serif;
+    font-size: 14px;
+    color: var(--vermilion);
+    border-bottom: 1px solid var(--vermilion);
+    cursor: pointer;
+  }
+  .showcase-card-cta-empty {
+    font-family: 'Newsreader', serif;
+    font-size: 13.5px;
+    color: var(--sepia);
+    opacity: 0.75;
+    letter-spacing: 0.01em;
+  }
+
   /* 搜索 */
   .search-result-group { margin-bottom: 18px; }
   .search-result-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
@@ -7415,9 +7451,21 @@ function renderWorkshop(handle) {
   const root = document.getElementById('workshop-content');
   if (!user) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这间工作室</p>'; return; }
   const projects = state.projects.filter(p=>p.owner===handle);
-  const recent    = projects.filter(p=>['active','stuck'].includes(p.status));
-  const alsoDoing = projects.filter(p=>p.status==='paused');
-  const done      = projects.filter(p=>['done','archive'].includes(p.status));
+  // v0.69: 工作室分层不再纯按 status · 30 天没动的 active/stuck 也沉到「也在做」
+  // spec 5.1 §项目: "30 天没动 → 自动沉到也在做 · 让真实活动决定哪些被看见,不需要用户主动整理"
+  const STALE_MS = 30 * 24 * 60 * 60 * 1000;
+  const lastActivityAt = (p) => {
+    const lastUpdate = (p.updates && p.updates[0]) ? p.updates[0].at : 0;
+    return Math.max(lastUpdate, p.updatedAt || 0);
+  };
+  const isStale = (p) => {
+    const at = lastActivityAt(p);
+    return at > 0 && (Date.now() - at) > STALE_MS;
+  };
+  const inFlight  = (p) => ['active','stuck'].includes(p.status);
+  const recent    = projects.filter(p => inFlight(p) && !isStale(p));
+  const alsoDoing = projects.filter(p => p.status === 'paused' || (inFlight(p) && isStale(p)));
+  const done      = projects.filter(p => ['done','archive'].includes(p.status));
   const recentEvents = [];
   projects.forEach(p => p.updates.slice(0,2).forEach(u => recentEvents.push({projectName:p.name,projectSlug:p.slug,text:u.text,at:u.at,agoOrder:parseAgoOrder(u.at)})));
   recentEvents.sort((a,b)=>a.agoOrder-b.agoOrder);
@@ -7467,15 +7515,18 @@ function renderWorkshop(handle) {
     ? `<div class="workshop-mini-stats">${statsParts.join('，')}</div>`
     : '';
 
-  const renderPcards = (list) => list.map(p => {
+  const renderPcards = (list, opts = {}) => list.map(p => {
     const ex = findExhibitUpdate(p);
     const exCfg = ex ? (EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship) : null;
+    // v0.69: 在「也在做」区,自动沉(非 paused)的项目显示"一段时间没动",避免"进行中却出现在也在做"的语义冲突
+    const autoSunk = opts.region === 'alsoDoing' && inFlight(p) && isStale(p);
+    const statusLabel = autoSunk ? '一段时间没动' : statusText(p.status);
     return `
     <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
       <div class="pcard-name">${escapeHtml(p.name)}</div>
       <div class="pcard-desc">${escapeHtml(p.desc)}</div>
       <div class="pcard-meta">
-        <span class="${p.status}">— ${statusText(p.status)}</span>
+        <span class="${autoSunk ? 'archive' : p.status}">— ${statusLabel}</span>
         ${(p.tools || []).length > 0 ? ` &nbsp;·&nbsp; ${p.tools.slice(0,2).join('、')}` : ''}
         ${exCfg ? ` &nbsp;·&nbsp; <span class="pcard-showcase-link" style="color: ${exCfg.badgeColor}; border-bottom-color: ${exCfg.badgeColor};" onclick="event.stopPropagation(); showScreen('showcase','${p.id}')">${exCfg.glyph} 在陈列馆 · ${exCfg.name}</span>` : ''}
       </div>
@@ -7541,7 +7592,7 @@ function renderWorkshop(handle) {
         <div class="done-index-list">${renderDoneIndex(done)}</div>
       </div>
     ` : ''}
-    ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing)}</div>` : ''}
+    ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing, {region: 'alsoDoing'})}</div>` : ''}
 
     ${trackingPublic.length > 0 ? `
       <div class="mb-12">
@@ -7643,7 +7694,14 @@ function renderProject(owner, slug) {
           <span class="try-cta-arrow">→</span>
           <span class="try-cta-url">${p.productLink}</span>
         </a>
-      </div>` : ''}
+      </div>` : `
+      <div class="pheader-action-row" style="justify-content: flex-end;">
+        <div class="try-cta-empty">
+          <span class="try-cta-empty-label">待补产物</span>
+          <span class="try-cta-empty-hint">还没挂可玩入口</span>
+          ${isMine ? `<span class="try-cta-empty-action" onclick="openEditProject('${p.id}')">+ 挂上来</span>` : ''}
+        </div>
+      </div>`}
     </div>
 
     <div class="mb-12">
@@ -7993,7 +8051,7 @@ function renderShowcase(focusId) {
               <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">暂不入馆</span>
             ` : ''}
             <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工作室 →</a>
-            ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : ''}
+            ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : `<span class="showcase-card-cta-empty">待补产物</span>`}
           </div>
         </div>
       </article>
@@ -8353,24 +8411,75 @@ async function submitNewProject() {
 }
 
 /* ============ IMAGE UPLOAD ============ */
+// 端侧压缩 · 长边 ≤ 1600 · JPEG quality 0.85 · SVG / GIF 不动 (保留动画/矢量)
+// 设计:统一管道,所有 update / note / ship 上传都先过这里,server 端不动
+async function compressImage(file, opts = {}) {
+  if (!file || !file.type.startsWith('image/')) throw new Error('不是图片');
+  // SVG 不压 · 保留矢量
+  if (file.type === 'image/svg+xml') {
+    return readAsDataURL(file);
+  }
+  // GIF 不压 · 保留动画 (canvas 重绘只剩第一帧)
+  if (file.type === 'image/gif') {
+    return readAsDataURL(file);
+  }
+  const maxDim = opts.maxDim || 1600;
+  const quality = opts.quality || 0.85;
+  const dataUrl = await readAsDataURL(file);
+  const img = await loadImage(dataUrl);
+  let { naturalWidth: w, naturalHeight: h } = img;
+  if (w >= h && w > maxDim) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+  else if (h > maxDim) { w = Math.round(w * (maxDim / h)); h = maxDim; }
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  // 白底铺一层 · 防止 PNG 透明在 JPEG 里变成黑底
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/jpeg', quality);
+}
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = (e) => resolve(e.target.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// 提示压缩前后差距 · 让用户感受到工具在干活
+function reportCompression(origBytes, dataUrl) {
+  const newBytes = Math.round(dataUrl.length * 3 / 4);
+  if (origBytes > 200 * 1024 && newBytes < origBytes * 0.8) {
+    showToast(`图压到了 ${Math.round(newBytes / 1024)}KB (原 ${Math.round(origBytes / 1024)}KB)`);
+  }
+}
+
 function handleImageSelect(ev) {
   const files = ev.target.files;
   for (const file of files) addImageFile(file);
   ev.target.value = '';
 }
 
-function addImageFile(file) {
+async function addImageFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  if (file.size > 800 * 1024) {
-    showToast('图太大了 — 原型阶段限制 800KB');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    pendingImages.push({ src: e.target.result, caption: '' });
+  if (file.size > 20 * 1024 * 1024) { showToast('图太大了 (>20MB) · 在别处先缩一下再来'); return; }
+  try {
+    const dataUrl = await compressImage(file);
+    pendingImages.push({ src: dataUrl, caption: '' });
     renderPendingImages();
-  };
-  reader.readAsDataURL(file);
+    reportCompression(file.size, dataUrl);
+  } catch (e) { showToast('压缩失败:' + e.message); }
 }
 
 function renderPendingImages() {
@@ -8394,15 +8503,15 @@ function handleNoteImageSelect(ev) {
   for (const file of files) addNoteImageFile(file);
   ev.target.value = '';
 }
-function addNoteImageFile(file) {
+async function addNoteImageFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  if (file.size > 800 * 1024) { showToast('图太大了 — 原型阶段限制 800KB'); return; }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    notePendingImages.push({ src: e.target.result, caption: '' });
+  if (file.size > 20 * 1024 * 1024) { showToast('图太大了 (>20MB) · 在别处先缩一下再来'); return; }
+  try {
+    const dataUrl = await compressImage(file);
+    notePendingImages.push({ src: dataUrl, caption: '' });
     renderNotePendingImages();
-  };
-  reader.readAsDataURL(file);
+    reportCompression(file.size, dataUrl);
+  } catch (e) { showToast('压缩失败:' + e.message); }
 }
 function renderNotePendingImages() {
   const list = document.getElementById('note-upload-list');
@@ -8425,15 +8534,15 @@ function handleShipImageSelect(ev) {
   for (const file of files) addShipImageFile(file);
   ev.target.value = '';
 }
-function addShipImageFile(file) {
+async function addShipImageFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  if (file.size > 800 * 1024) { showToast('图太大了,原型阶段限制 800KB'); return; }
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    shipPendingImages.push({ src: e.target.result, caption: '' });
+  if (file.size > 20 * 1024 * 1024) { showToast('图太大了 (>20MB) · 在别处先缩一下再来'); return; }
+  try {
+    const dataUrl = await compressImage(file);
+    shipPendingImages.push({ src: dataUrl, caption: '' });
     renderShipPendingImages();
-  };
-  reader.readAsDataURL(file);
+    reportCompression(file.size, dataUrl);
+  } catch (e) { showToast('压缩失败:' + e.message); }
 }
 function renderShipPendingImages() {
   const list = document.getElementById('ship-upload-list');
