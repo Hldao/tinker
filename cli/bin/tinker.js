@@ -1592,6 +1592,29 @@ command -v tinker >/dev/null 2>&1 && tinker check --from-hook || true
 ${HOOK_END}
 `;
 
+// v0.13 post-push hook · 用户 git push 时 · 自然的"模块告一段落" 信号
+// detached spawn backfill · 不阻塞 push 返回 · 草稿后台跑
+const POST_PUSH_BLOCK = `${HOOK_BEGIN}
+# tinker post-push: detached backfill · 不阻塞
+command -v tinker >/dev/null 2>&1 && \\
+  (tinker situation backfill --type design-loop --hours 4 --quiet >/dev/null 2>&1 &) || true
+${HOOK_END}
+`;
+
+// v0.13 post-checkout hook · 切回 main 分支时触发 (feature done)
+// $1 = previous HEAD · $2 = new HEAD · $3 = 1 if branch checkout (not file)
+const POST_CHECKOUT_BLOCK = `${HOOK_BEGIN}
+# tinker post-checkout: 切回 main 时认为 feature 做完了 · 触发推演总结
+if [ "$3" = "1" ]; then
+  CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+  if [ "$CUR_BRANCH" = "main" ] || [ "$CUR_BRANCH" = "master" ]; then
+    command -v tinker >/dev/null 2>&1 && \\
+      (tinker situation backfill --type design-loop --hours 4 --quiet >/dev/null 2>&1 &) || true
+  fi
+fi
+${HOOK_END}
+`;
+
 function loadPromptState() {
   try {
     if (!fs.existsSync(PROMPT_STATE_FILE)) return {};
@@ -1665,25 +1688,33 @@ async function cmdHookInstall() {
 
   // 装 hook · 不暴力覆盖 · 用 marker 块附加 · 兼容用户已有 hook
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
-  const hookFile = path.join(gitDir, 'hooks', 'post-commit');
-  let content = '';
-  if (fs.existsSync(hookFile)) {
-    content = fs.readFileSync(hookFile, 'utf-8');
-    // 移除旧 marker 块 (重装)
-    content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
-    content = content.replace(/^\s*#\s*tinker post-commit hook[\s\S]*?(?=\n#|\n[a-zA-Z]|$)/m, '');
-  } else {
-    content = '#!/bin/sh\n';
-  }
-  content = content.trimEnd() + '\n\n' + HOOK_BLOCK;
-  fs.writeFileSync(hookFile, content);
-  fs.chmodSync(hookFile, 0o755);
+  installSingleGitHook(gitDir, 'post-commit', HOOK_BLOCK);
+  installSingleGitHook(gitDir, 'post-push', POST_PUSH_BLOCK);
+  installSingleGitHook(gitDir, 'post-checkout', POST_CHECKOUT_BLOCK);
 
-  ok('hook 装好了 · 触发器是: ' + sepia('60 分钟内累 3+ commit'));
+  ok('hooks 装好了 · 三件套:');
+  log(sepia('    post-commit    每次 commit 跑触发器评估 (24 个触发器自动判断)'));
+  log(sepia('    post-push      推上之后后台起草推演总结 (不阻塞)'));
+  log(sepia('    post-checkout  切回 main 后台起草推演总结 (feature done 信号)'));
   log('');
   log(sepia('  默认: 静默 · 满足触发条件才会出来问'));
   log(sepia('  关:    ') + vermilion('tinker hook uninstall'));
   log(sepia('  静音: ') + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('tinker mute today'));
+}
+
+// v0.13 helper · 装一个 git hook · 复用 marker 块逻辑
+function installSingleGitHook(gitDir, name, block) {
+  const hookFile = path.join(gitDir, 'hooks', name);
+  let content = '';
+  if (fs.existsSync(hookFile)) {
+    content = fs.readFileSync(hookFile, 'utf-8');
+    content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
+  } else {
+    content = '#!/bin/sh\n';
+  }
+  content = content.trimEnd() + '\n\n' + block;
+  fs.writeFileSync(hookFile, content);
+  fs.chmodSync(hookFile, 0o755);
 }
 
 // v0.13 装 Claude Code SessionStart compact hook
@@ -1707,45 +1738,56 @@ async function cmdClaudeHookInstall(opts = {}) {
 
   settings.hooks = settings.hooks || {};
   settings.hooks.SessionStart = settings.hooks.SessionStart || [];
+  settings.hooks.SessionEnd = settings.hooks.SessionEnd || [];
+  settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit || [];
 
-  // 检测是否已有 compact matcher · 避免重复装
-  const existingIdx = settings.hooks.SessionStart.findIndex(h => h && h.matcher === 'compact');
   // 命令:每个 lifecycle 都试一遍 (design-loop 优先 · 不命中再 learning · 都不命中静默退)
-  // 用 || true 让 hook 失败不影响 Claude Code 新 session 启动
-  const cmd = 'tinker situation backfill --type design-loop --hours 4 --quiet 2>/dev/null || tinker situation backfill --type learning --hours 4 --quiet 2>/dev/null || true';
-  const newHook = {
-    matcher: 'compact',
-    hooks: [{ type: 'command', command: cmd }],
-  };
+  const backfillCmd = 'tinker situation backfill --type design-loop --hours 4 --quiet 2>/dev/null || tinker situation backfill --type learning --hours 4 --quiet 2>/dev/null || true';
 
-  if (existingIdx >= 0) {
-    // 已有 compact matcher · 看是不是我们自己的 (含 tinker situation backfill 字串)
-    const cur = settings.hooks.SessionStart[existingIdx];
-    const isOurs = cur.hooks && cur.hooks.some(h => h.command && h.command.includes('tinker situation'));
-    if (isOurs) {
-      settings.hooks.SessionStart[existingIdx] = newHook;
-      log(sepia('  已存在 Tinker compact hook · 更新一下'));
-    } else {
-      // 别人的 hook · 我们附加进 hooks 数组而不是覆盖
-      cur.hooks = cur.hooks || [];
-      cur.hooks.push({ type: 'command', command: cmd });
-      log(sepia('  已有别的 compact hook · 我们附加进去 · 不覆盖'));
-    }
-  } else {
-    settings.hooks.SessionStart.push(newHook);
-  }
+  // SessionStart matcher=compact · 用户 /compact 时触发
+  installClaudeHookEntry(settings.hooks.SessionStart, 'compact', backfillCmd, 'compact');
+
+  // SessionEnd · 用户 Cmd+Q 或 session 终止时触发
+  installClaudeHookEntry(settings.hooks.SessionEnd, null, backfillCmd, 'session-end');
+
+  // UserPromptSubmit matcher=收工词 · 用户说"晚安/收工/累了" 等时触发
+  // tinker maybe-goodnight 自己判断今天值不值得收尾 + 后台 spawn backfill 起草
+  const goodnightWords = '晚安|收工|今天就到|明天继续|睡了|累了|下班|收摊|休息|不弄了|做到这|歇了';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, goodnightWords, 'tinker maybe-goodnight 2>/dev/null || true', 'goodnight');
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   log('');
-  ok('Claude Code compact hook 装好了');
-  log(sepia('  下次跑 /compact · Tinker 会自动:'));
-  log(sepia('    1. 扫这段对话的过去 4 小时'));
-  log(sepia('    2. 推断是 design-loop 还是 learning'));
-  log(sepia('    3. LLM 起草工作日志气质的草稿'));
-  log(sepia('    4. 写到 .tinker/drafts/'));
-  log(sepia('  你在新 session 第一眼就能看见草稿路径'));
+  ok('Claude Code hooks 装好了 · 三件套:');
+  log(sepia('    SessionStart compact     · /compact 时'));
+  log(sepia('    SessionEnd                · 关 Claude Code / 系统 sleep 时'));
+  log(sepia('    UserPromptSubmit          · 你对 AI 说"晚安/收工/累了" 等词时'));
+  log(sepia('  全部扫过去 4h 对话 · LLM 起草工作日志气质草稿 · 写到 .tinker/drafts/'));
   log('');
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
+}
+
+// helper · 装一个 Claude Code hook entry (匹配 matcher 或没 matcher 的全局 hook)
+// 已存在我们装的 · 更新;别人的 · 附加;否则新建
+function installClaudeHookEntry(arr, matcher, cmd, kind) {
+  const existingIdx = matcher
+    ? arr.findIndex(h => h && h.matcher === matcher)
+    : arr.findIndex(h => h && !h.matcher);
+  const newEntry = matcher
+    ? { matcher, hooks: [{ type: 'command', command: cmd }] }
+    : { hooks: [{ type: 'command', command: cmd }] };
+
+  if (existingIdx >= 0) {
+    const cur = arr[existingIdx];
+    const isOurs = cur.hooks && cur.hooks.some(h => h.command && h.command.includes('tinker situation'));
+    if (isOurs) {
+      arr[existingIdx] = newEntry;
+    } else {
+      cur.hooks = cur.hooks || [];
+      cur.hooks.push({ type: 'command', command: cmd });
+    }
+  } else {
+    arr.push(newEntry);
+  }
 }
 
 function cmdClaudeHookUninstall() {
@@ -1756,22 +1798,54 @@ function cmdClaudeHookUninstall() {
   catch { err('settings.json 解析失败 · 手动看一下'); process.exit(1); }
 
   const before = JSON.stringify(settings);
-  const list = (settings.hooks && settings.hooks.SessionStart) || [];
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].matcher !== 'compact') continue;
-    list[i].hooks = (list[i].hooks || []).filter(h => !(h.command || '').includes('tinker situation'));
-    if (list[i].hooks.length === 0) list.splice(i, 1);
-  }
+  // 卸 SessionStart compact 跟 SessionEnd 两套
+  ['SessionStart', 'SessionEnd'].forEach(evt => {
+    const list = (settings.hooks && settings.hooks[evt]) || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      list[i].hooks = (list[i].hooks || []).filter(h => !(h.command || '').includes('tinker situation'));
+      if (list[i].hooks.length === 0) list.splice(i, 1);
+    }
+  });
 
   if (JSON.stringify(settings) === before) {
-    log(sepia('  没找到 Tinker compact hook · 没动'));
+    log(sepia('  没找到 Tinker hook · 没动'));
     return;
   }
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-  ok('Claude Code compact hook 删了');
+  ok('Claude Code hooks 删了 (SessionStart compact + SessionEnd)');
 }
 
 function cmdHookUninstall() {
+  if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
+  const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
+  // v0.13 卸 3 个 hooks
+  let any = false;
+  ['post-commit', 'post-push', 'post-checkout'].forEach(name => {
+    if (uninstallSingleGitHook(gitDir, name)) any = true;
+  });
+  if (any) ok('hooks 移除了');
+  else log(sepia('  没找到 tinker 的 hook 块'));
+}
+
+// v0.13 helper · 卸 marker 块
+function uninstallSingleGitHook(gitDir, name) {
+  const hookFile = path.join(gitDir, 'hooks', name);
+  if (!fs.existsSync(hookFile)) return false;
+  let content = fs.readFileSync(hookFile, 'utf-8');
+  const before = content;
+  content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
+  content = content.replace(/^.*tinker post-commit hook[\s\S]*?esac\s*\n/m, '');
+  content = content.trimEnd();
+  if (content === before.trimEnd()) return false;
+  if (content === '#!/bin/sh' || content === '') {
+    fs.unlinkSync(hookFile);
+  } else {
+    fs.writeFileSync(hookFile, content + '\n');
+  }
+  return true;
+}
+
+function cmdHookUninstallLegacy() {  // kept for legacy reference · unused
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
   const hookFile = path.join(gitDir, 'hooks', 'post-commit');
@@ -1779,7 +1853,6 @@ function cmdHookUninstall() {
   let content = fs.readFileSync(hookFile, 'utf-8');
   const before = content;
   content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
-  // 老版本兜底 (v1 暴力 hook)
   content = content.replace(/^.*tinker post-commit hook[\s\S]*?esac\s*\n/m, '');
   content = content.trimEnd();
   if (content === before.trimEnd()) {
@@ -4633,12 +4706,14 @@ async function reviewCandidatesInteractively(candidates, cfg, sourceTag) {
 async function cmdVoiceTeach(opts) {
   const cfg = mustHaveConfig();
 
-  if (!opts.fromClaude && !opts.file && !opts.review) {
+  if (!opts.fromClaude && !opts.fromTinker && !opts.file && !opts.review) {
     log(sepia('  用法:'));
     log(sepia('    ') + vermilion('tinker voice teach --from-claude'));
     log(sepia('      从 Claude Code 对话历史抽你说过的话当 sample (默认 100 条最近 · 自动加进 good 池)'));
     log(sepia('    ') + vermilion('tinker voice teach --from-claude --review'));
     log(sepia('      逐条让你标 y/n/skip · 分别进 good / bad / 跳过 (v0.11 新加)'));
+    log(sepia('    ') + vermilion('tinker voice teach --from-tinker'));
+    log(sepia('      回填:server 上自己最近 update 全部加进 good 池 (默认 30 条 · 自动去重)'));
     log(sepia('    ') + vermilion('tinker voice teach --review'));
     log(sepia('      从你最近 Tinker 推过的 update 里抽来 review (高信号样本 · v0.11 新加)'));
     log(sepia('    ') + vermilion('tinker voice teach --file <path>'));
@@ -4646,8 +4721,10 @@ async function cmdVoiceTeach(opts) {
     return;
   }
 
-  // v0.11: review 模式 + 从 Tinker 自己 push 历史拉
-  if (opts.review && !opts.fromClaude && !opts.file) {
+  // v0.11 review 模式 + 从 Tinker 自己 push 历史拉
+  // v0.13 --from-tinker 默认 bulk · 回填 webapp 直发 / contribute --from-file 等不走 CLI 的 update
+  const wantTinker = opts.fromTinker || (opts.review && !opts.fromClaude && !opts.file);
+  if (wantTinker) {
     log(sepia('  从你最近的 Tinker update 抽样本...'));
     let candidates = [];
     try {
@@ -4655,15 +4732,61 @@ async function cmdVoiceTeach(opts) {
       for (const p of state.projects) {
         if (p.owner !== cfg.handle) continue;
         for (const u of (p.updates || [])) {
-          if (u.text && u.text.length >= 30) candidates.push({ text: u.text, ts: u.at });
+          if (u.text && u.text.length >= 30) candidates.push({ text: u.text, ts: u.at, updateId: u.id });
         }
       }
     } catch (e) { err('拉 Tinker 数据失败: ' + e.message); process.exit(1); }
     candidates.sort((a, b) => b.ts - a.ts);
-    const N = opts.limit && opts.limit > 0 ? opts.limit : 10;
+    const N = opts.limit && opts.limit > 0 ? opts.limit : (opts.fromTinker ? 30 : 10);
     candidates = candidates.slice(0, N);
-    if (candidates.length === 0) { log(sepia('  没有 update 可 review · 先发几条再来')); return; }
-    return reviewCandidatesInteractively(candidates, cfg, 'tinker-self');
+    if (candidates.length === 0) { log(sepia('  没有 update 可拉 · 先发几条再来')); return; }
+
+    // review 模式 (review 显式)
+    if (opts.review) {
+      return reviewCandidatesInteractively(candidates, cfg, 'tinker-self');
+    }
+
+    // bulk 模式 (--from-tinker 默认) · 直接加 · 自动去重
+    const dir = path.join(CONFIG_DIR, 'style-pool', 'good');
+    fs.mkdirSync(dir, { recursive: true });
+    // 去重:扫已有文件 · 读 frontmatter 里的 source_update_id · 兜底走 text head
+    const existingIds = new Set();
+    const existingHeads = new Set();
+    try {
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith('.md')) continue;
+        const raw = fs.readFileSync(path.join(dir, f), 'utf-8');
+        const idMatch = raw.match(/source_update_id:\s*(\S+)/);
+        if (idMatch) existingIds.add(idMatch[1]);
+        const bodyMatch = raw.match(/---\s*\n[\s\S]*?\n---\s*\n([\s\S]+)$/);
+        if (bodyMatch) existingHeads.add(bodyMatch[1].trim().slice(0, 80));
+      }
+    } catch {}
+
+    let added = 0, skipped = 0;
+    candidates.forEach((m, i) => {
+      if (existingIds.has(m.updateId)) { skipped++; return; }
+      const head = m.text.trim().slice(0, 80);
+      if (existingHeads.has(head)) { skipped++; return; }
+      const ts = m.ts || Date.now();
+      const stamp = new Date(ts).toISOString().slice(0, 19).replace(/[T:]/g, '-');
+      const file = path.join(dir, `${stamp}-backfill-tinker-${String(i).padStart(3, '0')}.md`);
+      const meta = [
+        '---',
+        `handle: ${cfg.handle || ''}`,
+        `at: ${new Date(ts).toISOString()}`,
+        'choice: backfill-tinker',
+        'source: Tinker server (回填)',
+        `source_update_id: ${m.updateId}`,
+        '---',
+      ].join('\n');
+      fs.writeFileSync(file, `${meta}\n\n${m.text}\n`);
+      added++;
+    });
+    log('');
+    ok(`加了 ${added} 条 · 跳过 ${skipped} 条 (已在 pool 里)`);
+    if (added > 0) log(sepia('  下一步: ') + vermilion('tinker voice analyze') + sepia(' 生成 fingerprint'));
+    return;
   }
 
   // 模式 1 · 从 Claude Code 对话历史抽
@@ -5719,6 +5842,7 @@ function parseArgs(args) {
     else if (a === '--json') opts.json = true;
     else if (a === '--from-hook') opts.fromHook = true;
     else if (a === '--from-claude') opts.fromClaude = true;
+    else if (a === '--from-tinker') opts.fromTinker = true;
     else if (a === '--week') opts.week = true;
     else if (a === '--month') opts.month = true;
     else if (a === '--days') opts.daysBack = parseInt(args[++i], 10);
