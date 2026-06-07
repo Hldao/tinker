@@ -5309,6 +5309,127 @@ async function cmdBorrow(query, opts) {
   log(sepia('  借了哪条记得回头 ') + vermilion('tinker contribute') + sepia(' 把自己的总结也放进去'));
 }
 
+// v0.14 反馈链路三件套 · 让 CLI 也能完成 Tinker 反算法的核心闭环 (借了能回应 / 启发了能反馈)
+// 之前 reactToProject / submitTinkered / deleteTinkered / markMethodUsed 这 4 个 server action
+// 只有 webapp 在用 · CLI 没暴露 · 现在补上
+
+// 从 p-xxx 直接 ID · 或从 URL 提取
+function resolveProjectId(arg) {
+  if (!arg) return null;
+  if (arg.startsWith('p-')) return arg;
+  // URL 形态: https://.../#/p/<handle>/<slug>  或  /#/p/<id>
+  const m = arg.match(/p-[a-zA-Z0-9]+/);
+  return m ? m[0] : null;
+}
+
+// tinker react <projectId|url> — toggle "想试试"
+// 已标 → 撤回 (server 内部 toggle)
+async function cmdReact(arg, opts) {
+  const cfg = mustHaveConfig();
+  const projectId = resolveProjectId(arg);
+  if (!projectId) {
+    if (opts.json) return errJson('用法: tinker react <projectId>', 'NO_PROJECT');
+    err('用法: ' + vermilion('tinker react <projectId>') + sepia(' (例: tinker react p-mq10xkuo)'));
+    process.exit(1);
+  }
+  try {
+    const r = await apiAction(cfg, 'reactToProject', { projectId, level: 'wantToTry' });
+    const action = (r && r.result && r.result.action) || 'add';
+    if (opts.json) return outputJson({ ok: true, action, projectId });
+    ok(action === 'undo' ? '撤回了想试试' : '标了想试试 · 项目作者会收到通知');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'REACT_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
+// tinker tinkered <projectId|url> --name "..." --link "..." --inspired-by <updateId>
+// --undo 撤回
+// 必填: name / link / inspired-by  (link 必须 https://)
+async function cmdTinkered(arg, opts) {
+  const cfg = mustHaveConfig();
+  const projectId = resolveProjectId(arg);
+  if (!projectId) {
+    if (opts.json) return errJson('用法: tinker tinkered <projectId> --name <> --link <> --inspired-by <updateId>', 'NO_PROJECT');
+    err('用法: ' + vermilion('tinker tinkered <projectId> --name "..." --link "https://..." --inspired-by <updateId>'));
+    err('  撤回: ' + vermilion('tinker tinkered <projectId> --undo'));
+    process.exit(1);
+  }
+  if (opts.undo) {
+    try {
+      await apiAction(cfg, 'deleteTinkered', { projectId });
+      if (opts.json) return outputJson({ ok: true, action: 'undo' });
+      ok('撤回了接走 · 原作者通知也清了');
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'UNDO_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+  if (!opts.name || !opts.link || !opts.inspiredBy) {
+    if (opts.json) return errJson('必填: --name <> --link <https://...> --inspired-by <updateId>', 'MISSING_ARGS');
+    err('必填: --name "你做的项目名" --link "https://..." --inspired-by <updateId>');
+    process.exit(1);
+  }
+  try {
+    await apiAction(cfg, 'submitTinkered', {
+      projectId,
+      name: opts.name,
+      link: opts.link,
+      inspiredByUpdateId: opts.inspiredBy,
+    });
+    if (opts.json) return outputJson({ ok: true, projectId, name: opts.name, link: opts.link, inspiredByUpdateId: opts.inspiredBy });
+    ok('挂上了你的延伸版 · 原作者会收到通知');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'TINKERED_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
+// tinker used <updateId> [-m "怎么用的"] — 标"用了 · 跑通了"
+// server 要 updateIdx (按 at DESC 排) · 不是 updateId · 这里 CLI 拉 state 自己算
+// toggle 行为:已标 → 撤回 · 没标 → 加
+async function cmdUsed(updateId, opts) {
+  const cfg = mustHaveConfig();
+  if (!updateId || !updateId.startsWith('u-')) {
+    if (opts.json) return errJson('用法: tinker used <updateId>', 'NO_UPDATE_ID');
+    err('用法: ' + vermilion('tinker used <updateId>') + sepia(' (例: tinker used u-abc123 -m "我也跑通了 · 加了 retry")'));
+    process.exit(1);
+  }
+  let state;
+  try { state = await apiState(cfg); }
+  catch (e) {
+    if (opts.json) return errJson(e.message, 'STATE_FAILED');
+    err(e.message); process.exit(1);
+  }
+  let foundProject = null, foundIdx = -1;
+  for (const p of state.projects) {
+    const idx = (p.updates || []).findIndex(u => u.id === updateId);
+    if (idx >= 0) { foundProject = p; foundIdx = idx; break; }
+  }
+  if (!foundProject) {
+    if (opts.json) return errJson('找不到 update: ' + updateId, 'NOT_FOUND');
+    err('找不到这条 update: ' + updateId); process.exit(1);
+  }
+  if (foundProject.owner === cfg.handle) {
+    if (opts.json) return errJson('不能给自己的进展标"用了"', 'SELF');
+    err('不能给自己的进展标"用了"'); process.exit(1);
+  }
+  try {
+    const r = await apiAction(cfg, 'markMethodUsed', {
+      projectId: foundProject.id,
+      updateIdx: foundIdx,
+      note: (opts.text || '').trim(),
+    });
+    const action = (r && r.result && r.result.action) || 'add';
+    if (opts.json) return outputJson({ ok: true, action, updateId, projectId: foundProject.id });
+    ok(action === 'undo' ? '撤回了"用了 · 跑通了"' : '标了"用了 · 跑通了" · 原作者会收到通知');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'USED_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
 // tinker contribute <updateId> — 标自己一条 update 为方法
 // 不带参数时 · 默认拿最近一条 push 的 id
 async function cmdContribute(updateIdArg, opts) {
@@ -6012,6 +6133,13 @@ function help() {
   log('  ' + vermilion('tinker contribute --from-file <md>') + sepia('  从 markdown 按段交互选 contribute · 隐私扫描'));
   log('  ' + vermilion('tinker contribute --from-file <md> --auto') + sepia(' LLM 看完帮挑 3 段 · 一键确认'));
   log('');
+  log(sepia('  ') + vermilion('反馈链路 · 反算法的闭环 (借了 / 启发了要回应)'));
+  log('  ' + vermilion('tinker react <projectId>') + sepia('            toggle "想试试" · 项目作者收到通知'));
+  log('  ' + vermilion('tinker used <updateId> -m "..."') + sepia('     标某条进展为"用了 · 跑通了" · 给原作者反馈'));
+  log('  ' + vermilion('tinker tinkered <projectId> --name "..." --link "https://..." --inspired-by <updateId>'));
+  log(sepia('                                       挂上你做的延伸版 · 因 ta 启发'));
+  log('  ' + vermilion('tinker tinkered <projectId> --undo') + sepia('  撤回延伸版'));
+  log('');
   log(sepia('  ') + vermilion('voice · 写作风格学习'));
   log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
   log('  ' + vermilion('tinker voice teach --from-claude') + sepia('    从 Claude Code 对话历史抽样本'));
@@ -6038,6 +6166,9 @@ function help() {
   log(sepia('  用户问"上次怎么解决的"              → ') + vermilion('tinker recent --json --limit 10'));
   log(sepia('  起草前避免重复 / 引用作者过往        → ') + vermilion('tinker recent --json'));
   log(sepia('  作者要"标方法/经验/上手指南/决策"     → ') + vermilion('tinker contribute / mark-experience / mark-learning / mark-decision'));
+  log(sepia('  用户借了某条 update 且跑通了          → ') + vermilion('tinker used <updateId> -m "..." ') + dim('(给原作者反馈)'));
+  log(sepia('  用户说"想试试某个项目"              → ') + vermilion('tinker react <projectId>'));
+  log(sepia('  用户做了延伸版 (因 ta 启发)           → ') + vermilion('tinker tinkered <projectId> --name --link --inspired-by'));
   log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
   log(sepia('  ') + dim('调前看 ') + vermilion('tinker state --json') + dim(' · 静音/冷却中别打扰'));
   log(sepia('  ') + dim('幂等保险 · 给 --idempotency-key (同 key 24h 内不重复)'));
@@ -6075,6 +6206,13 @@ function parseArgs(args) {
     else if (a === '--from-hook') opts.fromHook = true;
     else if (a === '--from-claude') opts.fromClaude = true;
     else if (a === '--from-tinker') opts.fromTinker = true;
+    else if (a === '--name') opts.name = args[++i];
+    else if (a.startsWith('--name=')) opts.name = a.slice('--name='.length);
+    else if (a === '--link') opts.link = args[++i];
+    else if (a.startsWith('--link=')) opts.link = a.slice('--link='.length);
+    else if (a === '--inspired-by') opts.inspiredBy = args[++i];
+    else if (a.startsWith('--inspired-by=')) opts.inspiredBy = a.slice('--inspired-by='.length);
+    else if (a === '--undo') opts.undo = true;
     else if (a === '--week') opts.week = true;
     else if (a === '--month') opts.month = true;
     else if (a === '--days') opts.daysBack = parseInt(args[++i], 10);
@@ -6528,6 +6666,9 @@ async function main() {
       }
       case 'contribute': await cmdContribute(args[1], opts); break;
       case 'recent': await cmdRecent(opts); break;
+      case 'react': await cmdReact(args[1], opts); break;
+      case 'tinkered': await cmdTinkered(args[1], opts); break;
+      case 'used': await cmdUsed(args[1], opts); break;
       case 'mark-experience': case 'mark-exp':
         await cmdMarkExperience(args[1], opts); break;
       case 'mark-learning': case 'mark-learn':
