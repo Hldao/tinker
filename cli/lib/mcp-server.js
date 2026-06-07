@@ -166,7 +166,7 @@ const TOOLS = [
   // === 动作类 ===
   {
     name: 'tinker_push',
-    description: '发一笔普通进展到指定项目。message 必填 · project_id 可选 (不填用 repo 绑定的项目)。idempotency_key 强烈推荐:AI 重试时同 key 24h 内不重复 push。',
+    description: '记一笔普通进展到指定项目。message 必填 · project_id 可选 (不填用 repo 绑定的项目)。idempotency_key 强烈推荐:AI 重试时同 key 24h 内不重复 push。',
     inputSchema: {
       type: 'object',
       properties: {

@@ -1975,7 +1975,7 @@ function triggerKeywordMatch() {
     // v0.91 砍 demo (demo 数据 / demo 视频高频)
     const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b)/i;
     if (PROTO_WORDS.test(scanText)) {
-      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `像原型节点的 commit: ${dim(titleSnippet)}`, suggestion: '要不要把原型挂上 · 顺便发一笔' };
+      return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `像原型节点的 commit: ${dim(titleSnippet)}`, suggestion: '要不要把原型挂上 · 顺便记一笔' };
     }
 
     // BREAKTHROUGH · "终于明白 / 想清楚了" · 没被 SHIP 吃掉的顿悟时刻
@@ -2135,7 +2135,7 @@ function triggerCrossRepoDrift(state, currentRepoCfg) {
     reason: 'cross-repo-drift',
     kind: 'progress',
     msg: `今天主要在 ${dim('"' + (otherInfo.projectName || path.basename(other)) + '"')} 干活 (${otherCount}/${total} commits) · 这边 ${currentRepoCfg.projectName} 只占 ${currentCount}/${total}`,
-    suggestion: `要不切到那边发一笔 · 还是这边其实没动 (那这一笔可能不发就好)`,
+    suggestion: `要不切到那边记一笔 · 还是这边其实没动 (那这一笔可能不发就好)`,
   };
 }
 
@@ -2379,7 +2379,7 @@ function triggerLongBody() {
       reason: 'long-body',
       kind: 'long-body',
       msg: `这条 commit 你写了 ${body.length} 字 · 用心了: ${dim(titleSnippet)}`,
-      suggestion: '作者花时间写的事一般值得记 · 顺手发一笔吧',
+      suggestion: '作者花时间写的事一般值得记 · 顺手记一笔吧',
     };
   } catch { return { fired: false }; }
 }
@@ -2697,7 +2697,7 @@ function evaluateUiSession(state, cfg) {
     kind: 'ui-session',
     session,
     msg: `这一波 UI 改了 ${session.commitCount} 个 commit (${minutes} 分钟前开始 · ${reason})`,
-    suggestion: '想发一笔总结吗? 我会自动等 deploy 完贴 before/after 对比图',
+    suggestion: '想记一笔总结吗? 我会自动等 deploy 完贴 before/after 对比图',
   };
 }
 
@@ -3077,10 +3077,10 @@ async function cmdCheck(opts) {
   }
 
   // 根据触发器类型 · 默认动作不一样:
-  //   keyword=frustrated → 特殊:不说"想发一笔"·三选 [标卡住 / 喘口气 / 没事接着搞]
+  //   keyword=frustrated → 特殊:不说"想记一笔"·三选 [标卡住 / 喘口气 / 没事接着搞]
   //   keyword=ship → "进陈列馆" (走 shipProject) 排第一
   //   keyword=stuck → "标卡住" 排第一
-  //   其他 → "发一笔" 排第一
+  //   其他 → "记一笔" 排第一
   const choices = [];
   if (result.kind === 'frustrated') {
     // 破防时刻 · 文案 / 选项跟其他都不一样 · 不要产品语言
@@ -3088,17 +3088,17 @@ async function cmdCheck(opts) {
     choices.push({ name: '暂停 30 分钟 · 出去走走', value: 'mute-30m' });
     choices.push({ name: '没事 · 我接着搞', value: 'skip-once' });
   } else if (result.kind === 'ui-session') {
-    // UI session 结束 · 想发一笔 + 自动贴对比图 (第二个 commit 加 deploy watcher)
-    choices.push({ name: '发一笔 · 自动贴 before / after 对比图', value: 'ui-push' });
-    choices.push({ name: '只发一笔 · 不要对比图', value: 'push' });
+    // UI session 结束 · 想记一笔 + 自动贴对比图 (第二个 commit 加 deploy watcher)
+    choices.push({ name: '记一笔 · 自动贴 before / after 对比图', value: 'ui-push' });
+    choices.push({ name: '只记一笔 · 不要对比图', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'brand') {
     // 品牌信号 · "捣鼓" / Tinker 出现 · 主动认歧义 · 让用户挑哪种意思
     // v0.2 #3: 两个选项 value 区分 · 让 input prompt 文案匹配语境
-    choices.push({ name: '是 Tinker 项目本身的进展 · 发一笔', value: 'push-brand-self' });
-    choices.push({ name: '是用 Tinker 做事情的反思 · 发一笔', value: 'push-brand-meta' });
+    choices.push({ name: '是 Tinker 项目本身的进展 · 记一笔', value: 'push-brand-self' });
+    choices.push({ name: '是用 Tinker 做事情的反思 · 记一笔', value: 'push-brand-meta' });
     choices.push({ name: '巧合 · 跟 Tinker 没关系 · 跳过', value: 'skip-once' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
@@ -3164,25 +3164,25 @@ async function cmdCheck(opts) {
     choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'long-body') {
     // v0.7: 长 body 兜底 · 作者花时间写
-    choices.push({ name: '顺手发一笔', value: 'push' });
+    choices.push({ name: '顺手记一笔', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'ship') {
     choices.push({ name: '✦ 进陈列馆 · 写一句完工感想', value: 'ship' });
-    choices.push({ name: '只发一笔普通进展', value: 'push' });
+    choices.push({ name: '只记一笔普通进展', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'stuck') {
     choices.push({ name: '⚠ 标卡住 · 写在哪里卡了', value: 'stuck' });
-    choices.push({ name: '只发一笔普通进展', value: 'push' });
+    choices.push({ name: '只记一笔普通进展', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
   } else if (result.kind === 'prototype') {
     choices.push({ name: '◐ 进陈列馆 · 作为原型', value: 'prototype' });
-    choices.push({ name: '只发一笔普通进展', value: 'push' });
+    choices.push({ name: '只记一笔普通进展', value: 'push' });
     choices.push({ name: '稍后 · 1 小时后再问', value: 'later' });
     choices.push({ name: '今天不发了 · 明天再问', value: 'skip-today' });
     choices.push({ name: '静音 24 小时', value: 'mute' });
@@ -6243,7 +6243,7 @@ function cmdSchema(opts = {}) {
         { flag: '--json', purpose: '结构化' },
         { flag: '--narrate', purpose: '让 LLM 朋友式说一句' },
       ], jsonOutput: true, example: 'tinker goodnight --json' },
-      { name: 'push', purpose: '发一笔进展 · 直接 / 从草稿文件 / experience 单篇都支持', args: [
+      { name: 'push', purpose: '记一笔进展 · 直接 / 从草稿文件 / experience 单篇都支持', args: [
         { flag: '-m / --message', purpose: '内容' },
         { flag: '-p / --project', purpose: '指定项目 id (不指定时自动选唯一一个)' },
         { arg: '<file.md>', purpose: '从草稿文件发布 (含 autopsy 生成的 experience 草稿)' },
