@@ -4129,12 +4129,12 @@ async function cmdContributeFromFile(cfg, opts) {
   // 优先级: --project <slug> > 当前 cwd repoConfig > 交互选 > 报错
   let projectId = null;
   let projectName = null;
-  if (opts.project) {
+  if (opts.projectId) {
     const state = await apiState(cfg);
-    const p = state.projects.find(x => x.owner === cfg.handle && (x.slug === opts.project || x.name === opts.project));
+    const p = state.projects.find(x => x.owner === cfg.handle && (x.id === opts.projectId || x.slug === opts.projectId || x.name === opts.projectId));
     if (!p) {
-      if (opts.json) return errJson('找不到项目: ' + opts.project, 'NO_PROJECT');
-      err('找不到你的项目: ' + opts.project); process.exit(1);
+      if (opts.json) return errJson('找不到项目: ' + opts.projectId, 'NO_PROJECT');
+      err('找不到你的项目: ' + opts.projectId); process.exit(1);
     }
     projectId = p.id; projectName = p.name;
   } else {
@@ -4460,8 +4460,7 @@ function parseArgs(args) {
       if (opts.section) opts.section = Array.isArray(opts.section) ? [...opts.section, v] : [opts.section, v];
       else opts.section = v;
     }
-    else if (a === '--project') opts.project = args[++i];
-    else if (a.startsWith('--project=')) opts.project = a.slice('--project='.length);
+    else if (a.startsWith('--project=')) opts.projectId = a.slice('--project='.length);
     else if (a === '--unmark') {
       // 既支持 --unmark <id> 也支持 --unmark=<id> · 单独 --unmark 走 positional id
       const next = args[i + 1];

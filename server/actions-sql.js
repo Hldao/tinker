@@ -375,7 +375,7 @@ function getProjectFlat(projectId) {
 
 // notifyTinkered: 作者主动通知"接走我 + 想试试"的人 (默认 false · 避免轰炸)
 // alsoStuck: 同时把项目改为 stuck (spec §5.3 "卡了" 进展 → 召回过往关心者)
-function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at }, { currentUserId }) {
+function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at, isMethod }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('记一笔不能空');
   const p = db.prepare('SELECT owner_id, name, status FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
@@ -391,10 +391,12 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
   const willStuck = alsoStuck && p.status !== 'stuck';
   // 求反馈:勾了之后 · 存 feedback_ask 字段(可能为空字符串 = 求反馈但没具体问题)
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
+  // v0.13 contribute --from-file: 创建时就标方法 · 省一次 API 调用
+  const methodFlag = isMethod ? 1 : 0;
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal);
+      INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask, is_method) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal, methodFlag);
 
     if (Array.isArray(images)) {
       const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
