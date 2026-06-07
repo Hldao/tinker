@@ -227,6 +227,11 @@
   .entry-status.done { color: var(--moss); }
   /* v0.79 feed 卡片文本最多 6 行 · 超出 ... 截断 · 点卡片进项目页看全文 */
   .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; text-overflow: ellipsis; }
+  /* v0.84 方法 tag chip · 跨用户聚类信号 · 卡片底部显示 */
+  .method-tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .method-tag-chip { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); padding: 2px 8px; background: rgba(120, 113, 108, 0.06); border-radius: 12px; letter-spacing: 0.05em; cursor: pointer; transition: background 0.15s; }
+  .method-tag-chip:hover { background: rgba(120, 113, 108, 0.14); }
+  .method-tag-chip::before { content: '#'; opacity: 0.5; margin-right: 2px; }
   /* v0.83 方法库子页 · masthead 方法库 进入 · 跨用户跨项目 */
   .methods-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
   .methods-lib-search { flex: 1; min-width: 240px; font-family: 'Newsreader', serif; font-size: 16px; padding: 10px 14px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; color: var(--ink); transition: border-color 0.15s; }
@@ -7410,6 +7415,15 @@ function getFeedEvents() {
   return events;
 }
 
+// v0.84 方法 tag chip row · 点击跳方法库子页 + 用 #tag 当 query
+function renderMethodTagRow(m) {
+  const tags = Array.isArray(m.tags) ? m.tags : [];
+  if (tags.length === 0) return '';
+  return `<div class="method-tag-row">${
+    tags.map(t => `<span class="method-tag-chip" onclick="event.stopPropagation(); methodsLibraryState.query='#${escapeHtml(t)}'; showScreen('methods');">${escapeHtml(t)}</span>`).join('')
+  }</div>`;
+}
+
 // v0.82 沉淀方法 hero · 跟下方 feed 是两个平行板块
 // 排序优先级:
 // 1. 借用次数 (有数据时 · borrowCount desc · 沉淀价值越高越靠前)
@@ -7444,9 +7458,10 @@ function renderMethodHero() {
       ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
       : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
     return `
-      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
         <span class="method-hero-card-badge">✤ 方法</span>
         ${scenarioOrFallback}
+        ${renderMethodTagRow(m)}
         <div class="method-hero-card-meta">
           <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
           <span style="color: var(--sepia-light);">·</span>
@@ -7813,6 +7828,58 @@ function renderWorkshop(handle) {
         <div class="done-index-list">${renderDoneIndex(done)}</div>
       </div>
     ` : ''}
+    ${(() => {
+      // v0.84 工作室方法库板块 · 跟项目并列 · 让"沉淀手艺"在 owner 页就能被看见
+      // 排序: borrowCount desc → updatedAt desc · 最多显示 12 张 · 更多走方法库子页
+      const ownerMethods = (state.methods || []).filter(m => m.owner === handle);
+      if (ownerMethods.length === 0) return '';
+      const sorted = [...ownerMethods].sort((a, b) => {
+        const bc = (b.borrowCount || 0) - (a.borrowCount || 0);
+        if (bc !== 0) return bc;
+        return (b.updatedAt || b.at) - (a.updatedAt || a.at);
+      });
+      const shown = sorted.slice(0, 12);
+      const projectsById = new Map(state.projects.map(p => [p.id, p]));
+      const cards = shown.map(m => {
+        const p = m.projectId ? projectsById.get(m.projectId) : null;
+        const scenarioOrFallback = m.scenario
+          ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
+          : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 80))}…</div>`;
+        const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
+        const projectLine = p
+          ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
+          : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
+        const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span>` : '';
+        return `
+          <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+            <span class="method-hero-card-badge">✤ 方法</span>
+            ${scenarioOrFallback}
+            ${renderMethodTagRow(m)}
+            <div class="method-hero-card-meta">
+              ${borrowed}
+              ${projectLine}
+              <span style="color: var(--sepia-light);">·</span>
+              <span>${shortAgo(m.at)}</span>
+            </div>
+            <div class="method-hero-card-actions">
+              <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+      const moreLink = sorted.length > 12
+        ? `<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="showScreen('methods')">看全部方法库 →</span>`
+        : '';
+      return `
+        <div class="mb-12">
+          <div class="section-label flex items-center justify-between">
+            <span>沉淀方法 (${ownerMethods.length})</span>
+            ${moreLink}
+          </div>
+          <div class="method-hero-scroll">${cards}</div>
+        </div>
+      `;
+    })()}
     ${trackingPublic.length > 0 ? `
       <div class="mb-12">
         <div class="section-label">${isMe ? '我在跟进的' : `@${handle} 在跟进的`} (${trackingPublic.length})</div>
@@ -8221,14 +8288,14 @@ function daysSinceShip(ts) {
 
 // v0.83 方法库子页 · masthead 顶级 nav 进来
 // 跨用户跨项目 · 按主题分组 (按所属项目)/ 按 owner 分组 / 按时间倒序
-// 顶部 keyword search · 复用 borrow 那条 FTS5 路径 (/api/method/search)
+// v0.84: 搜索改成 server-side FTS5 · 通过 /api/method/search · 跟 tinker borrow 同源
 //
 // 设计哲学:
 // - 方法是沉淀型资产 · 这里不强加排序 · 让用户自己挑维度
 // - 三种维度: 关键词搜 · 按作者分组 · 按项目分组
 // - 不做 trending / star / ranking (Tinker 反算法立场)
-let methodsLibraryState = { query: '', groupBy: 'project' }; // groupBy: 'project' | 'owner' | 'recent'
-function renderMethodsLibrary(initialQuery) {
+let methodsLibraryState = { query: '', groupBy: 'project', remoteHits: null, lastQuery: null };
+async function renderMethodsLibrary(initialQuery) {
   if (initialQuery !== undefined) methodsLibraryState.query = initialQuery;
   const root = document.getElementById('methods-library-content');
   if (!root) return;
@@ -8236,16 +8303,43 @@ function renderMethodsLibrary(initialQuery) {
   const all = state.methods || [];
   const projectsById = new Map(state.projects.map(p => [p.id, p]));
 
-  // 关键词过滤 · 简单 case-insensitive substring 匹配 (text + scenario)
-  // 服务器端 /api/method/search 是 FTS5 · 但这里直接前端 filter 够用了 · 数据量小
+  // v0.84 关键词非空 → server-side FTS5 (跟 tinker borrow 同源)
+  // 特殊: query 以 # 开头 → tag 精确过滤 (前端 filter · 不发 server)
+  // 关键词空 → 用本地 state.methods 全集 (避免每次进页面都打一次 API)
   let methods = all;
-  const q = (methodsLibraryState.query || '').trim().toLowerCase();
-  if (q) {
-    methods = methods.filter(m => {
-      return (m.text || '').toLowerCase().includes(q) ||
-             (m.scenario || '').toLowerCase().includes(q) ||
-             (m.owner || '').toLowerCase().includes(q);
-    });
+  const q = (methodsLibraryState.query || '').trim();
+  if (q.startsWith('#') && q.length > 1) {
+    const tag = q.slice(1).toLowerCase();
+    methods = all.filter(m => Array.isArray(m.tags) && m.tags.some(t => t.toLowerCase() === tag));
+  } else if (q) {
+    // 缓存机制: 同 query 不重发 · 等用户改了再发
+    if (methodsLibraryState.lastQuery !== q || methodsLibraryState.remoteHits === null) {
+      try {
+        const url = new URL('/api/method/search', location.origin);
+        url.searchParams.set('q', q);
+        url.searchParams.set('kindFilter', 'method');
+        url.searchParams.set('limit', '50');
+        const res = await fetch(url.toString());
+        const data = await res.json();
+        // FTS5 命中是 method id · 用 id 反查 state.methods 拿全字段 (含 borrowCount)
+        const hitIds = new Set((data.hits || []).map(h => h.methodId || h.id));
+        methodsLibraryState.remoteHits = all.filter(m => hitIds.has(m.id));
+        methodsLibraryState.lastQuery = q;
+      } catch (e) {
+        // 网络挂 fallback 到本地 substring
+        methodsLibraryState.remoteHits = all.filter(m => {
+          const lq = q.toLowerCase();
+          return (m.text || '').toLowerCase().includes(lq) ||
+                 (m.scenario || '').toLowerCase().includes(lq) ||
+                 (m.owner || '').toLowerCase().includes(lq);
+        });
+        methodsLibraryState.lastQuery = q;
+      }
+    }
+    methods = methodsLibraryState.remoteHits;
+  } else {
+    methodsLibraryState.remoteHits = null;
+    methodsLibraryState.lastQuery = null;
   }
 
   const renderCard = (m) => {
@@ -8258,9 +8352,10 @@ function renderMethodsLibrary(initialQuery) {
       ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
       : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
     return `
-      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
         <span class="method-hero-card-badge">✤ 方法</span>
         ${scenarioOrFallback}
+        ${renderMethodTagRow(m)}
         <div class="method-hero-card-meta">
           <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
           <span style="color: var(--sepia-light);">·</span>
@@ -8293,6 +8388,33 @@ function renderMethodsLibrary(initialQuery) {
       return `
         <div class="methods-lib-group">
           <div class="methods-lib-group-head">${groupLabel} <span class="methods-lib-group-count">· ${list.length} 条</span></div>
+          <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
+        </div>
+      `;
+    }).join('');
+  } else if (methodsLibraryState.groupBy === 'topic') {
+    // 按主题 = 按 tag 分组 · 一条 method 多 tag 时会在多组里都出现 (重复显示 OK · 让发现性最大化)
+    const byTag = new Map();
+    methods.forEach(m => {
+      const tags = Array.isArray(m.tags) ? m.tags : [];
+      if (tags.length === 0) {
+        if (!byTag.has('__none__')) byTag.set('__none__', []);
+        byTag.get('__none__').push(m);
+      } else {
+        tags.forEach(t => {
+          if (!byTag.has(t)) byTag.set(t, []);
+          byTag.get(t).push(m);
+        });
+      }
+    });
+    const sortedGroups = [...byTag.entries()].sort((a, b) => b[1].length - a[1].length);
+    groupedHtml = sortedGroups.map(([tag, list]) => {
+      const label = tag === '__none__'
+        ? '<span style="font-style: italic; color: var(--sepia);">未打 tag</span>'
+        : `<span class="method-tag-chip" style="font-size: 13px; padding: 4px 12px;" onclick="event.stopPropagation();">${escapeHtml(tag)}</span>`;
+      return `
+        <div class="methods-lib-group">
+          <div class="methods-lib-group-head">${label} <span class="methods-lib-group-count">· ${list.length} 条</span></div>
           <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
         </div>
       `;
@@ -8333,6 +8455,7 @@ function renderMethodsLibrary(initialQuery) {
         <input type="text" id="methods-lib-q" class="methods-lib-search" placeholder="搜方法 · supabase / 邮箱登录 / 部署…" value="${escapeHtml(methodsLibraryState.query)}"
           oninput="methodsLibraryState.query = this.value; clearTimeout(window._methodsLibT); window._methodsLibT = setTimeout(() => renderMethodsLibrary(), 200);">
         <div class="methods-lib-tabs">
+          ${groupTab('topic', '按主题')}
           ${groupTab('project', '按项目')}
           ${groupTab('owner', '按作者')}
           ${groupTab('recent', '按最近')}
@@ -8684,6 +8807,11 @@ function flashAnchor(anchor) {
   el.classList.remove('flash-anchor'); // 重置动画
   void el.offsetWidth;
   el.classList.add('flash-anchor');
+  // v0.83: 动画结束后清掉 class · 否则 .flash-anchor 上的 padding-left/margin-left
+  // 静态值会永久残留 · entry 视觉偏移 (用户报告 "刚进详情页错误 · 刷新就好")
+  el.addEventListener('animationend', () => {
+    el.classList.remove('flash-anchor');
+  }, { once: true });
 }
 
 /* ============ SEARCH ============ */
