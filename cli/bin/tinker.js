@@ -62,9 +62,20 @@ function errJson(msg, code, extra) {
 // Config
 // =============================================
 function loadConfig() {
-  if (!fs.existsSync(CONFIG_FILE)) return null;
-  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')); }
-  catch (e) { return null; }
+  // 优先级:env var > config 文件 · 让 AI agent / CI / 远程跑都能用
+  // TINKER_TOKEN / TINKER_SERVER / TINKER_HANDLE 三个 env 都支持
+  let cfg = null;
+  if (fs.existsSync(CONFIG_FILE)) {
+    try { cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')); } catch (e) {}
+  }
+  if (process.env.TINKER_TOKEN || process.env.TINKER_SERVER || process.env.TINKER_HANDLE) {
+    cfg = cfg || {};
+    if (process.env.TINKER_TOKEN) cfg.token = process.env.TINKER_TOKEN;
+    if (process.env.TINKER_SERVER) cfg.serverUrl = process.env.TINKER_SERVER.replace(/\/$/, '');
+    if (process.env.TINKER_HANDLE) cfg.handle = process.env.TINKER_HANDLE;
+    if (!cfg.serverUrl) cfg.serverUrl = DEFAULT_SERVER_URL;
+  }
+  return cfg;
 }
 function saveConfig(cfg) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -3794,6 +3805,13 @@ async function main() {
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
       case 'schema': cmdSchema(opts); break;
+      case 'mcp':
+        // 启动 MCP server · stdio 模式 · 给 Claude Code / Cursor 等当作 first-class tool
+        // 配置: ~/.claude/mcp.json 加 { mcpServers: { tinker: { command: "tinker", args: ["mcp"] } } }
+        const { startMcpServer } = require('../lib/mcp-server.js');
+        await startMcpServer();
+        return; // 这里不退出 · server 跑到 stdin EOF
+
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default:
@@ -3815,4 +3833,30 @@ async function main() {
   }
 }
 
-main();
+// 导出给 mcp-server.js 复用 · 不重写 API/state/git 逻辑
+module.exports = {
+  // 配置
+  loadConfig, mustHaveConfig, CONFIG_DIR, CONFIG_FILE,
+  // API
+  apiState, apiMe, apiAction, safeFetch,
+  // 状态持久化
+  loadPromptState, savePromptState, todayKey, recordPushAt,
+  // git
+  inGitRepo, gitHistorySince,
+  // LLM
+  llmDraft, llmQuickDraft, sanitizeDraft, validateDraft,
+  recordLLMUsage, getTodayLLMUsage,
+  // Claude Code 用量
+  getClaudeCodeUsageToday,
+  // 触发器
+  evaluateAllTriggers, loadRepoConfig,
+  // pending (AI agent 路径)
+  loadPending, savePending, clearPending,
+  // sample pool
+  savePoolSample,
+};
+
+// 直接 ./tinker 跑才走 main · require 拿模块时不跑
+if (require.main === module) {
+  main();
+}

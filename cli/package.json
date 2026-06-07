@@ -9,7 +9,8 @@
     "start": "node bin/tinker.js"
   },
   "dependencies": {
-    "@inquirer/prompts": "^7.2.1"
+    "@inquirer/prompts": "^7.2.1",
+    "@modelcontextprotocol/sdk": "^1.29.0"
   },
   "engines": {
     "node": ">=18.0.0"
