@@ -270,6 +270,10 @@
   .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; }
   .pcard-meta .stuck { color: var(--vermilion); }
   .pcard-meta .done { color: var(--moss); }
+  /* v0.73 跟进的 pcard 视觉降级 · 区分 owned vs 跨工作室 · 防"虚假繁荣感" */
+  .pcard.tracking-pcard { padding: 14px 0; border-bottom: 1px dotted var(--rule); }
+  .pcard.tracking-pcard .pcard-name { font-size: 17px; color: var(--ink-soft); }
+  .pcard.tracking-pcard:hover .pcard-name { color: var(--vermilion); }
 
   /* PROJECT */
   .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
@@ -7579,6 +7583,12 @@ function renderWorkshop(handle) {
     `;
   }).join('');
 
+  // v0.73 工作室页结构性瘦身:
+  //   · mini-stats isMe 守卫 (访客回归诗意头部 · 累计仅自己看)
+  //   · 顺序重排: 最近在动 → 最近的动静(上移) → 也在做 → 做过的 → 跟进的
+  //   · "做过的"去 vermilion 强调 · 让在做是主舞台 (spec §11)
+  //   · "跟进的"用 .tracking-pcard 视觉降级 · 防虚假繁荣
+  //   · CLI 钥匙弱化 · 跟"编辑"拉层级
   root.innerHTML = `
     <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工作室' : '一间工作室'}</div>
@@ -7586,9 +7596,9 @@ function renderWorkshop(handle) {
       <p class="workshop-tagline">
         「${escapeHtml(user.tagline)}」
         ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
-        ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="vertical-align: middle;">CLI 钥匙</span>` : ''}
+        ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); vertical-align: middle; letter-spacing: 0.05em;">CLI 钥匙</span>` : ''}
       </p>
-      ${miniStatsHtml}
+      ${isMe ? miniStatsHtml : ''}
     </div>
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
@@ -7609,22 +7619,26 @@ function renderWorkshop(handle) {
         </div>
       ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent)}
     </div>
+    ${recentEvents.length > 0 ? `
+      <div class="mb-12" id="workshop-recent-events">
+        <div class="section-label">最近的动静</div>
+      </div>
+    ` : ''}
+    ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing, {region: 'alsoDoing'})}</div>` : ''}
     ${done.length > 0 ? `
       <div class="mb-12">
-        <div class="section-label flex items-center justify-between" style="color: var(--vermilion);">
-          <span>做过的 · 都在陈列馆 (${done.length})</span>
-          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0; color: var(--vermilion); border-bottom-color: var(--vermilion);" onclick="showScreen('showcase')">看全部陈列 →</span>
+        <div class="section-label flex items-center justify-between">
+          <span>做过的 (${done.length})</span>
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="showScreen('showcase')">看全部陈列 →</span>
         </div>
         <div class="done-index-list">${renderDoneIndex(done)}</div>
       </div>
     ` : ''}
-    ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing, {region: 'alsoDoing'})}</div>` : ''}
-
     ${trackingPublic.length > 0 ? `
       <div class="mb-12">
         <div class="section-label">${isMe ? '我在跟进的' : `@${handle} 在跟进的`} (${trackingPublic.length})</div>
         ${trackingPublic.map(({p, roleLabel}) => `
-          <div class="pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
+          <div class="pcard tracking-pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
             <div class="pcard-name">@${p.owner} / ${escapeHtml(p.name)}</div>
             <div class="pcard-meta">
               <span style="color: var(--vermilion);">— ${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
@@ -7633,10 +7647,6 @@ function renderWorkshop(handle) {
         `).join('')}
       </div>
     ` : ''}
-
-    <div class="mt-16" id="workshop-recent-events">
-      <div class="section-label">最近的动静</div>
-    </div>
   `;
 
   // v0.37: 最近的动静 同样跳过"第一个今天"的 label · 只在换天时出现 separator
