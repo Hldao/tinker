@@ -1925,64 +1925,74 @@ function triggerKeywordMatch() {
     //   DECISION · v0.2 新加 · 工具链选型 priority 85 · 比 fix 长期价值高
     //   FIX / TINKER / DISCOVERY · 弱信号最后
 
+    // v0.91 conventional commit prefix 检测 · feat:/fix:/refactor: 等开头 = 技术叙述
+    // 主要给 BRAND 用 · 避免项目作者自指误触发 · 其他触发器维持原判断
+    const isConventionalCommit = /^(feat|fix|refactor|chore|docs|test|style|build|ci|perf|revert)(\([^)]+\))?:/i.test(title);
+
     // SHIP (仪式信号 · 完工) · 优先级 100 · 同时命中时盖过 BREAKTHROUGH
-    const SHIP_WORDS = /(\bship(?:ped|s|it)?\b|\bdone\b|\bmerged?\b|\bdeployed?\b|\breleased?\b|\blaunch(?:ed)?\b|\brolled out\b|完工|跑通|发布|上线|上架|完成|\bfinished?\b)/i;
+    // v0.91 砍 merged? (git merge 高频) / done|finished? (多义) / 发布|完成 (描述性)
+    // 留显式仪式词 · 真完工才命中
+    const SHIP_WORDS = /(\bship(?:ped|s|it)?\b|\bdeployed?\b|\breleased?\b|\blaunch(?:ed)?\b|\brolled out\b|完工|跑通|上线|上架)/i;
     if (SHIP_WORDS.test(scanText)) {
       return { fired: true, priority: 100, reason: 'keyword-ship', kind: 'ship', msg: `像完工的 commit: ${dim(titleSnippet)}`, suggestion: '要不要进陈列馆 · 写一句感想' };
     }
 
     // STUCK (技术性卡住 · 不像 FRUSTRATED 那么情绪化)
-    const STUCK_WORDS = /(\bstuck\b|卡住|卡了|卡在|\bhotfix\b|\bbroken\b|挂了|不对劲|出问题|报错了|\bblocker\b)/i;
+    // v0.91 砍 hotfix (是 commit prefix 不是状态)
+    const STUCK_WORDS = /(\bstuck\b|卡住|卡了|卡在|\bbroken\b|挂了|不对劲|出问题|报错了|\bblocker\b)/i;
     if (STUCK_WORDS.test(scanText)) {
       return { fired: true, priority: 100, reason: 'keyword-stuck', kind: 'stuck', msg: `像卡住的 commit: ${dim(titleSnippet)}`, suggestion: '要不要标卡住 · 让在意的人看到' };
     }
 
     // PROTOTYPE
-    const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b|\bdemo\b)/i;
+    // v0.91 砍 demo (demo 数据 / demo 视频高频)
+    const PROTO_WORDS = /(\bprototype\b|原型|\bmockup\b)/i;
     if (PROTO_WORDS.test(scanText)) {
       return { fired: true, priority: 100, reason: 'keyword-prototype', kind: 'prototype', msg: `像原型节点的 commit: ${dim(titleSnippet)}`, suggestion: '要不要把原型挂上 · 顺便发一笔' };
     }
 
     // BREAKTHROUGH · "终于明白 / 想清楚了" · 没被 SHIP 吃掉的顿悟时刻
-    const BREAKTHROUGH_WORDS = /(终于(?:明白|搞清|搞定|想通|懂了)|搞清楚了|想清楚了|想通了|想明白了|顿悟|\baha\b|\bfinally\b(?!\s+(?:ship|done|done))|\bclicked\b|\bgot it\b)/i;
+    // v0.91 砍 clicked (UI 词高频) / got it (太宽泛) · 修了 done|done 重复 bug
+    const BREAKTHROUGH_WORDS = /(终于(?:明白|搞清|搞定|想通|懂了)|搞清楚了|想清楚了|想通了|想明白了|顿悟|\baha\b|\bfinally\b(?!\s+(?:ship|done)))/i;
     if (BREAKTHROUGH_WORDS.test(scanText)) {
       return { fired: true, priority: 95, reason: 'keyword-breakthrough', kind: 'progress', msg: `像顿悟的 commit: ${dim(titleSnippet)}`, suggestion: '这种十秒钟很难复现 · 一笔留下来吧' };
     }
 
     // v0.2 #1 DECISION · 工具链选型 · 长期记得起来比 fix 重要
-    // 关键词刻意精确: 必须是"动词性决策" · 不抓 npm install / pip install 这种日常依赖
-    // 中文"装(了|上)" 是精确决策动词 · 英文用 adopt/migrate/switch to 等明确决策动词
-    const DECISION_WORDS = /(\badopt(?:ed|ing)?\b|\bswitch(?:ed|ing)?\s+to\b|\bmov(?:e|ed|ing)\s+to\b|\bmigrat(?:e|ed|ing)\s+to\b|\bstop\s+using\b|\bdeprecat(?:e|ed|ing)\b|装(?:了|上)|装上|换成|改用|不再用|不用了|切到|切换到|引入(?:了)?|选了|定下来|决定用|采用|放弃(?:了)?|移除(?:了)?|去掉了|改回|降级|升级)/i;
+    // v0.91 砍 升级|降级|引入(了)?|移除(了)?|去掉了|选了 (高频日常依赖管理 · 不是工具链决策)
+    // 留明确动词性决策: adopt / switch to / migrate to / 换成 / 改用 / 切到 / 采用 / 放弃 等
+    const DECISION_WORDS = /(\badopt(?:ed|ing)?\b|\bswitch(?:ed|ing)?\s+to\b|\bmov(?:e|ed|ing)\s+to\b|\bmigrat(?:e|ed|ing)\s+to\b|\bstop\s+using\b|\bdeprecat(?:e|ed|ing)\b|装(?:了|上)|装上|换成|改用|不再用|不用了|切到|切换到|定下来|决定用|采用|放弃(?:了)?|改回)/i;
     if (DECISION_WORDS.test(scanText)) {
       return { fired: true, priority: 85, reason: 'keyword-decision', kind: 'decision', msg: `像工具链决策的 commit: ${dim(titleSnippet)}`, suggestion: '这种决策几个月后自己都想不起为什么 · 记一笔吧' };
     }
 
-    // FIX
-    const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|修好|修了|搞定|解决了|处理了)/i;
-    if (FIX_WORDS.test(scanText)) {
-      return { fired: true, priority: 80, reason: 'keyword-fix', kind: 'progress', msg: `修好的 commit: ${dim(titleSnippet)}`, suggestion: '要不要写一笔 · 说说这个坑' };
-    }
+    // v0.91 FIX 触发器整体砍 (§12 砍 > 加)
+    // 原因: 每个 fix:/fix(scope): commit 都命中 · 最大疲劳源
+    // 真值钱的 fix 会自动被 BREAKTHROUGH ("终于搞定") / DECISION ("换成 X 修了") 抓走
+    // 普通 fix 不需要 prompt · 违反 §10 不烦人精神
 
     // BRAND_MENTION · "捣鼓" / "Tinker" 出现 = 品牌 engagement 信号
-    // 设计:全世界除了 Tinker 社区谁会写"捣鼓" · 一旦出现就大概率关于我们:
-    //   - 贡献者在改 Tinker 代码 (feat(捣鼓): ...)
-    //   - 用户在用 Tinker 视角做事 ("捣鼓 X" 描述工作)
-    //   - 引用 Tinker 文化 ("跟捣鼓上的 X 一样")
-    // 所以不过滤 · 不只匹配动词形 · 任何"捣鼓"出现都触发 · prompt 主动认歧义
-    // 优先级 75 比泛 TINKER 高一档 · 但低于 100 不抢仪式
+    // 设计:全世界除了 Tinker 社区谁会写"捣鼓" · 一旦出现就大概率关于我们
+    // v0.91 加自指守卫: conventional commit prefix 开头 + 看 git remote 是 tinker repo → 跳过
+    // 项目作者在自己 repo 里 commit 含"捣鼓" = 必然 · 不算品牌 mention
+    let isOwnTinkerRepo = false;
+    try {
+      const remote = execSync('git remote get-url origin 2>/dev/null', { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      isOwnTinkerRepo = /tinker/i.test(remote);
+    } catch {}
     const BRAND_WORDS = /(捣鼓|\btinker\b)/i;
-    if (BRAND_WORDS.test(scanText)) {
+    if (BRAND_WORDS.test(scanText) && !(isConventionalCommit && isOwnTinkerRepo)) {
       return { fired: true, priority: 75, reason: 'keyword-brand', kind: 'brand', msg: `commit 里有"捣鼓": ${dim(titleSnippet)}`, suggestion: '这是关于 Tinker 的什么?' };
     }
 
-    // TINKER (泛 · 在玩 · active exploration) · 不含"捣鼓"·已经被上一段抓走
-    const TINKER_WORDS = /(玩了|玩玩|弄了|搞了|折腾|试了|试试|试了试|试一下|\bplay(?:ing|ed)?\b|\btinker(?:ing|ed)?\b|\bexperiment(?:ing|ed)?\b|\btr(?:y|ying|ied)\b)/i;
-    if (TINKER_WORDS.test(scanText)) {
-      return { fired: true, priority: 70, reason: 'keyword-tinker', kind: 'progress', msg: `在捣鼓: ${dim(titleSnippet)}`, suggestion: '一句话说一下你在玩什么?' };
-    }
+    // v0.91 TINKER 触发器整体砍 (§12 砍 > 加)
+    // 原因: "玩了/弄了/搞了/折腾/试了" 全是日常虚词 · 无独占价值
+    // 真有趣的探索会被 DISCOVERY / PROTOTYPE / BREAKTHROUGH 抓走
+    // 留 TINKER 只是噪音 · priority 70 实际命中率高但价值低
 
     // DISCOVERY (发现 / 学到)
-    const DISCOVERY_WORDS = /(发现|意识到|原来|才知道|学到|学了|理解了|\blearned\b|\brealized?\b|\bdiscovered?\b|\bturns out\b)/i;
+    // v0.91 砍 原来 (太宽 "原来在这"/"原来配置错了")
+    const DISCOVERY_WORDS = /(发现|意识到|才知道|学到|学了|理解了|\blearned\b|\brealized?\b|\bdiscovered?\b|\bturns out\b)/i;
     if (DISCOVERY_WORDS.test(scanText)) {
       return { fired: true, priority: 70, reason: 'keyword-discovery', kind: 'progress', msg: `像学到东西的 commit: ${dim(titleSnippet)}`, suggestion: '学到 / 发现了什么? 给别人看看' };
     }
@@ -3771,7 +3781,13 @@ async function cmdGoodnight(opts = {}) {
     log(sepia('  AI 总结中...'));
     const commitsLine = gitCommits.slice(0, 12).map(c => '- ' + c.msg).join('\n');
     const updatesLine = todayUpdates.slice(0, 6).map(u => '- (' + u.projectName + ') ' + u.text.slice(0, 80)).join('\n');
-    const prompt = `今天的 git commits:\n${commitsLine}\n\n今天发到 Tinker 的 updates:\n${updatesLine || '(无)'}\n\n用一段话 (80-150 字) 替作者收个尾 · 准备睡觉 · 语气朋友式 · 不总结 · 给一句你觉得最值得说的 · 一句"明天接着搞"那种话。不要"总结今天"那种 PM 周报开头。`;
+    // v0.13 注入 fingerprint + 真实样本 · 让 narrate 按作者真实气质写 · 不是通用 LLM 朋友腔
+    const fingerprintBlock = loadFingerprint();
+    const goodSamplesBlock = loadGoodSamples(2);
+    const voiceInjection = (fingerprintBlock || goodSamplesBlock)
+      ? `\n\n${fingerprintBlock}\n\n${goodSamplesBlock}\n`
+      : '';
+    const prompt = `今天的 git commits:\n${commitsLine}\n\n今天发到 Tinker 的 updates:\n${updatesLine || '(无)'}\n\n用一段话 (80-150 字) 替作者收个尾 · 准备睡觉 · 语气朋友式 · 不总结 · 给一句你觉得最值得说的 · 一句"明天接着搞"那种话。不要"总结今天"那种 PM 周报开头。${voiceInjection}`;
     try {
       const r = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
