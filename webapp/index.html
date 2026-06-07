@@ -227,6 +227,18 @@
   .entry-status.done { color: var(--moss); }
   /* v0.79 feed 卡片文本最多 6 行 · 超出 ... 截断 · 点卡片进项目页看全文 */
   .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; text-overflow: ellipsis; }
+  /* v0.83 方法库子页 · masthead 方法库 进入 · 跨用户跨项目 */
+  .methods-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  .methods-lib-search { flex: 1; min-width: 240px; font-family: 'Newsreader', serif; font-size: 16px; padding: 10px 14px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; color: var(--ink); transition: border-color 0.15s; }
+  .methods-lib-search:focus { outline: none; border-color: var(--moss); }
+  .methods-lib-search::placeholder { color: var(--sepia-light); font-style: italic; }
+  .methods-lib-tabs { display: flex; gap: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .methods-lib-tab { color: var(--sepia); cursor: pointer; padding: 4px 2px; border-bottom: 1px solid transparent; transition: color 0.15s, border-color 0.15s; }
+  .methods-lib-tab:hover { color: var(--ink); }
+  .methods-lib-tab.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .methods-lib-list { margin-top: 24px; display: flex; flex-direction: column; gap: 36px; }
+  .methods-lib-group-head { font-family: 'Newsreader', serif; font-size: 17px; color: var(--ink); margin-bottom: 12px; }
+  .methods-lib-group-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; }
   /* v0.82 方法 hero 板块 · 首页顶部跟下方进展 feed 板块分离
      不被时间倒序压 · 永远在顶 · 沉淀型资产应有的位置
      视觉: 浅米底 + 苔色边 · 跟 feed 主区背景区分 */
@@ -6341,6 +6353,7 @@
     <div class="masthead-actions">
       <nav class="masthead-nav-primary">
         <button onclick="goHome()">工坊</button>
+        <button onclick="showScreen('methods')">方法库</button>
         <button onclick="navMyWorkshop()">我的工作室</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
@@ -6401,6 +6414,11 @@
 
   <section class="screen" id="screen-workshop"><div id="workshop-content"></div></section>
   <section class="screen" id="screen-project"><div id="project-content"></div></section>
+
+  <!-- v0.83 方法库子页 · 跨用户跨项目 · 跟 feed / 陈列馆 同级板块 -->
+  <section class="screen" id="screen-methods">
+    <div id="methods-library-content"></div>
+  </section>
 
   <section class="screen" id="screen-about">
     <div class="about-container">
@@ -7161,6 +7179,7 @@ function showScreen(name, ...args) {
   else if (name === 'onboard') renderOnboard();
   else if (name === 'notifications') renderNotifications();
   else if (name === 'showcase') renderShowcase(args[0]);
+  else if (name === 'methods') renderMethodsLibrary(args[0]);
   // about 是静态内容,不需要 render
   // 更新 hash · 让 URL 可分享 + back/forward 工作
   const newHash = buildHash(name, args);
@@ -7180,6 +7199,7 @@ function buildHash(name, args) {
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
   if (name === 'feed') return '#/';
+  if (name === 'methods') return args && args[0] ? '#/m/' + encodeURIComponent(args[0]) : '#/m';
   // 项目分组视图 · 用短 hash /g · 老链接 /showcase 也兼容 (navigateFromHash 处)
   if (name === 'showcase') return args && args[0] ? '#/g/' + encodeURIComponent(args[0]) : '#/g';
   return '#/';
@@ -7196,6 +7216,7 @@ function navigateFromHash() {
   if (parts[0] === 'onboard') return showScreen('onboard');
   if (parts[0] === 'g') return showScreen('showcase', parts[1]);       // 新短 hash
   if (parts[0] === 'showcase') return showScreen('showcase', parts[1]); // 老链接兼容
+  if (parts[0] === 'm') return showScreen('methods', parts[1]);        // 方法库 (跨用户) · /m/<keyword> 可选预填搜词
   return goHome();
 }
 
@@ -8171,6 +8192,137 @@ function formatShipDate(ts) {
 function daysSinceShip(ts) {
   if (!ts) return 0;
   return Math.max(0, Math.floor((Date.now() - ts) / 86400000));
+}
+
+// v0.83 方法库子页 · masthead 顶级 nav 进来
+// 跨用户跨项目 · 按主题分组 (按所属项目)/ 按 owner 分组 / 按时间倒序
+// 顶部 keyword search · 复用 borrow 那条 FTS5 路径 (/api/method/search)
+//
+// 设计哲学:
+// - 方法是沉淀型资产 · 这里不强加排序 · 让用户自己挑维度
+// - 三种维度: 关键词搜 · 按作者分组 · 按项目分组
+// - 不做 trending / star / ranking (Tinker 反算法立场)
+let methodsLibraryState = { query: '', groupBy: 'project' }; // groupBy: 'project' | 'owner' | 'recent'
+function renderMethodsLibrary(initialQuery) {
+  if (initialQuery !== undefined) methodsLibraryState.query = initialQuery;
+  const root = document.getElementById('methods-library-content');
+  if (!root) return;
+
+  const all = state.methods || [];
+  const projectsById = new Map(state.projects.map(p => [p.id, p]));
+
+  // 关键词过滤 · 简单 case-insensitive substring 匹配 (text + scenario)
+  // 服务器端 /api/method/search 是 FTS5 · 但这里直接前端 filter 够用了 · 数据量小
+  let methods = all;
+  const q = (methodsLibraryState.query || '').trim().toLowerCase();
+  if (q) {
+    methods = methods.filter(m => {
+      return (m.text || '').toLowerCase().includes(q) ||
+             (m.scenario || '').toLowerCase().includes(q) ||
+             (m.owner || '').toLowerCase().includes(q);
+    });
+  }
+
+  const renderCard = (m) => {
+    const p = m.projectId ? projectsById.get(m.projectId) : null;
+    const scenarioOrFallback = m.scenario
+      ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
+      : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 80))}…</div>`;
+    const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
+    const projectLine = p
+      ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
+      : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
+    return `
+      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+        <span class="method-hero-card-badge">✤ 方法</span>
+        ${scenarioOrFallback}
+        <div class="method-hero-card-meta">
+          <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
+          <span style="color: var(--sepia-light);">·</span>
+          ${projectLine}
+          <span style="color: var(--sepia-light);">·</span>
+          <span>${shortAgo(m.at)}</span>
+        </div>
+        <div class="method-hero-card-actions">
+          <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
+        </div>
+      </div>
+    `;
+  };
+
+  // 分组
+  let groupedHtml = '';
+  if (methodsLibraryState.groupBy === 'project') {
+    const byProject = new Map();
+    methods.forEach(m => {
+      const key = m.projectId || '__none__';
+      if (!byProject.has(key)) byProject.set(key, []);
+      byProject.get(key).push(m);
+    });
+    const sortedGroups = [...byProject.entries()].sort((a, b) => b[1].length - a[1].length);
+    groupedHtml = sortedGroups.map(([pid, list]) => {
+      const p = pid !== '__none__' ? projectsById.get(pid) : null;
+      const groupLabel = p
+        ? `<span class="nh" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</span> <span style="color: var(--sepia-light);">· @${escapeHtml(p.owner)}</span>`
+        : '<span style="font-style: italic; color: var(--sepia);">未关联项目</span>';
+      return `
+        <div class="methods-lib-group">
+          <div class="methods-lib-group-head">${groupLabel} <span class="methods-lib-group-count">· ${list.length} 条</span></div>
+          <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
+        </div>
+      `;
+    }).join('');
+  } else if (methodsLibraryState.groupBy === 'owner') {
+    const byOwner = new Map();
+    methods.forEach(m => {
+      const key = m.owner || '__none__';
+      if (!byOwner.has(key)) byOwner.set(key, []);
+      byOwner.get(key).push(m);
+    });
+    const sortedGroups = [...byOwner.entries()].sort((a, b) => b[1].length - a[1].length);
+    groupedHtml = sortedGroups.map(([owner, list]) => `
+      <div class="methods-lib-group">
+        <div class="methods-lib-group-head"><span class="nh" onclick="showScreen('workshop','${owner}')">@${escapeHtml(owner)}</span> <span class="methods-lib-group-count">· ${list.length} 条</span></div>
+        <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
+      </div>
+    `).join('');
+  } else {
+    // recent · 单一时间倒序
+    const sorted = [...methods].sort((a, b) => b.at - a.at);
+    groupedHtml = `<div class="method-hero-scroll">${sorted.map(renderCard).join('')}</div>`;
+  }
+
+  if (methods.length === 0) {
+    groupedHtml = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">${q ? '没搜到 · 换个词试试' : '还没有沉淀方法 · 用 tinker contribute --from-file 推一份过来'}</div>`;
+  }
+
+  const groupTab = (key, label) => `
+    <span class="methods-lib-tab ${methodsLibraryState.groupBy === key ? 'active' : ''}" onclick="methodsLibraryState.groupBy='${key}'; renderMethodsLibrary();">${label}</span>
+  `;
+
+  root.innerHTML = `
+    <div class="mb-8">
+      <h1 class="feed-title mb-3">方法库</h1>
+      <p class="feed-sub mb-6">vibe coder 沉淀下来的手艺 · 关键词搜 · 复制 markdown 直接喂给你的 AI</p>
+      <div class="methods-lib-toolbar">
+        <input type="text" id="methods-lib-q" class="methods-lib-search" placeholder="搜方法 · supabase / 邮箱登录 / 部署…" value="${escapeHtml(methodsLibraryState.query)}"
+          oninput="methodsLibraryState.query = this.value; clearTimeout(window._methodsLibT); window._methodsLibT = setTimeout(() => renderMethodsLibrary(), 200);">
+        <div class="methods-lib-tabs">
+          ${groupTab('project', '按项目')}
+          ${groupTab('owner', '按作者')}
+          ${groupTab('recent', '按最近')}
+        </div>
+      </div>
+    </div>
+    <div class="methods-lib-list">${groupedHtml}</div>
+  `;
+
+  // 让 search 框 retain focus (因为 oninput 重 render 会丢)
+  const qInput = document.getElementById('methods-lib-q');
+  if (qInput && document.activeElement !== qInput && q) {
+    qInput.focus();
+    qInput.setSelectionRange(qInput.value.length, qInput.value.length);
+  }
 }
 
 function renderShowcase(focusId) {
