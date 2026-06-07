@@ -581,9 +581,14 @@
   /* 被用过 升级版 section header 样式 + 顶部点线分隔 */
   .tl-used-block { margin-top: 18px; padding-top: 12px; border-top: 1px dotted var(--rule); }
   .tl-used-header { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.15em; margin-bottom: 8px; }
-  /* update 卡片下面"N 条便签提到这里"反向跳转链接 */
-  .tl-note-ref { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; cursor: pointer; transition: color 0.15s; }
-  .tl-note-ref:hover { color: var(--vermilion); }
+  /* v0.72 便签预览条 · update 卡片下方显示关联便签的 60 字摘要 + 跳转 ·
+     上下文关联 ≠ spec 反对的嵌套盖楼 (便签自身仍独立平等 · 不能再被回复) */
+  .tl-note-preview { margin-top: 14px; padding: 10px 14px; background: rgba(120, 113, 108, 0.04); border-left: 2px solid var(--sepia-light); cursor: pointer; transition: all 0.15s; font-family: 'Newsreader', serif; line-height: 1.5; }
+  .tl-note-preview:hover { background: rgba(194, 65, 12, 0.04); border-left-color: var(--vermilion); }
+  .tl-note-preview-user { font-family: 'Inter', -apple-system, sans-serif; font-weight: 600; font-size: 13.5px; color: var(--ink); margin-right: 6px; }
+  .tl-note-preview:hover .tl-note-preview-user { color: var(--vermilion); }
+  .tl-note-preview-text { color: var(--ink-soft); font-size: 14.5px; }
+  .tl-note-preview-more { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--sepia); letter-spacing: 0.05em; margin-left: 8px; white-space: nowrap; }
   /* 便签墙某条便签关联了 update · 顶上"说的是「XXX」"跳转链接 */
   .note-ref { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-bottom: 6px; cursor: pointer; transition: color 0.15s; padding-bottom: 6px; border-bottom: 1px dotted var(--rule); line-height: 1.5; }
   .note-ref:hover { color: var(--vermilion); }
@@ -6351,7 +6356,7 @@
       <!-- 一段话 elevator -->
       <div class="about-section about-intro">
         <p>GitHub 是给写代码的人用的工作室。</p>
-        <p>这里是给用 AI 做小东西的人用的工作室。他们做的东西能跑、能玩、能被别人接走，不必懂代码，也不必证明自己"成了程序员"。</p>
+        <p>这里是给用 AI 做小东西的人用的工作室。他们做的东西能跑、能玩、能启发别人也动手做，不必懂代码，也不必证明自己"成了程序员"。</p>
       </div>
 
       <!-- 不做什么 -->
@@ -6376,7 +6381,7 @@
 
         <div class="about-do-item">
           <h3 class="about-do-title">让别人真用上你的东西</h3>
-          <p>不是点赞，是「我用了你的方法，跑通了」。有人真的把你做的东西接走用，比一千个赞重要。</p>
+          <p>不是点赞，是「我用了你的方法，跑通了」「看了你的进展，我也动手做了」。有人因为你的进展也动了手，比一千个赞重要。</p>
         </div>
 
         <div class="about-do-item">
@@ -6451,7 +6456,7 @@
   <section class="screen" id="screen-notifications">
     <div class="mb-8">
       <h1 class="feed-title mb-3">通知</h1>
-      <p class="feed-sub">谁接走了你的东西、谁觉得有意思、谁留了便签 — 时间倒序</p>
+      <p class="feed-sub">谁因你的进展动了手、谁觉得有意思、谁留了便签 — 时间倒序</p>
     </div>
     <div id="notif-list"></div>
     <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
@@ -6510,10 +6515,10 @@
 
 <div id="modal-tinkered" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
-    <h3 class="modal-title">挂上你的延伸版</h3>
-    <p class="modal-sub">原作者能看到你真的做了什么 — 不只是点了赞</p>
+    <h3 class="modal-title">因 ta 启发 · 挂上你做的版本</h3>
+    <p class="modal-sub">ta 会看到 ta 的进展真启动了别人 · 不只是点了赞</p>
     <div class="mb-4">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的项目名</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">你做的项目</label>
       <input id="tinkered-name" class="input-bare" placeholder="中文版求职信生成器">
     </div>
     <div class="mb-4">
@@ -6522,7 +6527,7 @@
     </div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-tinkered')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitTinkered()" class="btn-act-primary">挂上 · 通知原作者</button>
+      <button onclick="submitTinkered()" class="btn-act-primary">挂上 · 告诉 ta 启发了你</button>
     </div>
   </div>
 </div>
@@ -6550,11 +6555,11 @@
     <div id="update-extras" class="update-extras">
       <label class="update-extra-row">
         <input type="checkbox" id="update-alsostuck">
-        <span><span class="extra-title">同时把项目状态改成「卡住」</span><span class="extra-sub">之前接走过、或说过想试试你的人会收到通知，也许能搭把手。</span></span>
+        <span><span class="extra-title">同时把项目状态改成「卡住」</span><span class="extra-sub">之前因你启发动手过、或说过想试试的人会收到通知，也许能搭把手。</span></span>
       </label>
       <label class="update-extra-row" id="update-notify-row">
         <input type="checkbox" id="update-notify">
-        <span><span class="extra-title">通知接走过、想试试的人</span><span class="extra-sub">跑通了大版本、或重要更新时再勾。默认不发，不打扰别人。</span></span>
+        <span><span class="extra-title">通知动过手、想试试的人</span><span class="extra-sub">跑通了大版本、或重要更新时再勾。默认不发，不打扰别人。</span></span>
       </label>
       <label class="update-extra-row">
         <input type="checkbox" id="update-seeking-feedback" onchange="document.getElementById('update-feedback-ask-wrap').classList.toggle('hidden', !this.checked)">
@@ -7002,7 +7007,7 @@ async function apiRevokeToken(tokenId) {
 
 
 const NOTIF_TEMPLATES = {
-  tinkered:     (n) => ({ verb:'接走了你的',     verbColor:'var(--vermilion)' }),
+  tinkered:     (n) => ({ verb:'因你启发动手了 ·', verbColor:'var(--vermilion)' }),
   methodUsed:   (n) => ({ verb:'用了你的方法 · 跑通了', verbColor:'var(--vermilion)' }),
   mentioned:    (n) => ({ verb:'提到了你 · 在',  verbColor:'var(--vermilion)' }),
   projectDone:  (n) => ({ verb:'跑通了 · 你之前说过想试试 · 现在能用了', verbColor:'var(--moss)' }),
@@ -7016,7 +7021,7 @@ const NOTIF_TEMPLATES = {
 
 // v0.58 通知 type chip 简短 label · 跨 type 一致排版
 const NOTIF_TYPE_LABELS = {
-  tinkered: '接走',
+  tinkered: '被启发',
   methodUsed: '用了方法',
   mentioned: '提到了我',
   projectDone: '跑通了',
@@ -7491,7 +7496,7 @@ function renderWorkshop(handle) {
   state.projects.forEach(p => {
     if (p.owner === handle) return;
     if (p.reactions.tinkered.find(t => t.user === handle)) {
-      trackingPublic.push({ p, role: 'tinkered', roleLabel: isMe ? '我接走了' : '接走了' });
+      trackingPublic.push({ p, role: 'tinkered', roleLabel: isMe ? '因 ta 启发我做了' : '因 ta 启发做了' });
     } else if (p.updates.some(u => u.usedBy && u.usedBy.find(x => x.user === handle))) {
       trackingPublic.push({ p, role: 'methodUsed', roleLabel: '用了方法' });
     }
@@ -7521,7 +7526,7 @@ function renderWorkshop(handle) {
   const statsParts = [];
   if (activeCount > 0) statsParts.push(`在做 <span class="num">${activeCount}</span>`);
   if (doneCount > 0) statsParts.push(`跑通 <span class="num">${doneCount}</span>`);
-  if (receivedTinkered > 0) statsParts.push(`被接走过 <span class="num">${receivedTinkered}</span>`);
+  if (receivedTinkered > 0) statsParts.push(`启发了 <span class="num">${receivedTinkered}</span> 人动手`);
   if (receivedMethodUsed > 0) statsParts.push(`方法被用 <span class="num">${receivedMethodUsed}</span>`);
   if (trackingCount > 0) statsParts.push(`跟进过 <span class="num">${trackingCount}</span>`);
   if (topTools.length > 0) statsParts.push(`常用 <span class="ws-tools">${topTools.join(' · ')}</span>`);
@@ -7686,7 +7691,7 @@ function renderProject(owner, slug) {
           </div>
           <div class="upgrade-cta-row">
             <span class="upgrade-arrow">→</span>
-            <span class="upgrade-hint">跑通了, 来挂上你的延伸版</span>
+            <span class="upgrade-hint">跑通了 · 挂上你受启发做的</span>
             <span class="upgrade-action" onclick="openTinkered()">挂上 →</span>
           </div>
         </div>
@@ -7695,7 +7700,7 @@ function renderProject(owner, slug) {
     return `
       <div class="react-line" style="${containerStyle}">
         <span class="react-action" onclick="reactToProject('wantToTry')">想试试</span>
-        <span class="react-action" onclick="openTinkered()">做了延伸版</span>
+        <span class="react-action" onclick="openTinkered()">因 ta 启发也做了</span>
       </div>
     `;
   };
@@ -7803,11 +7808,17 @@ function renderProject(owner, slug) {
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
               </div>
-              ${notesAboutThis.length > 0 ? `
-                <div class="tl-note-ref" onclick="event.stopPropagation(); flashAnchor('note-${notesAboutThis[0].id}')">
-                  ↓ ${notesAboutThis.length} 条便签提到这里
-                </div>
-              ` : ''}
+              ${notesAboutThis.length > 0 ? (() => {
+                const firstNote = notesAboutThis[0];
+                const rawText = (firstNote.text || '').replace(/\s+/g, ' ');
+                const preview = rawText.length > 60 ? rawText.slice(0, 60) + '…' : rawText;
+                const extra = notesAboutThis.length - 1;
+                return `
+                  <div class="tl-note-preview" onclick="event.stopPropagation(); flashAnchor('note-${firstNote.id}')">
+                    <span class="tl-note-preview-user">@${firstNote.user}</span><span class="tl-note-preview-text">「${escapeHtml(preview)}」</span>${extra > 0 ? `<span class="tl-note-preview-more">+ ${extra} 条 ↓</span>` : `<span class="tl-note-preview-more">↓</span>`}
+                  </div>
+                `;
+              })() : ''}
               ${usedByList.length > 0 ? `
                 <div class="tl-used-block">
                   <div class="tl-used-header">被用过 · ${usedByList.length}</div>
@@ -7845,7 +7856,7 @@ function renderProject(owner, slug) {
         <div class="mb-12 psect">
           <div class="section-label">反馈区</div>
           ${p.reactions.tinkered.length > 0 ? `
-            <div class="sub-label">接走过 · ${p.reactions.tinkered.length} 人</div>
+            <div class="sub-label">因这个启发动手 · ${p.reactions.tinkered.length} 人</div>
             ${p.reactions.tinkered.map(t=>`
               <div class="ref-entry" id="tinkered-${t.user}">
                 <span class="arrow">→</span>
@@ -8090,7 +8101,7 @@ function renderShowcase(focusId) {
     const tinkeredCount = (p.reactions && p.reactions.tinkered) ? p.reactions.tinkered.length : 0;
     const methodCount = (p.updates || []).reduce((acc, u) => acc + ((u.usedBy && u.usedBy.length) || 0), 0);
     const stamps = [];
-    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">被接走过<span class="num">${tinkeredCount}</span></span>`);
+    if (tinkeredCount > 0) stamps.push(`<span class="pcard-stamp">启发了<span class="num">${tinkeredCount}</span>人</span>`);
     if (methodCount > 0) stamps.push(`<span class="pcard-stamp">方法被用<span class="num">${methodCount}</span></span>`);
     const idxStr = String(idx + 1).padStart(2, '0');
     const cfg = EXHIBIT_KIND_COPY[kind] || EXHIBIT_KIND_COPY.ship;
@@ -8239,7 +8250,7 @@ function renderNotifications() {
           })() ? `
             <div class="notif-upgrade-cta" onclick="event.stopPropagation(); openTinkeredFromNotif('${n.id}', '${argOwner}', '${argSlug}');">
               <span class="upgrade-arrow">→</span>
-              <span class="upgrade-action">挂上你的延伸版</span>
+              <span class="upgrade-action">挂上你做的版本</span>
             </div>
           ` : ''}
         </div>
@@ -8718,7 +8729,7 @@ async function deleteTinkered(projectId) {
   if (!p) return;
   const mine = (p.reactions.tinkered || []).find(t => t.user === currentUser.handle);
   if (!mine) return;
-  if (!confirm('撤回你的延伸版「' + mine.name + '」? · 原作者收到的通知也会一起清掉')) return;
+  if (!confirm('撤回你受启发做的「' + mine.name + '」? · 原作者收到的通知也会一起清掉')) return;
   try {
     await apiAction('deleteTinkered', { projectId });
     renderProject(p.owner, p.slug);
@@ -8762,7 +8773,7 @@ function openTinkered() {
   if (!currentUser.handle) {
     const savedProjectCtx = currentProjectCtx;
     setPending('openTinkered', { projectCtx: savedProjectCtx });
-    openLogin('挂自己的延伸版');
+    openLogin('挂自己受启发做的');
     return;
   }
   currentTinkeredCtx = currentProjectCtx;
@@ -8773,7 +8784,7 @@ function openTinkered() {
 async function submitTinkered() {
   const name = document.getElementById('tinkered-name').value.trim();
   const link = document.getElementById('tinkered-link').value.trim();
-  if (!name || !link) { showToast('名字和链接都要填 — 没有产物不算延伸版'); return; }
+  if (!name || !link) { showToast('名字和链接都要填 — 得真做出来才挂上'); return; }
   const p = projectById(currentTinkeredCtx);
   try {
     await apiAction('submitTinkered', { projectId: p.id, name, link });
