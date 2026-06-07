@@ -7,11 +7,18 @@
 // 跟 tinker.js 共享逻辑 · 不重写 API / 状态 / git / LLM
 
 const tinker = require('../bin/tinker.js');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const {
   ListToolsRequestSchema,
   CallToolRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
+  SubscribeRequestSchema,
+  UnsubscribeRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 
 // 包装一次 · 所有 tool result 用同一种 shape
@@ -392,14 +399,191 @@ const TOOLS = [
       });
     },
   },
+  {
+    name: 'tinker_borrow',
+    description: '搜方法库 · 关键词全文搜所有人的 update (作者标 is_method=1 的优先) · AI 卡住的时候帮用户找前人怎么做的。query 是关键词,可中英文。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '关键词 · 例: "supabase 邮箱登录"' },
+        limit: { type: 'integer', description: '返回条数 · 默认 10', minimum: 1, maximum: 50 },
+        methodsOnly: { type: 'boolean', description: '只看作者标方法的 (默认 false)' },
+      },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const cfg = tinker.loadConfig();
+      if (!cfg || !cfg.serverUrl) return toolErr('未配置 serverUrl', 'NO_CONFIG');
+      const q = (args.query || '').trim();
+      if (!q) return toolErr('query 必填', 'NO_QUERY');
+      const url = new URL('/api/method/search', cfg.serverUrl);
+      url.searchParams.set('q', q);
+      url.searchParams.set('limit', String(args.limit || 10));
+      if (args.methodsOnly) url.searchParams.set('methodsOnly', '1');
+      if (cfg.handle) url.searchParams.set('borrower', cfg.handle); // 反馈闭环
+      const res = await fetch(url.toString());
+      if (!res.ok) return toolErr('搜失败 · HTTP ' + res.status, 'HTTP_' + res.status);
+      const data = await res.json();
+      return toolResult({ ok: true, query: q, hits: data.hits || [] });
+    },
+  },
+  {
+    name: 'tinker_contribute',
+    description: '把自己一条 update 标为方法 · 让别人 borrow 能看到 · updateId 不传时用最近一条 push。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        updateId: { type: 'string', description: 'update id · 例 u-xxx · 留空则用最近一条' },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const cfg = tinker.mustHaveConfig();
+      let updateId = args.updateId;
+      if (!updateId) {
+        const state = await tinker.apiState(cfg);
+        let latest = null;
+        for (const p of state.projects || []) {
+          for (const u of p.updates || []) {
+            if (!latest || u.at > latest.at) latest = u;
+          }
+        }
+        if (!latest) return toolErr('还没记过进展 · 没东西可标', 'NO_UPDATES');
+        updateId = latest.id;
+      }
+      await tinker.apiAction(cfg, 'markAsMethod', { updateId });
+      return toolResult({ ok: true, updateId, marked: true });
+    },
+  },
+  // v0.12: 读自己最近 update · AI 起草前 / 用户问"我上次怎么搞的" 时可调
+  {
+    name: 'tinker_recent_updates',
+    description: '拉作者最近 N 条自己的 update · 给 AI 起草前避免重复 / 用户回忆"上次怎么解决的" 用。可按 kind 过滤 (experience / method / ship / stuck / prototype)。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', description: '条数 · 默认 5 · max 50', minimum: 1, maximum: 50 },
+        kind: { type: 'string', description: 'all (默认) / experience / method / ship / stuck / prototype' },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const cfg = tinker.mustHaveConfig();
+      const url = new URL('/api/me/updates', cfg.serverUrl);
+      url.searchParams.set('limit', String(args.limit || 5));
+      url.searchParams.set('kind', args.kind || 'all');
+      const res = await fetch(url.toString(), {
+        headers: { 'Authorization': 'Bearer ' + cfg.token },
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        return toolErr('拉失败 · HTTP ' + res.status + ' · ' + body.slice(0, 200), 'HTTP_' + res.status);
+      }
+      const data = await res.json();
+      const list = (data.updates || []).map(u => ({
+        ...u,
+        url: cfg.serverUrl + '/#/p/' + u.ownerHandle + '/' + u.projectSlug,
+      }));
+      return toolResult({ ok: true, updates: list });
+    },
+  },
+  // v0.12: 标某条 update 为踩坑经验 · 给 AI 检索池埋种子
+  {
+    name: 'tinker_mark_experience',
+    description: '把自己一条 update 标为踩坑经验 · 让 AI 检索 Tinker 时优先取这类 (帮其他人少走弯路)。updateId 不传则取最近一条。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        updateId: { type: 'string', description: 'update id · 例 u-xxx · 留空则用最近一条' },
+        unmark: { type: 'boolean', description: '取消标记 (默认 false)' },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const cfg = tinker.mustHaveConfig();
+      if (args.unmark) {
+        if (!args.updateId) return toolErr('unmark 需要 updateId', 'NO_ID');
+        await tinker.apiAction(cfg, 'unmarkExperience', { updateId: args.updateId });
+        return toolResult({ ok: true, updateId: args.updateId, marked: false });
+      }
+      let updateId = args.updateId;
+      if (!updateId) {
+        const state = await tinker.apiState(cfg);
+        let latest = null;
+        for (const p of state.projects || []) {
+          for (const u of p.updates || []) {
+            if (!latest || u.at > latest.at) latest = u;
+          }
+        }
+        if (!latest) return toolErr('还没记过进展 · 没东西可标', 'NO_UPDATES');
+        updateId = latest.id;
+      }
+      await tinker.apiAction(cfg, 'markAsExperience', { updateId });
+      return toolResult({ ok: true, updateId, marked: true });
+    },
+  },
 ];
 
 function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, ''); }
 
+// === resources · 让 MCP client 订阅 prompt-state 的变化 ===
+//
+// 资源 URI 表 (subscribe 通过这些 URI 标识):
+//   tinker://triggers/active   prompt-state.json 当前触发状态 · 高频变化
+//   tinker://state/today       今日 commit/push 摘要 · 低频
+//
+// 推送策略: 文件监听 + 30s 轮询兜底
+// AI agent 订阅后 · 文件变化或轮询差异时收 ResourceUpdatedNotification
+const RESOURCES = [
+  {
+    uri: 'tinker://triggers/active',
+    name: 'Tinker 当前触发',
+    description: '正在等用户响应的 prompt · push 触发器的当前状态。AI 订阅这个就能在触发器变化时被叫醒。',
+    mimeType: 'application/json',
+    read: () => {
+      const state = tinker.loadPromptState();
+      const now = Date.now();
+      return {
+        now,
+        muted: !!(state.mutedUntil && state.mutedUntil > now),
+        mutedUntil: state.mutedUntil || null,
+        dismissedToday: state.dismissedTodayKey === tinker.todayKey(),
+        lastPromptedAt: state.lastPromptedAt || null,
+        uiSession: state.uiSession || null,
+        lastPushAtByProject: state.lastPushAtByProject || {},
+      };
+    },
+  },
+  {
+    uri: 'tinker://state/today',
+    name: 'Tinker 今日摘要',
+    description: '今日 git commit + Tinker push 计数 · ~30s 刷一次。订阅后可以让 AI 在用户大量编码时跟进 push 提醒。',
+    mimeType: 'application/json',
+    read: async () => {
+      const cfg = tinker.loadConfig();
+      const git = tinker.gitCommitsTodayQuick ? tinker.gitCommitsTodayQuick() : { count: 0 };
+      let tinkerPushed = 0;
+      if (cfg && cfg.serverUrl && cfg.token) {
+        try {
+          const state = await tinker.apiState(cfg);
+          const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+          for (const p of state.projects || []) {
+            for (const u of p.updates || []) {
+              if (u.at >= todayStart.getTime()) tinkerPushed++;
+            }
+          }
+        } catch {}
+      }
+      return { gitCommits: git.count || 0, tinkerPushed, at: Date.now() };
+    },
+  },
+];
+
 async function startMcpServer() {
   const server = new Server(
-    { name: 'tinker', version: '0.10' },
-    { capabilities: { tools: {} } }
+    { name: 'tinker', version: '0.12' },
+    { capabilities: { tools: {}, resources: { subscribe: true, listChanged: false } } }
   );
   // list_tools handler
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -415,6 +599,72 @@ async function startMcpServer() {
       return toolErr(e.message || String(e), 'HANDLER_ERROR');
     }
   });
+
+  // list_resources
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: RESOURCES.map(r => ({
+      uri: r.uri, name: r.name, description: r.description, mimeType: r.mimeType,
+    })),
+  }));
+
+  // read_resource
+  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+    const r = RESOURCES.find(x => x.uri === req.params.uri);
+    if (!r) throw new Error('未知资源: ' + req.params.uri);
+    const data = await r.read();
+    return {
+      contents: [{
+        uri: r.uri, mimeType: r.mimeType,
+        text: JSON.stringify(data, null, 2),
+      }],
+    };
+  });
+
+  // 订阅管理 · subscribedUris 是当前订阅 URI 的集合
+  // lastSnapshots 记录上次推过的内容 · diff 后才发新通知
+  const subscribed = new Set();
+  const lastSnapshots = new Map();
+
+  server.setRequestHandler(SubscribeRequestSchema, async (req) => {
+    subscribed.add(req.params.uri);
+    return {};
+  });
+  server.setRequestHandler(UnsubscribeRequestSchema, async (req) => {
+    subscribed.delete(req.params.uri);
+    return {};
+  });
+
+  // 推送循环 · 每 5s 检查订阅资源 · 内容变了就 notify
+  // 文件监听针对 prompt-state.json (高频) · 轮询负责 today 摘要
+  const PROMPT_STATE_FILE = path.join(os.homedir(), '.tinker', 'prompt-state.json');
+  async function checkAndNotify() {
+    for (const uri of subscribed) {
+      const r = RESOURCES.find(x => x.uri === uri);
+      if (!r) continue;
+      try {
+        const data = await r.read();
+        const key = JSON.stringify(data);
+        if (lastSnapshots.get(uri) !== key) {
+          lastSnapshots.set(uri, key);
+          // 推送 ResourceUpdatedNotification
+          await server.notification({
+            method: 'notifications/resources/updated',
+            params: { uri },
+          });
+        }
+      } catch {}
+    }
+  }
+  const interval = setInterval(checkAndNotify, 5000);
+  interval.unref();
+
+  // 文件 watcher · prompt-state.json 变化时立刻检查 (不等 5s 轮询)
+  try {
+    if (fs.existsSync(PROMPT_STATE_FILE)) {
+      fs.watchFile(PROMPT_STATE_FILE, { interval: 1000 }, () => checkAndNotify());
+    }
+  } catch {}
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
