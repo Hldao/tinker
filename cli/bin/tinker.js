@@ -3146,6 +3146,15 @@ async function cmdCheck(opts) {
     return;
   }
 
+  // 非 TTY (Bash 工具触发 git commit / CI / detached) 时 silently 跳过
+  // 之前 line 3315 select() 在非 TTY 会抛错 · catch 默认 'later' → 静默 1 小时
+  // 用户看着像"被 Tinker 自动选了稍后 1 小时再问" · 实际上 select 根本没机会问
+  // 不污染 state · 下次真 TTY commit 仍能正常触发 (winner 已经在 line 3143 记给 goodnight)
+  if (!opts.json && !(process.stdin.isTTY && process.stdout.isTTY)) {
+    try { logTriggerEvent('check-skip-non-tty', 'fired', { trigger_kind: result.kind, trigger_reason: result.reason }); } catch {}
+    return;
+  }
+
   // prompt 出来 · v0.3 --json mode 跳过人类可读输出 · 只输出 JSON
   if (!opts.json) {
     log('');
