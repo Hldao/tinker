@@ -87,9 +87,12 @@ const LIFECYCLE_CONFIGS = {
     triggerKind: 'ai-learning-breakthrough',
     abandonTimeoutMs: ABANDON_TIMEOUT_LEARNING_MS,
     canEnter(scan) {
-      const exploreCount = countMatches(scan.text, LEARNING_EXPLORE);
+      const learnCount = countMatches(scan.text, LEARNING_EXPLORE);
+      const designCount = countMatches(scan.text, DESIGN_EXPLORE);
       const failCount = countMatches(scan.text, STRUGGLE_FAIL);
-      return exploreCount >= 4 && scan.span >= 20 * 60 * 1000 && failCount < 3;
+      // v0.13 fix · 加 learn > design 条件 · 避免产品讨论被误识别为学习
+      // (产品讨论里也会出现"怎么用 / 怎么写" 等 learning 词 · 但 design 词更多)
+      return learnCount >= 4 && learnCount > designCount && scan.span >= 20 * 60 * 1000 && failCount < 3;
     },
     canExit(scan) {
       return LEARNING_UNDERSTAND.test(scan.lastChunk);
@@ -107,12 +110,15 @@ const LIFECYCLE_CONFIGS = {
     triggerKind: 'ai-design-breakthrough',
     abandonTimeoutMs: ABANDON_TIMEOUT_DESIGN_MS,
     canEnter(scan) {
-      const exploreCount = countMatches(scan.text, DESIGN_EXPLORE);
-      const failCount = countMatches(scan.text, STRUGGLE_FAIL);
+      const designCount = countMatches(scan.text, DESIGN_EXPLORE);
       const learnCount = countMatches(scan.text, LEARNING_EXPLORE);
-      // design-loop 信号:权衡/考虑词密集 + 失败词低 (不是 debug) + 探索词低 (不是 learning)
-      // 阈值高一些:推演词容易跟"思考类"对话混淆 · 设 >= 8 才进
-      return exploreCount >= 8 && scan.span >= 30 * 60 * 1000 && failCount < 3 && learnCount < 4;
+      const failCount = countMatches(scan.text, STRUGGLE_FAIL);
+      // v0.13 fix · 关键修改:
+      //   1. 阈值 8 → 5 (推演往往分散 · 30 min 凑 8 太严)
+      //   2. span 30 min → 20 min (跟 learning 一致 · 不再要求半小时)
+      //   3. 去掉"learnCount < 4" · 改成"design > learning * 1.5" (相对密度判断)
+      //      (推演往往含 learning 词如"怎么用 X" · 但 design 词更密)
+      return designCount >= 5 && designCount > learnCount * 1.5 && scan.span >= 20 * 60 * 1000 && failCount < 3;
     },
     canExit(scan) {
       return DESIGN_DECIDE.test(scan.lastChunk);
@@ -123,9 +129,11 @@ const LIFECYCLE_CONFIGS = {
   },
 };
 
-// 优先级:struggle > learning > design-loop
-// 同时满足时按这个序选 (debug 最需要陪伴 · 学习其次 · 推演不打扰)
-const LIFECYCLE_PRIORITY = ['struggle', 'learning', 'design-loop'];
+// 优先级:struggle > design-loop > learning
+// v0.13 调整: design-loop 优先于 learning · 因为产品讨论的产出价值更高 ·
+// 而 learning 也能 fallback (design 不达阈值时自然 learning 接管)
+// struggle 仍最优先 (debug 信号最该被陪伴)
+const LIFECYCLE_PRIORITY = ['struggle', 'design-loop', 'learning'];
 
 // ============================================
 // 第三部分 · 通用工具

@@ -3671,8 +3671,24 @@ async function cmdStruggle(sub, opts = {}) {
     return;
   }
 
-  if (opts.json) return errJson('用法: tinker struggle [status|off|on]', 'BAD_ARG');
-  err('用法: tinker struggle [status|off|on]');
+  if (action === 'reset') {
+    // v0.13 清掉当前 currentStruggle · 让状态机下次 cmdCheck 重新评估
+    // 用于:lifecycle 类型误判时手动 reset (比如本来是 design-loop 被识别成 learning)
+    const previousId = state.currentStruggle ? state.currentStruggle.id : null;
+    state.currentStruggle = null;
+    savePromptState(state);
+    if (opts.json) return outputJson({ ok: true, cleared: previousId });
+    if (previousId) {
+      log(sepia('  清掉了: ') + bold(previousId));
+      log(sepia('  下次 git commit 触发 hook 时会重新评估 · 也可以现在跑 ') + vermilion('tinker check'));
+    } else {
+      log(sepia('  当前没在跟踪 · 没什么可清'));
+    }
+    return;
+  }
+
+  if (opts.json) return errJson('用法: tinker struggle [status|off|on|reset]', 'BAD_ARG');
+  err('用法: tinker struggle [status|off|on|reset]');
 }
 
 // v0.12 Breakthrough Autopsy
