@@ -626,37 +626,45 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
   };
 }
 
-// 搜方法库 · q 是用户输入 (空格分词) · 优先 is_method=1 · 其次最近
-// 返回 { hits: [{ updateId, text, projectName, ownerHandle, at, isMethod, score }] }
+// 搜方法库 + 踩坑经验 · q 是用户输入 (空格分词)
+// 优先 is_method=1 OR is_experience=1 · 其次最近
+// 返回 { hits: [{ updateId, text, projectName, ownerHandle, at, isMethod, isExperience, score }] }
 // borrowerHandle 可空 · 有就把命中的前 N 条记进 borrow_log (让作者 goodnight 看到)
-function searchMethods({ q, limit = 10, methodsOnly = false, borrowerHandle = null }) {
+// kindFilter: undefined (默认 · 搜全部) / 'method' (只 method) / 'experience' (只 experience)
+function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowerHandle = null }) {
   if (!q || !q.trim()) return { hits: [] };
   const ftsQ = q.trim().split(/\s+/).filter(Boolean).map(t => t.replace(/["*]/g, '')).filter(Boolean).join(' ');
   if (!ftsQ) return { hits: [] };
-  const where = methodsOnly ? 'AND u.is_method = 1' : '';
+  // methodsOnly 是老参数 (向后兼容) · 优先看 kindFilter
+  let where = '';
+  if (kindFilter === 'method') where = 'AND u.is_method = 1';
+  else if (kindFilter === 'experience') where = 'AND u.is_experience = 1';
+  else if (methodsOnly) where = 'AND u.is_method = 1';
   let rows = db.prepare(`
-    SELECT u.id, u.text, u.at, u.is_method, p.name AS project_name, usr.handle AS owner_handle,
+    SELECT u.id, u.text, u.at, u.is_method, u.is_experience,
+           p.name AS project_name, usr.handle AS owner_handle,
            bm25(updates_fts) AS score
     FROM updates_fts
     JOIN updates u ON u.id = updates_fts.update_id
     JOIN projects p ON p.id = u.project_id
     JOIN users usr ON usr.id = p.owner_id
     WHERE updates_fts MATCH ? ${where}
-    ORDER BY u.is_method DESC, score ASC, u.at DESC
+    ORDER BY (u.is_method OR u.is_experience) DESC, score ASC, u.at DESC
     LIMIT ?
   `).all(ftsQ, limit);
 
   // trigram tokenizer 要 ≥3 字符才能命中 · 2 字 CJK ("邮箱") 走 LIKE 兜底
   if (rows.length === 0) {
-    const likeWhere = methodsOnly ? 'AND u.is_method = 1' : '';
+    const likeWhere = where;
     rows = db.prepare(`
-      SELECT u.id, u.text, u.at, u.is_method, p.name AS project_name, usr.handle AS owner_handle,
+      SELECT u.id, u.text, u.at, u.is_method, u.is_experience,
+             p.name AS project_name, usr.handle AS owner_handle,
              0 AS score
       FROM updates u
       JOIN projects p ON p.id = u.project_id
       JOIN users usr ON usr.id = p.owner_id
       WHERE u.text LIKE ? ${likeWhere}
-      ORDER BY u.is_method DESC, u.at DESC
+      ORDER BY (u.is_method OR u.is_experience) DESC, u.at DESC
       LIMIT ?
     `).all('%' + q.trim() + '%', limit);
   }
@@ -689,6 +697,7 @@ function searchMethods({ q, limit = 10, methodsOnly = false, borrowerHandle = nu
       ownerHandle: r.owner_handle,
       at: r.at,
       isMethod: !!r.is_method,
+      isExperience: !!r.is_experience,
       score: r.score,
     })),
   };

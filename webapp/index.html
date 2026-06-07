@@ -516,6 +516,9 @@
   .sri-name { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); transition: color 0.15s; }
   .sri-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-left: 8px; }
   .sri-tagline { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 2px; }
+  .sri-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 1px 6px; margin-left: 8px; border-radius: 2px; letter-spacing: 0.04em; vertical-align: middle; }
+  .sri-tag-experience { background: #fff1ec; color: var(--vermilion); }
+  .sri-tag-method { background: #f0ede4; color: var(--moss); }
   .sri-text { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink-soft); line-height: 1.5; margin-top: 4px; }
   .search-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); text-align: center; padding: 24px 0; }
   .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); border: 1px solid var(--sepia-light); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
@@ -8407,14 +8410,24 @@ function doSearch(q) {
 
   if (updates.length > 0) {
     const shown = updates.slice(0, 8);
+    // v0.12 排序 · 标了经验或方法的优先 (让 @xiao 搜阿里云时一眼看见 daodao 的踩坑总结)
+    shown.sort((a, b) => {
+      const aw = (a.u.isExperience ? 2 : 0) + (a.u.isMethod ? 1 : 0);
+      const bw = (b.u.isExperience ? 2 : 0) + (b.u.isMethod ? 1 : 0);
+      return bw - aw;
+    });
     html += `<div class="search-result-group">
       <div class="search-result-label">进展 (${updates.length}${updates.length > 8 ? ' · 显示前 8 条' : ''})</div>
-      ${shown.map(({p, u}) => `
+      ${shown.map(({p, u}) => {
+        const tags = [];
+        if (u.isExperience) tags.push('<span class="sri-tag sri-tag-experience">踩坑经验</span>');
+        if (u.isMethod) tags.push('<span class="sri-tag sri-tag-method">方法</span>');
+        return `
         <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('project','${p.owner}','${p.slug}');">
-          <div><span class="sri-meta">@${p.owner} / ${escapeHtml(p.name)} · ${shortAgo(u.at)}</span></div>
+          <div><span class="sri-meta">@${p.owner} / ${escapeHtml(p.name)} · ${shortAgo(u.at)}</span>${tags.join(' ')}</div>
           <div class="sri-text">${escapeHtml(u.text.length > 120 ? u.text.slice(0, 120) + '...' : u.text)}</div>
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>`;
   }
 

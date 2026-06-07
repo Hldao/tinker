@@ -103,6 +103,7 @@ function buildState({ targetUserId } = {}) {
       if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
       if (u.kind) out.kind = u.kind;
       if (u.is_method) out.isMethod = true;
+      if (u.is_experience) out.isExperience = true;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;
       const usedBy = usedByMap[u.id];

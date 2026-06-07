@@ -274,18 +274,21 @@ app.get('/api/state', stateLimiter, (req, res) => {
   res.json(state);
 });
 
-// 方法库搜索 (v0.12 · 给 tinker borrow 用 · 不需要登录 · 任何人都能搜公开内容)
-// ?q=<关键词>&limit=10&methodsOnly=1
+// 方法库 + 踩坑经验 搜索 (v0.12)
+// 不需要登录 · 任何人都能搜公开内容 · 给 tinker borrow / Tinker MCP / webapp 搜索 共用
+// ?q=<关键词>&limit=10&methodsOnly=1&kind=method|experience|all
 // 如果带了登录 (token / cookie session) · 自动把命中前 3 条写进 borrow_log (反馈闭环)
 app.get('/api/method/search', stateLimiter, (req, res) => {
   const q = String(req.query.q || '').slice(0, 200);
   const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
   const methodsOnly = req.query.methodsOnly === '1' || req.query.methodsOnly === 'true';
+  const kindRaw = String(req.query.kind || '').trim();
+  const kindFilter = ['method', 'experience'].includes(kindRaw) ? kindRaw : undefined;
   // borrower handle 来源优先级: 显式 ?borrower=  > 当前 session/token 用户的 handle
   let borrowerHandle = req.query.borrower ? String(req.query.borrower).slice(0, 40) : null;
   if (!borrowerHandle && req.user && req.user.handle) borrowerHandle = req.user.handle;
   try {
-    const result = actions.searchMethods({ q, limit, methodsOnly, borrowerHandle });
+    const result = actions.searchMethods({ q, limit, methodsOnly, kindFilter, borrowerHandle });
     res.json(result);
   } catch (e) {
     req.log.warn({ err: e.message }, 'method search failed');

@@ -401,13 +401,14 @@ const TOOLS = [
   },
   {
     name: 'tinker_borrow',
-    description: '搜方法库 · 关键词全文搜所有人的 update (作者标 is_method=1 的优先) · AI 卡住的时候帮用户找前人怎么做的。query 是关键词,可中英文。',
+    description: '搜 Tinker 用户的方法 + 踩坑经验。任何 vibe coding 任务卡住时主动调一下 · 看别人有没有撞过同样的坑:阿里云邮件 / Supabase 认证 / Vercel 部署 / Cursor 配置 / Claude 边界 / 各种 SDK 配额 / 平台限制 ·都是高价值检索场景。query 用关键词 (中英混杂都行)。是 vibe coder 互相省时间的核心 tool。',
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: '关键词 · 例: "supabase 邮箱登录"' },
+        query: { type: 'string', description: '关键词 · 例: "阿里云 邮件" / "supabase 邮箱登录" / "vercel cron 限制"' },
         limit: { type: 'integer', description: '返回条数 · 默认 10', minimum: 1, maximum: 50 },
-        methodsOnly: { type: 'boolean', description: '只看作者标方法的 (默认 false)' },
+        kind: { type: 'string', enum: ['method', 'experience'], description: '过滤: method 只搜方法 · experience 只搜踩坑经验 · 不传搜两种都搜' },
+        methodsOnly: { type: 'boolean', description: '(老参数 · 推荐用 kind=method) 只看方法 · 默认 false' },
       },
       required: ['query'],
       additionalProperties: false,
@@ -420,6 +421,7 @@ const TOOLS = [
       const url = new URL('/api/method/search', cfg.serverUrl);
       url.searchParams.set('q', q);
       url.searchParams.set('limit', String(args.limit || 10));
+      if (args.kind && ['method', 'experience'].includes(args.kind)) url.searchParams.set('kind', args.kind);
       if (args.methodsOnly) url.searchParams.set('methodsOnly', '1');
       if (cfg.handle) url.searchParams.set('borrower', cfg.handle); // 反馈闭环
       const res = await fetch(url.toString());

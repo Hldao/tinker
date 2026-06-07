@@ -3956,14 +3956,16 @@ async function cmdBorrow(query, opts) {
   if (!q) {
     if (opts.json) return errJson('用法: tinker borrow "<关键词>"', 'NO_QUERY');
     log(sepia('  用法: ') + vermilion('tinker borrow "<关键词>"'));
-    log(sepia('  例:   ') + vermilion('tinker borrow "supabase 邮箱登录"'));
-    log(sepia('  加 --methods-only 只看作者标记为方法的 (更高信号)'));
+    log(sepia('  例:   ') + vermilion('tinker borrow "阿里云 邮件"') + sepia(' (搜踩坑经验)'));
+    log(sepia('  例:   ') + vermilion('tinker borrow "supabase 邮箱登录"') + sepia(' (搜方法)'));
+    log(sepia('  加 --methods-only 只看方法 · --kind experience 只看踩坑经验'));
     return;
   }
   const url = new URL('/api/method/search', cfg.serverUrl);
   url.searchParams.set('q', q);
   url.searchParams.set('limit', String(opts.limit || 10));
   if (opts.methodsOnly || opts['methods-only']) url.searchParams.set('methodsOnly', '1');
+  if (opts.kind && ['method', 'experience'].includes(opts.kind)) url.searchParams.set('kind', opts.kind);
   // 带 handle 让作者收到反馈 (反馈闭环 v0.12) · 没登录就匿名
   if (cfg.handle) url.searchParams.set('borrower', cfg.handle);
   const res = await fetch(url.toString());
@@ -3983,7 +3985,11 @@ async function cmdBorrow(query, opts) {
   log(sepia(`  搜到 ${hits.length} 条 · 关键词: `) + bold(q));
   log('');
   hits.forEach((h, i) => {
-    const flag = h.isMethod ? vermilion(' [方法]') : '';
+    // v0.12 标识 · 经验排在方法之前 (因为踩坑经验更稀缺 · 更值得看)
+    const flags = [];
+    if (h.isExperience) flags.push(vermilion('[踩坑经验]'));
+    if (h.isMethod) flags.push(vermilion('[方法]'));
+    const flag = flags.length ? ' ' + flags.join(' ') : '';
     const when = new Date(h.at).toISOString().slice(0, 10);
     log(bold(`  ${i + 1}. `) + h.projectName + sepia(' · @') + h.ownerHandle + sepia(' · ') + when + flag);
     const lines = h.text.split('\n').filter(Boolean).slice(0, 3);
@@ -4085,6 +4091,75 @@ function parseMarkdownSections(content) {
   }).filter(s => s.charCount > 30); // 太短的段没 contribute 价值
 }
 
+// v0.13 让 LLM 看完整 doc 推荐 3 段最值得分享的
+// 返回 [{ heading, reason }] 数组 · 失败 throw
+async function llmPickSections(cfg, sections) {
+  if (!cfg.llm || !cfg.llm.apiKey) throw new Error('未配置 LLM · 先 tinker llm 配置 key');
+  const provider = cfg.llm.provider || 'deepseek';
+  const apiKey = cfg.llm.apiKey;
+  const summary = sections.map((s, i) => {
+    const preview = s.fullText.slice(0, 180).replace(/\n/g, ' ');
+    return `${i + 1}. 标题: ${s.heading} · ${s.charCount} 字 · 前 180 字: ${preview}${s.charCount > 180 ? '...' : ''}`;
+  }).join('\n');
+  const prompt = `你在帮一个 vibe coder (用 AI 编程的开发者) 整理 markdown 文档 · 挑出最值得分享给别人 borrow / 复用的几段。
+
+文档有以下 ${sections.length} 个段落:
+
+${summary}
+
+判断标准:
+- 包含具体可操作的方法 / 套路 / 配置 · 不是只有结论
+- 对踩同样坑的人有直接价值 (而不是只对作者自己有意义)
+- 不是项目特定的细节 (内部路径 / 变量名 / 私人决策)
+- 字数太短 (<50 字) 一般不值得
+
+挑 3 段 (真没合适的可以少挑)。
+
+输出严格 JSON · 不要包 \`\`\`json:
+{ "picks": [{ "heading": "完整标题原文 (字符要跟上面列表里完全一样)", "reason": "10-20 字 · 为什么值得分享" }] }`;
+
+  let rawText;
+  if (provider === 'deepseek') {
+    const r = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: cfg.llm.model || 'deepseek-chat', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d.error && d.error.message) || 'DeepSeek ' + r.status);
+    rawText = d.choices[0].message.content.trim();
+    recordLLMUsage(provider, d.usage && d.usage.total_tokens, 'auto-pick');
+  } else if (provider === 'anthropic') {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: cfg.llm.model || 'claude-sonnet-4-5-20250929', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d.error && d.error.message) || 'Anthropic ' + r.status);
+    rawText = d.content[0].text.trim();
+    recordLLMUsage(provider, d.usage && (d.usage.input_tokens + d.usage.output_tokens), 'auto-pick');
+  } else if (provider === 'openai') {
+    const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: cfg.llm.model || 'gpt-4o-mini', max_tokens: 1500, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error((d.error && d.error.message) || 'OpenAI ' + r.status);
+    rawText = d.choices[0].message.content.trim();
+    recordLLMUsage(provider, d.usage && d.usage.total_tokens, 'auto-pick');
+  } else {
+    throw new Error('不支持的 LLM provider: ' + provider);
+  }
+  rawText = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  let parsed;
+  try { parsed = JSON.parse(rawText); }
+  catch (e) { throw new Error('LLM 返回不是合法 JSON:\n' + rawText.slice(0, 200)); }
+  if (!parsed.picks || !Array.isArray(parsed.picks)) throw new Error('LLM 返回缺 picks 数组');
+  return parsed.picks;
+}
+
 // v0.13 隐私扫描 · 给作者上传前提示 · 不强删 · 让作者决定
 // 返回 [{ kind, sample, hint }] 命中列表
 function scanPrivacyRisks(text, cfg) {
@@ -4131,7 +4206,12 @@ async function cmdContributeFromFile(cfg, opts) {
   let projectName = null;
   if (opts.projectId) {
     const state = await apiState(cfg);
-    const p = state.projects.find(x => x.owner === cfg.handle && (x.id === opts.projectId || x.slug === opts.projectId || x.name === opts.projectId));
+    // 优先精确 (id/slug/name 全等) · 没有再退到 name 子串匹配 (大小写不敏感)
+    const q = opts.projectId;
+    const mine = state.projects.filter(x => x.owner === cfg.handle);
+    const exact = mine.find(x => x.id === q || x.slug === q || x.name === q);
+    const fuzzy = exact || mine.find(x => x.name.toLowerCase().includes(q.toLowerCase()));
+    const p = fuzzy;
     if (!p) {
       if (opts.json) return errJson('找不到项目: ' + opts.projectId, 'NO_PROJECT');
       err('找不到你的项目: ' + opts.projectId); process.exit(1);
@@ -4166,7 +4246,41 @@ async function cmdContributeFromFile(cfg, opts) {
 
   // 选段
   let chosen = [];
-  if (opts.section) {
+  if (opts.auto) {
+    // --auto: LLM 看完整篇推荐 3 段最值得分享的 · 跳过手动勾
+    log(sepia('  LLM 看完 ') + bold(sections.length + ' 段') + sepia(' 推荐中... (DeepSeek)'));
+    let picks;
+    try { picks = await llmPickSections(cfg, sections); }
+    catch (e) {
+      if (opts.json) return errJson('LLM 推荐失败: ' + e.message, 'LLM_FAIL');
+      err('LLM 推荐失败: ' + e.message); process.exit(1);
+    }
+    if (!picks.length) {
+      const msg = 'LLM 看完没挑出合适的方法段 (可能整篇都偏项目特定 / 偏结论) · 试试 --section 手动选';
+      if (opts.json) return errJson(msg, 'NO_PICKS');
+      log(sepia('  ' + msg)); return;
+    }
+    // 匹配回 sections (完全匹配 / 子串两端都试)
+    for (const pick of picks) {
+      const h = (pick.heading || '').trim();
+      const match = sections.find(s =>
+        s.heading === h ||
+        s.heading.toLowerCase() === h.toLowerCase() ||
+        s.heading.includes(h) ||
+        (h.length > 4 && h.includes(s.heading))
+      );
+      if (match) chosen.push({ ...match, llmReason: pick.reason });
+    }
+    if (chosen.length === 0) {
+      const msg = 'LLM 返回的标题匹配不上文档段 · 可能 LLM 改写了标题 · 试试 --section 手动';
+      if (opts.json) return errJson(msg, 'NO_MATCH_AFTER_LLM');
+      err(msg); process.exit(1);
+    }
+    log('');
+    log(moss('  LLM 推荐 ') + bold(chosen.length + ' 段') + sepia(':'));
+    chosen.forEach(c => log(sepia('    · ') + bold(c.heading) + sepia(' · ') + (c.llmReason || '')));
+    log('');
+  } else if (opts.section) {
     // --section "标题" 支持多次 · 模糊匹配 (大小写不敏感 · 子串)
     const want = (Array.isArray(opts.section) ? opts.section : [opts.section]).map(s => s.toLowerCase());
     chosen = sections.filter(s => want.some(w => s.heading.toLowerCase().includes(w)));
@@ -4449,6 +4563,7 @@ function parseArgs(args) {
     else if (a === '--methods-only' || a === '--methodsOnly') opts.methodsOnly = true;
     else if (a === '--from-file') opts.fromFile = args[++i];
     else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
+    else if (a === '--auto') opts.auto = true;
     else if (a === '--section') {
       // 支持多次 · 收集成数组 (匹配多段一起 contribute)
       const v = args[++i];
@@ -4734,16 +4849,18 @@ function cmdSchema(opts = {}) {
         { flag: '--check-only', purpose: '只刷新 cache 不真升级' },
       ], jsonOutput: false, example: 'tinker update' },
       { name: 'login', purpose: '配置 server / handle / token / LLM (交互)', args: [], jsonOutput: false, example: 'tinker login' },
-      { name: 'borrow', purpose: '搜方法库 (任意人的 update · is_method 优先)', args: [
+      { name: 'borrow', purpose: '搜方法 + 踩坑经验 (任意人的 update · is_method / is_experience 优先)', args: [
         { arg: '<关键词>', purpose: '查询词 · 可中英混杂 · 1-200 字' },
         { flag: '--methods-only', purpose: '只看作者标方法的' },
+        { flag: '--kind method|experience', purpose: '过滤 · experience 只搜踩坑经验' },
         { flag: '--limit N', purpose: '返回条数 · 默认 10 · 上限 50' },
         { flag: '--json', purpose: 'machine-readable 输出' },
-      ], jsonOutput: true, example: 'tinker borrow "supabase 邮箱登录" --json' },
+      ], jsonOutput: true, example: 'tinker borrow "阿里云 邮件" --kind experience' },
       { name: 'contribute', purpose: '标方法 · 现有 update 升格 / 或从 markdown 文件按段批量发', args: [
         { arg: '<updateId>', purpose: '不传默认拿最近一条 push' },
         { flag: '--unmark <updateId>', purpose: '取消方法标' },
         { flag: '--from-file <path.md>', purpose: '按 H1/H2/H3 切段交互选 · 隐私扫描 · 每段一条 update + 自动标方法' },
+        { flag: '--auto', purpose: '配合 --from-file · 让 LLM 看完整篇推荐 3 段最值得分享的 · 跳过手动勾' },
         { flag: '--section "<标题>"', purpose: '配合 --from-file · 直接选指定段 (可多次)' },
         { flag: '--project <slug>', purpose: '配合 --from-file · 指定项目 (否则当前 repo 绑定 / 交互选)' },
         { flag: '--json', purpose: 'machine-readable 输出' },
