@@ -7335,13 +7335,11 @@ function getFeedEvents() {
   const events = [];
   // spec §5.2 + status-picker 文案: 「归档」从 feed 移除
   // active / stuck / done / paused 都在 feed · archive 不在
-  // v0.79 沉淀方法 (isMethod=true) 不进首页 feed · 那是给 AI 看的 markdown · 不是 "今天发生了什么"
-  // 想看的人去项目页"沉淀方法"区 · 或者用 tinker borrow 搜
-  // proven (usedBy ≥3) 留在 feed · 因为它原本就是真实进展 · 只是被认证为方法
+  // v0.80 方法 first-class · 不再过滤 isMethod · 但走独立卡片模板 (makeEntryEl 内部分支)
+  // 产品定位: GitHub 沉淀代码 · Tinker 沉淀方法 · 方法是核心资产不是 update 的副属性
   state.projects.forEach(p => {
     if (p.status === 'archive') return;
     p.updates.forEach((u, idx) => {
-      if (u.isMethod) return;
       events.push({
         owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
         updateId: u.id,
@@ -7350,6 +7348,8 @@ function getFeedEvents() {
         images: u.images || null,
         feedbackAsk: u.feedbackAsk,
         productLink: p.productLink,
+        isMethod: !!u.isMethod,
+        scenario: u.scenario || null,
       });
     });
   });
@@ -8462,10 +8462,10 @@ function doSearch(q) {
 
   if (updates.length > 0) {
     const shown = updates.slice(0, 8);
-    // v0.12 排序 · 标了经验或方法的优先 (让 @xiao 搜阿里云时一眼看见 daodao 的踩坑总结)
+    // v0.13 三种标签排序 · 踩坑经验/上手指南 优先 · 方法次之
     shown.sort((a, b) => {
-      const aw = (a.u.isExperience ? 2 : 0) + (a.u.isMethod ? 1 : 0);
-      const bw = (b.u.isExperience ? 2 : 0) + (b.u.isMethod ? 1 : 0);
+      const aw = (a.u.isExperience ? 3 : 0) + (a.u.isLearning ? 2 : 0) + (a.u.isMethod ? 1 : 0);
+      const bw = (b.u.isExperience ? 3 : 0) + (b.u.isLearning ? 2 : 0) + (b.u.isMethod ? 1 : 0);
       return bw - aw;
     });
     html += `<div class="search-result-group">
@@ -8473,6 +8473,7 @@ function doSearch(q) {
       ${shown.map(({p, u}) => {
         const tags = [];
         if (u.isExperience) tags.push('<span class="sri-tag sri-tag-experience">踩坑经验</span>');
+        if (u.isLearning) tags.push('<span class="sri-tag sri-tag-learning">上手指南</span>');
         if (u.isMethod) tags.push('<span class="sri-tag sri-tag-method">方法</span>');
         return `
         <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('project','${p.owner}','${p.slug}');">

@@ -596,6 +596,36 @@ function unmarkExperience({ updateId }, { currentUserId }) {
   return { ok: true };
 }
 
+// v0.13 learning tag · Learning Sprint 第二个 lifecycle 产物
+// learning = "上手指南" · 给其他人快速入门一个新技术 / SDK / API 用
+// 跟 method (方法) / experience (踩坑) 是平行的三种 productTag
+function markAsLearning({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, u.text, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能把自己写的标成上手指南');
+  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 上手指南池希望有点干货 (至少 20 字)');
+  db.prepare('UPDATE updates SET is_learning = 1 WHERE id = ?').run(updateId);
+  return { ok: true, updateId };
+}
+
+function unmarkLearning({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能改自己的标记');
+  db.prepare('UPDATE updates SET is_learning = 0 WHERE id = ?').run(updateId);
+  return { ok: true };
+}
+
 // v0.12 给 CLI / MCP 拉自己最近的 update · 不走 action 路径 · 直接 GET 暴露
 // 限定 currentUserId 自己的 · 不暴露别人的
 // kindFilter: 'all' (默认) / 'experience' / 'method' / 'ship' / 'stuck' / 'prototype'
@@ -605,13 +635,14 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
   const params = [currentUserId];
   if (kindFilter === 'experience') where += ' AND u.is_experience = 1';
   else if (kindFilter === 'method') where += ' AND u.is_method = 1';
+  else if (kindFilter === 'learning') where += ' AND u.is_learning = 1';
   else if (kindFilter && ['ship', 'stuck', 'prototype'].includes(kindFilter)) {
     where += ' AND u.kind = ?';
     params.push(kindFilter);
   }
   params.push(cap);
   const rows = db.prepare(`
-    SELECT u.id, u.text, u.at, u.kind, u.is_method, u.is_experience,
+    SELECT u.id, u.text, u.at, u.kind, u.is_method, u.is_experience, u.is_learning,
            p.id AS project_id, p.slug AS project_slug, p.name AS project_name,
            usr.handle AS owner_handle
     FROM updates u
@@ -629,6 +660,7 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
       kind: r.kind || null,
       isMethod: !!r.is_method,
       isExperience: !!r.is_experience,
+      isLearning: !!r.is_learning,
       projectId: r.project_id,
       projectSlug: r.project_slug,
       projectName: r.project_name,
@@ -650,9 +682,10 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
   let where = '';
   if (kindFilter === 'method') where = 'AND u.is_method = 1';
   else if (kindFilter === 'experience') where = 'AND u.is_experience = 1';
+  else if (kindFilter === 'learning') where = 'AND u.is_learning = 1';
   else if (methodsOnly) where = 'AND u.is_method = 1';
   let rows = db.prepare(`
-    SELECT u.id, u.text, u.at, u.is_method, u.is_experience,
+    SELECT u.id, u.text, u.at, u.is_method, u.is_experience, u.is_learning,
            p.name AS project_name, usr.handle AS owner_handle,
            bm25(updates_fts) AS score
     FROM updates_fts
@@ -660,7 +693,7 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
     JOIN projects p ON p.id = u.project_id
     JOIN users usr ON usr.id = p.owner_id
     WHERE updates_fts MATCH ? ${where}
-    ORDER BY (u.is_method OR u.is_experience) DESC, score ASC, u.at DESC
+    ORDER BY (u.is_method OR u.is_experience OR u.is_learning) DESC, score ASC, u.at DESC
     LIMIT ?
   `).all(ftsQ, limit);
 
@@ -668,14 +701,14 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
   if (rows.length === 0) {
     const likeWhere = where;
     rows = db.prepare(`
-      SELECT u.id, u.text, u.at, u.is_method, u.is_experience,
+      SELECT u.id, u.text, u.at, u.is_method, u.is_experience, u.is_learning,
              p.name AS project_name, usr.handle AS owner_handle,
              0 AS score
       FROM updates u
       JOIN projects p ON p.id = u.project_id
       JOIN users usr ON usr.id = p.owner_id
       WHERE u.text LIKE ? ${likeWhere}
-      ORDER BY (u.is_method OR u.is_experience) DESC, u.at DESC
+      ORDER BY (u.is_method OR u.is_experience OR u.is_learning) DESC, u.at DESC
       LIMIT ?
     `).all('%' + q.trim() + '%', limit);
   }
@@ -709,6 +742,7 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
       at: r.at,
       isMethod: !!r.is_method,
       isExperience: !!r.is_experience,
+      isLearning: !!r.is_learning,
       score: r.score,
     })),
   };
@@ -963,6 +997,8 @@ module.exports = {
   markAsMethod, unmarkMethod,
   // experience tag (v0.12) · 给 AI 检索经验 · 跟 method 同构但语义不同
   markAsExperience, unmarkExperience,
+  // learning tag (v0.13) · 上手指南 · 给 AI 检索新技术入门
+  markAsLearning, unmarkLearning,
   // reactions
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes

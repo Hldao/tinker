@@ -1177,17 +1177,18 @@ async function cmdPushExperienceDraft(cfg, opts, text) {
     if (!yes) { log(sepia('  取消了')); return; }
   }
 
-  // 发 + 自动 mark · phase 1: experience 跟 learning 都先走 markAsExperience
-  // phase 2 计划: server 加 is_learning 字段后区分
+  // 发 + 自动 mark · v0.13 phase 2 完整版:learning → markAsLearning · experience → markAsExperience
   try {
     const res = await apiAction(cfg, 'addUpdate', { projectId, text });
     recordPushAt(projectId);
     const updateId = res && (res.id || (res.result && res.result.id));
     if (updateId) {
+      const markAction = isLearning ? 'markAsLearning' : 'markAsExperience';
+      const manualCmd = isLearning ? 'tinker mark-learning' : 'tinker mark-experience';
       try {
-        await apiAction(cfg, 'markAsExperience', { updateId });
+        await apiAction(cfg, markAction, { updateId });
       } catch (e) {
-        log(sepia('  ⚠ mark ' + productTag + ' 失败: ' + e.message + ' · 手动跑 ') + vermilion(`tinker mark-experience ${updateId}`));
+        log(sepia('  ⚠ mark ' + productTag + ' 失败: ' + e.message + ' · 手动跑 ') + vermilion(`${manualCmd} ${updateId}`));
       }
     }
     log('');
@@ -4574,7 +4575,7 @@ async function cmdBorrow(query, opts) {
   url.searchParams.set('q', q);
   url.searchParams.set('limit', String(opts.limit || 10));
   if (opts.methodsOnly || opts['methods-only']) url.searchParams.set('methodsOnly', '1');
-  if (opts.kind && ['method', 'experience'].includes(opts.kind)) url.searchParams.set('kind', opts.kind);
+  if (opts.kind && ['method', 'experience', 'learning'].includes(opts.kind)) url.searchParams.set('kind', opts.kind);
   // 带 handle 让作者收到反馈 (反馈闭环 v0.12) · 没登录就匿名
   if (cfg.handle) url.searchParams.set('borrower', cfg.handle);
   const res = await fetch(url.toString());
@@ -4594,9 +4595,10 @@ async function cmdBorrow(query, opts) {
   log(sepia(`  搜到 ${hits.length} 条 · 关键词: `) + bold(q));
   log('');
   hits.forEach((h, i) => {
-    // v0.12 标识 · 经验排在方法之前 (因为踩坑经验更稀缺 · 更值得看)
+    // v0.13 三种标签 · 经验/上手指南 排在方法之前 (更稀缺 · 更值得看)
     const flags = [];
     if (h.isExperience) flags.push(vermilion('[踩坑经验]'));
+    if (h.isLearning) flags.push(vermilion('[上手指南]'));
     if (h.isMethod) flags.push(vermilion('[方法]'));
     const flag = flags.length ? ' ' + flags.join(' ') : '';
     const when = new Date(h.at).toISOString().slice(0, 10);
@@ -5003,6 +5005,7 @@ async function cmdRecent(opts) {
     const when = new Date(u.at).toISOString().slice(0, 10);
     const tags = [];
     if (u.isExperience) tags.push(vermilion('[经验]'));
+    if (u.isLearning) tags.push(vermilion('[上手指南]'));
     if (u.isMethod) tags.push(vermilion('[方法]'));
     if (u.kind) tags.push(sepia('[' + u.kind + ']'));
     log(bold(`  ${i + 1}. `) + u.projectName + sepia(' · ') + when + ' ' + tags.join(' '));
@@ -5055,6 +5058,49 @@ async function cmdMarkExperience(updateIdArg, opts) {
   log(moss('  已标为经验 · 给 AI 检索时优先取这类 · 帮其他人少踩坑'));
   log(sepia('  id: ') + updateId);
   log(sepia('  反悔: ') + vermilion(`tinker mark-experience --unmark ${updateId}`));
+  log('');
+}
+
+// v0.13 mark learning · 跟 mark-experience 同构 · 标为上手指南
+async function cmdMarkLearning(updateIdArg, opts) {
+  const cfg = loadConfig();
+  if (!cfg.serverUrl || !cfg.token) {
+    if (opts.json) return errJson('未登录', 'NO_AUTH');
+    err('未登录 · 先 ' + vermilion('tinker login')); process.exit(1);
+  }
+  if (opts.unmark) {
+    const id = typeof opts.unmark === 'string' ? opts.unmark : updateIdArg;
+    if (!id) {
+      if (opts.json) return errJson('--unmark 需要 updateId', 'NO_ID');
+      err('--unmark 需要 updateId · 例: tinker mark-learning --unmark u-xxx'); process.exit(1);
+    }
+    await apiAction(cfg, 'unmarkLearning', { updateId: id });
+    if (opts.json) return outputJson({ ok: true, updateId: id, marked: false });
+    log(sepia('  已取消上手指南标: ') + id);
+    return;
+  }
+  let updateId = updateIdArg;
+  if (!updateId) {
+    const state = await apiState(cfg);
+    let latest = null;
+    for (const p of state.projects || []) {
+      for (const u of p.updates || []) {
+        if (!latest || u.at > latest.at) latest = { ...u, project: p.name };
+      }
+    }
+    if (!latest) {
+      if (opts.json) return errJson('还没记过进展 · 没东西可标', 'NO_UPDATES');
+      err('还没记过进展 · 没东西可标'); process.exit(1);
+    }
+    updateId = latest.id;
+    log(sepia('  默认拿最近一条: ') + bold(latest.project) + sepia(' · ') + latest.text.slice(0, 60) + sepia('...'));
+  }
+  await apiAction(cfg, 'markAsLearning', { updateId });
+  if (opts.json) return outputJson({ ok: true, updateId, marked: true });
+  log('');
+  log(moss('  已标为上手指南 · 给 AI 检索时优先取这类 · 帮其他人快速入门新技术'));
+  log(sepia('  id: ') + updateId);
+  log(sepia('  反悔: ') + vermilion(`tinker mark-learning --unmark ${updateId}`));
   log('');
 }
 
@@ -5631,7 +5677,7 @@ function cmdSchema(opts = {}) {
       { name: 'borrow', purpose: '搜方法 + 踩坑经验 (任意人的 update · is_method / is_experience 优先)', args: [
         { arg: '<关键词>', purpose: '查询词 · 可中英混杂 · 1-200 字' },
         { flag: '--methods-only', purpose: '只看作者标方法的' },
-        { flag: '--kind method|experience', purpose: '过滤 · experience 只搜踩坑经验' },
+        { flag: '--kind method|experience|learning', purpose: '过滤 · experience 只搜踩坑经验 · learning 只搜上手指南' },
         { flag: '--limit N', purpose: '返回条数 · 默认 10 · 上限 50' },
         { flag: '--json', purpose: 'machine-readable 输出' },
       ], jsonOutput: true, example: 'tinker borrow "阿里云 邮件" --kind experience' },
@@ -5724,6 +5770,8 @@ async function main() {
       case 'recent': await cmdRecent(opts); break;
       case 'mark-experience': case 'mark-exp':
         await cmdMarkExperience(args[1], opts); break;
+      case 'mark-learning': case 'mark-learn':
+        await cmdMarkLearning(args[1], opts); break;
       case 'session': await cmdSession(args[1], opts); break;
       case 'goodnight': case 'recap':
         await cmdGoodnight({

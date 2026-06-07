@@ -283,7 +283,7 @@ app.get('/api/method/search', stateLimiter, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
   const methodsOnly = req.query.methodsOnly === '1' || req.query.methodsOnly === 'true';
   const kindRaw = String(req.query.kind || '').trim();
-  const kindFilter = ['method', 'experience'].includes(kindRaw) ? kindRaw : undefined;
+  const kindFilter = ['method', 'experience', 'learning'].includes(kindRaw) ? kindRaw : undefined;
   // borrower handle 来源优先级: 显式 ?borrower=  > 当前 session/token 用户的 handle
   let borrowerHandle = req.query.borrower ? String(req.query.borrower).slice(0, 40) : null;
   if (!borrowerHandle && req.user && req.user.handle) borrowerHandle = req.user.handle;

@@ -104,6 +104,7 @@ function buildState({ targetUserId } = {}) {
       if (u.kind) out.kind = u.kind;
       if (u.is_method) out.isMethod = true;
       if (u.is_experience) out.isExperience = true;
+      if (u.is_learning) out.isLearning = true;
       if (u.scenario) out.scenario = u.scenario;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;
