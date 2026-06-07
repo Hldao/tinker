@@ -25,10 +25,16 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 
 const CONFIG_DIR = path.join(os.homedir(), '.tinker');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+// v0.12 踩坑全周期状态机 · lazy 加载避免影响主 CLI 启动速度
+let _struggleModule;
+function getStruggleModule() {
+  if (!_struggleModule) _struggleModule = require('../lib/struggle');
+  return _struggleModule;
+}
 
 // =============================================
 // 工具 — 颜色 / log
@@ -1050,6 +1056,16 @@ async function cmdPushFromDraft(cfg, opts) {
   const file = opts.draftFile;
   if (!fs.existsSync(file)) { err('找不到草稿:' + file); process.exit(1); }
   const md = fs.readFileSync(file, 'utf-8');
+
+  // v0.12 检测 autopsy 草稿 (frontmatter as_experience: true 或 --as-experience flag)
+  // autopsy 草稿是单一 markdown · 没 "## 候选 N" 切割 · 整篇当 text
+  const fmMatch = md.match(/^---\n([\s\S]*?)\n---\n+([\s\S]*)$/);
+  const isExperienceDraft = opts.asExperience
+    || (fmMatch && /as_experience:\s*true/i.test(fmMatch[1]));
+  if (isExperienceDraft) {
+    return cmdPushExperienceDraft(cfg, opts, fmMatch ? fmMatch[2].trim() : md.trim());
+  }
+
   const candidates = parseDraftMarkdown(md);
   if (candidates.length === 0) {
     err('草稿里没有候选(可能都被删了)');
@@ -1116,6 +1132,73 @@ async function cmdPushFromDraft(cfg, opts) {
   ok('发了 ' + bold(posted + '') + ' 条到 ' + bold(p.name));
   log(sepia('  去看: ') + cfg.serverUrl + '/');
   log('');
+}
+
+// v0.12 experience 草稿一键发 · 单 update + 自动 markAsExperience
+// text 已经去掉 frontmatter · 用户在 confirm 前能预览
+async function cmdPushExperienceDraft(cfg, opts, text) {
+  if (!text || text.length < 20) { err('草稿内容太短 · experience 池要求 ≥ 20 字'); process.exit(1); }
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck'].includes(p.status));
+  if (mine.length === 0) { err('你没有 active/stuck 的项目'); process.exit(1); }
+
+  let projectId;
+  if (opts.projectId) {
+    projectId = opts.projectId;
+  } else if (mine.length === 1) {
+    projectId = mine[0].id;
+    log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
+  } else {
+    const { select } = require('@inquirer/prompts');
+    projectId = await select({
+      message: '发到哪个项目?',
+      choices: mine.map(p => ({
+        name: p.name + sepia('  ' + p.desc.slice(0, 40)),
+        value: p.id,
+      })),
+    });
+  }
+  const p = mine.find(x => x.id === projectId);
+
+  // 预览 + 确认 (除非 --yes)
+  log('');
+  log(sepia('  踩坑经验草稿预览 (前 300 字):'));
+  log(sepia('  ─────────'));
+  text.split('\n').slice(0, 10).forEach(line => log('  ' + line));
+  log(sepia('  ─────────'));
+  log('');
+  if (!opts.yes) {
+    const { confirm } = require('@inquirer/prompts');
+    const yes = await confirm({
+      message: `发到「${p.name}」并标为踩坑经验?`,
+      default: true,
+    });
+    if (!yes) { log(sepia('  取消了')); return; }
+  }
+
+  // 发 + 自动 mark
+  try {
+    const res = await apiAction(cfg, 'addUpdate', { projectId, text });
+    recordPushAt(projectId);
+    const updateId = res && (res.id || (res.result && res.result.id));
+    if (updateId) {
+      try {
+        await apiAction(cfg, 'markAsExperience', { updateId });
+      } catch (e) {
+        log(sepia('  ⚠ mark experience 失败: ' + e.message + ' · 手动跑 ') + vermilion(`tinker mark-experience ${updateId}`));
+      }
+    }
+    log('');
+    ok('发了 + 标为踩坑经验 — ' + bold(p.name));
+    if (updateId) log(sepia('  update id: ') + updateId);
+    const slug = (res && res.projectSlug) || p.slug;
+    const handle = (res && res.ownerHandle) || cfg.handle;
+    if (slug && handle) {
+      log(sepia('  去看: ') + cfg.serverUrl + '/#/p/' + handle + '/' + slug);
+    }
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
 }
 
 // 标记项目卡住 + 记一条 "卡在 X" · 触发 server A4 通知 wantToTry + tinkered 用户
@@ -1992,6 +2075,8 @@ function triggerRestart() {
   } catch { return { fired: false }; }
 }
 
+// 工具组合发现 · commit msg 含 2+ AI 工具名 + 创作词
+// 手艺组合是 vibe coder 最珍贵的事 · 单工具好用大家都会 · 组合才是手艺
 // v0.13 触发器: 这次 commit 改了 docs/*.md 类的文档
 // vibe coder 的文档基本都是 AI 写给 AI 看的 · 直接建议 contribute --auto
 // 让 LLM 挑段 · 用户一句 "好" 就发了 · 不用打开文件
@@ -2023,8 +2108,6 @@ function triggerDocsEdit() {
   } catch { return { fired: false }; }
 }
 
-// 工具组合发现 · commit msg 含 2+ AI 工具名 + 创作词
-// 手艺组合是 vibe coder 最珍贵的事 · 单工具好用大家都会 · 组合才是手艺
 function triggerToolCombo() {
   try {
     const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
@@ -2170,20 +2253,26 @@ function triggerReversal() {
   } catch { return { fired: false }; }
 }
 
-// v0.12 跨上下文触发器
-// AI 跟人折腾几小时 · 最后小修复 · 这种瞬间在 commit msg 里看不出来
-// 信号源: ~/.claude/projects/ 最近 6 小时 jsonl + 当前 commit fix + diff 小
+// v0.12 跨上下文触发器 · 状态机驱动版
+// 早期版本独立扫 ~/.claude/projects/ jsonl · v0.12 改成 struggle 状态机驱动
+// 命中条件:state.currentStruggle 刚 resolved (5min 内) + 当前 commit 是 fix + diff 小
 // 对社区价值 ★★★★ · vibe coder 时代最稀缺的"踩坑经验"
 function triggerAiDebugBreakthrough() {
   try {
-    // 1) 当前 commit 是 fix 类
+    const state = loadPromptState();
+    const cur = state.currentStruggle;
+    // 必须有 resolved struggle + justResolvedAt 在 5 分钟内
+    if (!cur || !cur.resolved || !cur.justResolvedAt) return { fired: false };
+    if (Date.now() - cur.justResolvedAt > 5 * 60 * 1000) return { fired: false };
+
+    // 当前 commit 是 fix 类
     const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
     const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
     const scanText = title + '\n' + body;
     const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|\bworkaround\b|修好|修了|搞定|搞通|跑通|通了|解决了|绕过|绕开)/i;
     if (!FIX_WORDS.test(scanText)) return { fired: false };
 
-    // 2) diff 小 (< 50 行 · 长 debug 最终小修复的特征)
+    // diff 小 (< 50 行 · 长 debug 最终小修复的特征)
     let ins = 0, del = 0;
     try {
       const statOut = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
@@ -2195,93 +2284,41 @@ function triggerAiDebugBreakthrough() {
     const netChange = ins + del;
     if (netChange === 0 || netChange > 50) return { fired: false };
 
-    // 3) 扫 ~/.claude/projects/ 最近 6 小时的对话
-    const claudeBase = path.join(os.homedir(), '.claude', 'projects');
-    if (!fs.existsSync(claudeBase)) return { fired: false };
-
-    // Claude Code 编码方式: cwd 把 / 换 - · 但 Claude session 起点不一定是 cwd
-    // 试两层: cwd 自己 + cwd parent · 都不在就不触发 (避免扫全 base 跨项目误报)
-    const cwdEncoded = process.cwd().replace(/\//g, '-');
-    const parentEncoded = path.dirname(process.cwd()).replace(/\//g, '-');
-    const searchDirs = [
-      path.join(claudeBase, cwdEncoded),
-      path.join(claudeBase, parentEncoded),
-    ].filter(p => fs.existsSync(p));
-    if (searchDirs.length === 0) return { fired: false };
-
-    const SIX_HOURS = 6 * 60 * 60 * 1000;
-    const now = Date.now();
-    const userMessages = [];
-    let scanned = 0;
-
-    function walkConv(dir) {
-      try {
-        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-          const full = path.join(dir, e.name);
-          if (e.isDirectory()) walkConv(full);
-          else if (e.name.endsWith('.jsonl')) {
-            try {
-              const stat = fs.statSync(full);
-              // 只读最近 6 小时改过的 jsonl · 跳过冷文件 (省 IO)
-              if (now - stat.mtimeMs > SIX_HOURS) continue;
-              scanned++;
-              if (scanned > 30) return;  // 上限 30 个文件防爆
-              const lines = fs.readFileSync(full, 'utf-8').split('\n').filter(Boolean);
-              for (const line of lines) {
-                try {
-                  const obj = JSON.parse(line);
-                  if (obj.type !== 'user' || !obj.message) continue;
-                  const ts = obj.timestamp ? new Date(obj.timestamp).getTime() : 0;
-                  if (!ts || now - ts > SIX_HOURS) continue;
-                  let text = '';
-                  if (typeof obj.message.content === 'string') text = obj.message.content;
-                  else if (Array.isArray(obj.message.content)) {
-                    text = obj.message.content
-                      .filter(c => c.type === 'text' && c.text)
-                      .map(c => c.text)
-                      .join('\n');
-                  }
-                  text = (text || '').trim();
-                  // skip slash command · tool_result · 短水水
-                  if (!text || text.startsWith('/') || text.length < 8) continue;
-                  userMessages.push({ text, ts });
-                } catch {}
-              }
-            } catch {}
-          }
+    // 命中 · 检查 autopsy 草稿是否就绪
+    const draftDir = path.join(process.cwd(), '.tinker', 'drafts');
+    let draftReady = null;
+    if (fs.existsSync(draftDir)) {
+      const drafts = fs.readdirSync(draftDir)
+        .filter(f => f.startsWith('experience-') && f.endsWith('.md'));
+      if (drafts.length > 0) {
+        // 按 mtime 找最新的一篇
+        const newest = drafts
+          .map(f => ({ f, mtime: fs.statSync(path.join(draftDir, f)).mtimeMs }))
+          .sort((a, b) => b.mtime - a.mtime)[0];
+        // 必须是 struggle.endedAt 之后写的 · 防止串草稿
+        if (newest.mtime >= (cur.endedAt || cur.justResolvedAt)) {
+          draftReady = newest.f;
         }
-      } catch {}
+      }
     }
-    searchDirs.forEach(d => walkConv(d));
 
-    // 4) 信号 A · 长对话 (>= 20 条 user message)
-    if (userMessages.length < 20) return { fired: false };
-    userMessages.sort((a, b) => a.ts - b.ts);
-
-    // 5) 信号 B · 中段挣扎 (失败信号 >= 3 次)
-    const joined = userMessages.map(m => m.text).join('\n');
-    const STRUGGLE_WORDS = /(还是不行|不行啊|又报错|又试|怎么还是|奇怪|为什么不|不对啊|失败|报错|debug|没用|没生效|没反应|还是不通|又挂了|又错|又崩)/g;
-    const struggleMatches = (joined.match(STRUGGLE_WORDS) || []).length;
-    if (struggleMatches < 3) return { fired: false };
-
-    // 6) 信号 C · 后段破局 (最后 5 条 user message 出现 cracked 关键词)
-    const lastChunk = userMessages.slice(-5).map(m => m.text).join('\n');
-    const CRACK_WORDS = /(终于|搞定|找到了|原来是|原来这样|通了|可以了|成了|破了|奏效|生效了|懂了|是这个|对了|过了)/;
-    if (!CRACK_WORDS.test(lastChunk)) return { fired: false };
-
-    // 7) 时间跨度 · 第一条到最后一条至少跨 30 分钟 (否则只是短聊不算折腾)
-    const span = userMessages[userMessages.length - 1].ts - userMessages[0].ts;
-    if (span < 30 * 60 * 1000) return { fired: false };
-
-    const hours = Math.round(span / 60000 / 10) / 6;  // 保留 1 位小数小时
+    const spanHours = cur.endedAt && cur.startedAt
+      ? Math.max(0.1, Math.round((cur.endedAt - cur.startedAt) / 360000) / 10)
+      : '?';
+    const topic = cur.topic || '这次折腾';
     const titleSnippet = '"' + title.slice(0, 50) + '"';
+    const sigCount = (cur.signals || []).length;
     return {
       fired: true,
       priority: 92,
       reason: 'ai-debug-breakthrough',
       kind: 'ai-debug-breakthrough',
-      msg: `像跟 AI 折腾 ${hours}h 破局的瞬间 (${userMessages.length} 轮对话 · ${netChange} 行修复): ${dim(titleSnippet)}`,
-      suggestion: '这种坑写出来能帮到下一个人 · 包括其他 AI',
+      msg: `「${topic}」破局了 · 跨 ${spanHours}h · ${sigCount} 条信号 · ${netChange} 行修复: ${dim(titleSnippet)}`,
+      suggestion: draftReady
+        ? `草稿已自动整理: .tinker/drafts/${draftReady} · 改改一键发`
+        : '这种坑写出来能帮到下一个人 · 包括其他 AI (草稿后台整理中)',
+      autopsyDraft: draftReady ? path.join(draftDir, draftReady) : null,
+      struggleId: cur.id,
     };
   } catch { return { fired: false }; }
 }
@@ -2563,6 +2600,98 @@ function evaluateAllTriggers(state, repoCfg, cfg) {
   return evaluateAllTriggersDetailed(state, repoCfg, cfg).winner;
 }
 
+// v0.12 踩坑全周期状态机入口 · cmdCheck 在评估触发器前调
+// 静默原则: 用户正在 debug 不该被打扰 · enter/continue 全部静默
+// resolve 切状态 + spawn autopsy 后台跑 · 不阻塞 hook
+function updateStruggleState(state, { fromHook } = {}) {
+  try {
+    const struggle = getStruggleModule();
+    const evalResult = struggle.evaluateStruggleState(state, { cwd: process.cwd() });
+
+    if (evalResult.transition === 'enter') {
+      // 入坑 · 静默标记 (alpha 期默认 consent=true · 用 tinker struggle off 可关)
+      const s = evalResult.pendingStruggle;
+      s.consented = true;
+      s.topic = struggle.inferTopic(s.signals);
+      state.currentStruggle = s;
+      struggle.saveDossier(s);
+      return;
+    }
+
+    if (evalResult.transition === 'continue') {
+      // 在 struggling 中 · 顺手 append 当前 commit 信号
+      try {
+        const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+        struggle.appendSignal(state.currentStruggle, {
+          type: 'wip_commit',
+          sha: execSync('git log -1 --pretty=%H', { encoding: 'utf-8' }).trim().slice(0, 8),
+          text: title.slice(0, 200),
+        });
+      } catch {}
+      // 同时记录最近的失败信号 (顺手刷 dossier · 让 autopsy 有料)
+      if (evalResult.recent && evalResult.recent.userMessages.length > 0) {
+        const seen = new Set((state.currentStruggle.signals || [])
+          .filter(s => s.type === 'claude_fail')
+          .map(s => s.at));
+        evalResult.recent.userMessages.slice(-3).forEach(m => {
+          if (!seen.has(m.ts)) {
+            struggle.appendSignal(state.currentStruggle, {
+              at: m.ts, type: 'claude_fail', text: m.text.slice(0, 200),
+            });
+          }
+        });
+      }
+      // 推断 topic (如果之前 topic 不准 · 信号更多了重推一次)
+      if (!state.currentStruggle.topic || state.currentStruggle.signals.length % 5 === 0) {
+        state.currentStruggle.topic = struggle.inferTopic(state.currentStruggle.signals);
+        struggle.saveDossier(state.currentStruggle);
+      }
+      return;
+    }
+
+    if (evalResult.transition === 'resolve') {
+      // 出坑 · 标 resolved + 记 justResolvedAt (给 ai-debug-breakthrough 触发器用)
+      state.currentStruggle.resolved = true;
+      state.currentStruggle.endedAt = Date.now();
+      state.currentStruggle.justResolvedAt = Date.now();
+      // 最后补一次 topic 推断
+      if (!state.currentStruggle.topic) {
+        state.currentStruggle.topic = struggle.inferTopic(state.currentStruggle.signals) || '未命名';
+      }
+      struggle.saveDossier(state.currentStruggle);
+      // 后台 spawn autopsy · 不阻塞 hook
+      spawnAutopsyAsync(state.currentStruggle.id);
+      return;
+    }
+
+    if (evalResult.transition === 'abandon') {
+      // 8h 无新信号 · 放弃这次 struggle
+      state.currentStruggle = null;
+      return;
+    }
+
+    // transition === 'none' · 什么都不做
+  } catch (e) {
+    // 容错 · struggle 状态机出问题不影响主流程
+    if (!fromHook) {
+      console.error('[struggle] ' + e.message);
+    }
+  }
+}
+
+// 后台 detached child 跑 autopsy · 不阻塞 hook
+// 用 process.execPath + __filename + 隐藏 args · 子进程跑 cmdAutopsy
+function spawnAutopsyAsync(struggleId) {
+  try {
+    const child = spawn(process.execPath, [__filename, '__autopsy', struggleId], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: process.cwd(),
+    });
+    child.unref();
+  } catch { /* 容错 */ }
+}
+
 // v0.12 记录今日触发器命中分布 · 给 tinker triggers + goodnight 用
 // 只记 winner · 因为这是最有意义的"今天替我做了什么"
 // 跨天 (todayKey 变化) 自动清零
@@ -2618,6 +2747,11 @@ async function cmdCheck(opts) {
   }
   // 顺手登记到 drift registry · 即使老用户没重装 hook 也能用 drift 检测
   registerRepoForDrift(process.cwd(), repoCfg);
+
+  // v0.12 踩坑全周期状态机 · 在评估触发器前先更新 struggle 状态
+  // 静默原则:enter/continue 时不打扰用户 (用户正在 debug 不该被弹窗)
+  // resolve 时仅切状态 · ai-debug-breakthrough 触发器会从 state 看到并 prompt
+  updateStruggleState(state, { fromHook });
 
   // 评估所有触发器 · 选最高 priority
   const cfgForUi = (() => { try { return mustHaveConfig(); } catch { return null; } })();
@@ -3331,6 +3465,33 @@ async function cmdGoodnight(opts = {}) {
       }
     }
   } catch {}
+
+  // v0.12 踩坑跟踪今日 · 透明展示状态机在后台干了什么
+  try {
+    const struggleMod = getStruggleModule();
+    const ps = loadPromptState();
+    const todayStart = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.getTime(); })();
+    const recent = struggleMod.listDossiers({ limit: 20 })
+      .filter(d => d.startedAt >= todayStart);
+    const cur = ps.currentStruggle;
+    const isCurrentToday = cur && cur.startedAt >= todayStart;
+    if (recent.length > 0 || isCurrentToday) {
+      log('');
+      log(sepia('    踩坑跟踪 (Tinker 替你记的现场):'));
+      if (isCurrentToday) {
+        log(sepia('      · ') + bold('正在跟踪') + sepia(' · ') + (cur.topic || '(未推断)')
+          + sepia(' · ') + (cur.signals || []).length + ' 信号'
+          + (cur.resolved ? moss(' · 已破局') : vermilion(' · 还在折腾')));
+      }
+      recent.filter(d => !cur || d.id !== cur.id).forEach(d => {
+        const when = new Date(d.startedAt).toTimeString().slice(0, 5);
+        log(sepia('      · ') + when + sepia(' · ') + (d.topic || '(无)')
+          + sepia(' · ') + (d.signals || []).length + ' 信号'
+          + (d.resolved ? moss(' · 破局') : sepia(' · 未完')));
+      });
+      log(sepia('    要看具体或关闭: ') + vermilion('tinker struggle'));
+    }
+  } catch {}
   log('');
 
   // Tinker 自己用 LLM 帮起草 / 分析 / narrate 的 token 用量是自指 · 不在晚安里显示
@@ -3366,6 +3527,316 @@ async function cmdGoodnight(opts = {}) {
 
   log(sepia('  晚安。'));
   log('');
+}
+
+// v0.12 `tinker struggle` · 看 / 关 / 重新激活 当前 struggle 状态
+// 信任建设:让用户能看见 Tinker 在后台跟踪什么 · 能一键关
+async function cmdStruggle(sub, opts = {}) {
+  const struggleMod = getStruggleModule();
+  const state = loadPromptState();
+  const now = Date.now();
+
+  const action = (sub || 'status').toLowerCase();
+
+  if (action === 'status') {
+    const cur = state.currentStruggle;
+    if (opts.json) {
+      const optedOut = state.struggleOptOutUntil && state.struggleOptOutUntil > now;
+      const recent = struggleMod.listDossiers({ limit: 5 });
+      return outputJson({
+        ok: true,
+        currentStruggle: cur ? {
+          id: cur.id,
+          topic: cur.topic,
+          startedAt: cur.startedAt,
+          endedAt: cur.endedAt || null,
+          signalCount: (cur.signals || []).length,
+          resolved: !!cur.resolved,
+        } : null,
+        optedOut: !!optedOut,
+        optedOutUntil: optedOut ? state.struggleOptOutUntil : null,
+        recent: recent.map(d => ({
+          id: d.id, topic: d.topic, signals: (d.signals || []).length,
+          resolved: !!d.resolved, startedAt: d.startedAt, endedAt: d.endedAt || null,
+        })),
+      });
+    }
+    log('');
+    log(bold('Tinker 踩坑跟踪状态'));
+    log('');
+    if (state.struggleOptOutUntil && state.struggleOptOutUntil > now) {
+      log(sepia('  跟踪已关 · 到 ' + new Date(state.struggleOptOutUntil).toLocaleString()));
+      log(sepia('  重新开启: ') + vermilion('tinker struggle on'));
+      log('');
+      return;
+    }
+    if (!cur) {
+      log(sepia('  当前没在跟踪任何 struggle · 安静'));
+    } else {
+      const span = Math.round((now - cur.startedAt) / 60000);
+      log(sepia('  当前 struggle:'));
+      log(sepia('    id     ') + cur.id);
+      log(sepia('    话题   ') + bold(cur.topic || '(未推断)'));
+      log(sepia('    起始   ') + new Date(cur.startedAt).toLocaleString() + sepia(` (${span} 分钟前)`));
+      log(sepia('    信号   ') + bold((cur.signals || []).length + ' 条'));
+      log(sepia('    状态   ') + (cur.resolved ? moss('已破局 (等草稿就绪 + 发)') : vermilion('还在折腾')));
+    }
+    const recent = struggleMod.listDossiers({ limit: 5 });
+    const others = recent.filter(d => !cur || d.id !== cur.id);
+    if (others.length > 0) {
+      log('');
+      log(sepia('  最近 ' + others.length + ' 段 (已存档):'));
+      others.forEach(d => {
+        const when = new Date(d.startedAt).toISOString().slice(0, 10);
+        log(sepia('    · ') + when + sepia(' · ') + (d.topic || '(无)')
+          + sepia(' · ') + (d.signals || []).length + ' 信号'
+          + (d.resolved ? moss(' · 破局') : vermilion(' · 未完')));
+      });
+    }
+    log('');
+    log(sepia('  关闭跟踪 (24h): ') + vermilion('tinker struggle off'));
+    log('');
+    return;
+  }
+
+  if (action === 'off') {
+    state.struggleOptOutUntil = now + 24 * 60 * 60 * 1000;
+    state.currentStruggle = null;  // 顺手清掉
+    savePromptState(state);
+    if (opts.json) return outputJson({ ok: true, optedOutUntil: state.struggleOptOutUntil });
+    log(sepia('  跟踪关了 · 到 ' + new Date(state.struggleOptOutUntil).toLocaleString()));
+    log(sepia('  重新开启: ') + vermilion('tinker struggle on'));
+    return;
+  }
+
+  if (action === 'on') {
+    state.struggleOptOutUntil = null;
+    savePromptState(state);
+    if (opts.json) return outputJson({ ok: true });
+    log(sepia('  跟踪开了'));
+    return;
+  }
+
+  if (opts.json) return errJson('用法: tinker struggle [status|off|on]', 'BAD_ARG');
+  err('用法: tinker struggle [status|off|on]');
+}
+
+// v0.12 Breakthrough Autopsy
+// 后台 detached child 调用 · tinker __autopsy <struggleId>
+// 把 dossier 整理成四段 markdown · 写到 <repo>/.tinker/drafts/experience-<topic>.md
+// 不阻塞主 hook · 失败容错 (fallback 到 template-based)
+async function cmdAutopsy(struggleId) {
+  const struggle = getStruggleModule();
+  const dossier = struggle.loadDossier(struggleId);
+  if (!dossier) return;  // 静默退出 · detached 不让用户看到错误
+
+  const draftDir = path.join(process.cwd(), '.tinker', 'drafts');
+  fs.mkdirSync(draftDir, { recursive: true });
+
+  // 文件名:experience-<safe-topic>-<short-id>.md
+  const safeTopic = (dossier.topic || 'unknown')
+    .replace(/[\s\\/:*?"<>|]+/g, '-')
+    .slice(0, 30);
+  const shortId = dossier.id.slice(-6);
+  const draftFile = path.join(draftDir, `experience-${safeTopic}-${shortId}.md`);
+
+  // 收集 git 上下文 (突破那一刻的 fix commit)
+  let fixTitle = '', fixBody = '', fixDiff = '';
+  try {
+    fixTitle = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    fixBody = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    fixDiff = execSync('git diff HEAD~1 HEAD --stat 2>/dev/null', { encoding: 'utf-8' }).trim().slice(0, 500);
+  } catch {}
+
+  // 组织 signals 时序 (按时间排序)
+  const sortedSignals = (dossier.signals || []).slice().sort((a, b) => a.at - b.at);
+  const signalLines = sortedSignals.slice(0, 20).map(s => {
+    const when = new Date(s.at).toISOString().slice(11, 16);
+    if (s.type === 'wip_commit') return `[${when}] commit · ${s.text || s.sha || ''}`;
+    if (s.type === 'claude_fail') return `[${when}] 对话 · ${(s.text || '').slice(0, 100)}`;
+    return `[${when}] ${s.type} · ${(s.text || s.snippet || '').slice(0, 100)}`;
+  }).join('\n');
+
+  // 拉 voice 上下文 · loadConfig 而不是 mustHaveConfig (后者会 process.exit)
+  const cfg = loadConfig();
+  const hasLLM = cfg && cfg.llm && cfg.llm.apiKey;
+  let voiceContext = '';
+  try {
+    const fp = loadFingerprint();
+    if (fp) voiceContext = fp.slice(0, 1000);
+  } catch {}
+
+  let markdown;
+  if (hasLLM) {
+    try {
+      markdown = await llmAutopsy(cfg, {
+        topic: dossier.topic || '未命名',
+        spanHours: dossier.endedAt
+          ? Math.max(0.1, Math.round((dossier.endedAt - dossier.startedAt) / 360000) / 10)
+          : '?',
+        signalLines,
+        fixTitle, fixBody, fixDiff,
+        voiceContext,
+      });
+    } catch (e) {
+      // LLM 失败 · fallback 到 template
+      markdown = templateAutopsy({ dossier, signalLines, fixTitle, fixBody });
+    }
+  } else {
+    // 没配 LLM · 直接 template
+    markdown = templateAutopsy({ dossier, signalLines, fixTitle, fixBody });
+  }
+
+  // 写文件 · 顶部加 frontmatter (给 tinker push --as-experience 用)
+  const frontmatter = [
+    '---',
+    `struggle_id: ${dossier.id}`,
+    `topic: ${dossier.topic || ''}`,
+    `started_at: ${new Date(dossier.startedAt).toISOString()}`,
+    `ended_at: ${dossier.endedAt ? new Date(dossier.endedAt).toISOString() : ''}`,
+    `signals: ${(dossier.signals || []).length}`,
+    `as_experience: true`,
+    `generated_by: ${hasLLM ? 'llm' : 'template'}`,
+    '---',
+    '',
+  ].join('\n');
+
+  fs.writeFileSync(draftFile, frontmatter + markdown);
+}
+
+// LLM 调用 · 直接返 markdown · 不解析 JSON
+async function llmAutopsy(cfg, ctx) {
+  const provider = cfg.llm.provider || 'anthropic';
+  const apiKey = cfg.llm.apiKey;
+  const prompt = `你的任务: 把这次踩坑过程整理成一篇能帮其他 vibe coder 少踩坑的经验贴。
+
+==================
+作者 voice 上下文 (照这个气质写)
+==================
+${ctx.voiceContext || '(暂无 voice fingerprint · 用工艺人日志气质 · 中文 · 不堆中圆点 / em-dash / italic / ALL_CAPS)'}
+
+==================
+这次踩坑信息
+==================
+话题: ${ctx.topic}
+跨度: ${ctx.spanHours} 小时
+
+时序信号 (按时间排序 · 节选):
+${ctx.signalLines || '(无)'}
+
+突破那一笔 commit:
+title: ${ctx.fixTitle}
+body: ${ctx.fixBody || '(无 body)'}
+diff: ${ctx.fixDiff || '(无 diff)'}
+
+==================
+输出
+==================
+严格按这四段 markdown 输出 · 每段标题用 ##:
+
+## 撞到的问题
+[1-2 句 · 具体到平台 / 错误码 / 表现]
+
+## 试过的
+[bullet 列表 · 按时间顺序 · 最多 5 条 · 每条 1 行]
+
+## 真正原因
+[1 段 · 解释为什么之前方向都不对]
+[关键: 别人能从这一段 google 找到答案]
+
+## 解法
+[1 段 · 含可被直接 copy 的配置 / 代码片段]
+[要可被其他 AI 直接注入 prompt]
+
+约束:
+- 用作者真实 voice
+- 不替作者编情绪 · "终于" 这种词只在 commit msg 真说过时用
+- 不下产品定论
+- 不堆中圆点 (·) · 不堆 em-dash · 不堆 italic · 不 ALL_CAPS
+- 保留具体平台名 / 错误码 / 配置 (这些是检索的钩子)
+- 不要写"总结" 或 "结论" 段 · 四段就是全部
+- 不要任何 LLM 自我介绍 · 直接出正文`;
+
+  let rawText;
+  if (provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'API ' + res.status);
+    rawText = data.content[0].text.trim();
+    recordLLMUsage(provider, data.usage && (data.usage.input_tokens + data.usage.output_tokens), 'autopsy');
+  } else if (provider === 'deepseek') {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'deepseek-chat',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'API ' + res.status);
+    rawText = data.choices[0].message.content.trim();
+    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'autopsy');
+  } else if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'gpt-4o-mini',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'API ' + res.status);
+    rawText = data.choices[0].message.content.trim();
+    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'autopsy');
+  } else {
+    throw new Error('不支持的 LLM provider: ' + provider);
+  }
+
+  // sanitize · 去 em-dash / 多余中圆点 / ANSI / 代码块包裹
+  rawText = rawText.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/, '');
+  if (typeof sanitizeDraft === 'function') {
+    rawText = sanitizeDraft(rawText);
+  }
+  return rawText;
+}
+
+// LLM 失败时的 fallback · 不调任何 API · 直接拼时序
+function templateAutopsy({ dossier, signalLines, fixTitle, fixBody }) {
+  const topic = dossier.topic || '这次折腾';
+  return `## 撞到的问题
+
+(待补 · 看下面时序自己写一句)
+
+## 试过的
+
+${signalLines || '(信号不足 · 自己回忆补一下)'}
+
+## 真正原因
+
+(待补 · 看 fix commit body 补一段)
+
+## 解法
+
+${fixTitle}
+
+${fixBody || '(commit body 是空的 · 自己补一句配置 / 代码片段)'}
+
+---
+
+(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-experience\`)
+`;
 }
 
 // `tinker session status | end` · 看 / 强制结束 当前 UI session
@@ -4519,7 +4990,7 @@ function cmdMute(args) {
 //
 // 资源:
 //   triggers · prompt-state 快照 · 内容变化时推一行
-//   today    · 今日 git commit + Tinker push 计数 · 5s 轮询
+//   today    · 今日 git commit + Tinker push 计数 · 30s 轮询
 //
 // 用法:
 //   tinker stream triggers              一直跑 · 内容变化时打一行 NDJSON
@@ -4537,6 +5008,7 @@ async function cmdStream(resource, opts = {}) {
     process.stdout.write(JSON.stringify({ event, resource, at: Date.now(), data }) + '\n');
   };
 
+  // 资源读取函数表 · 共享给 snapshot / updated 都用
   const reads = {
     triggers: () => {
       const s = loadPromptState();
@@ -4557,7 +5029,7 @@ async function cmdStream(resource, opts = {}) {
       if (inGitRepo()) {
         try {
           const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
-          const out = execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' });
+          const out = require('child_process').execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' });
           gitCommits = out.trim().split('\n').filter(Boolean).length;
         } catch {}
       }
@@ -4583,6 +5055,7 @@ async function cmdStream(resource, opts = {}) {
     process.exit(1);
   }
 
+  // 起始 snapshot
   const initial = await read();
   emit('snapshot', initial);
   if (opts.once) return;
@@ -4590,7 +5063,7 @@ async function cmdStream(resource, opts = {}) {
   let lastKey = JSON.stringify(initial);
   let polling = false;
   const checkAndPush = async () => {
-    if (polling) return;
+    if (polling) return; // 避免并发
     polling = true;
     try {
       const next = await read();
@@ -4600,10 +5073,11 @@ async function cmdStream(resource, opts = {}) {
     polling = false;
   };
 
+  // 5s 轮询 (triggers 偏低频 · today 偏低频 · 都 5s 就够)
   const interval = setInterval(checkAndPush, 5000);
   interval.unref();
 
-  // triggers: prompt-state.json 文件 watch (1s · 更灵敏)
+  // triggers: 加 prompt-state.json 文件 watch (1s · 更灵敏)
   if (resource === 'triggers') {
     const stateFile = path.join(CONFIG_DIR, 'prompt-state.json');
     if (fs.existsSync(stateFile)) {
@@ -4611,10 +5085,11 @@ async function cmdStream(resource, opts = {}) {
     }
   }
 
+  // 等 SIGINT · stdin EOF · 主进程退出
   process.on('SIGINT', () => process.exit(0));
   process.on('SIGTERM', () => process.exit(0));
   process.stdin.on('end', () => process.exit(0));
-  await new Promise(() => {});
+  await new Promise(() => {}); // 永远 hang
 }
 
 function help() {
@@ -4696,6 +5171,10 @@ function parseArgs(args) {
     else if (a === '--limit') opts.limit = parseInt(args[++i], 10);
     else if (a.startsWith('--limit=')) opts.limit = parseInt(a.slice('--limit='.length), 10);
     else if (a === '--methods-only' || a === '--methodsOnly') opts.methodsOnly = true;
+    else if (a === '--kind') opts.kind = args[++i];
+    else if (a.startsWith('--kind=')) opts.kind = a.slice('--kind='.length);
+    else if (a === '--as-experience' || a === '--asExperience') opts.asExperience = true;
+    else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (a === '--from-file') opts.fromFile = args[++i];
     else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
     else if (a === '--auto') opts.auto = true;
@@ -4944,6 +5423,10 @@ function cmdSchema(opts = {}) {
       { name: 'triggers', purpose: '触发器自检 · 当前 commit 上 24 个触发器命中情况 + state 拦截原因 + 今日累计', args: [
         { flag: '--json', purpose: '结构化' },
       ], jsonOutput: true, example: 'tinker triggers' },
+      { name: 'struggle', purpose: '看 / 关 / 重新开启踩坑跟踪状态机 (透明 + 信任建设)', args: [
+        { arg: 'status | off | on', purpose: '默认 status · off 关 24h · on 重新开启' },
+        { flag: '--json', purpose: '结构化' },
+      ], jsonOutput: true, example: 'tinker struggle' },
       { name: 'session', purpose: '看 / 强制结束 UI session', args: [
         { arg: 'status | end', purpose: 'status 看 · end 标结束' },
         { flag: '--json', purpose: '结构化' },
@@ -4956,10 +5439,13 @@ function cmdSchema(opts = {}) {
         { flag: '--json', purpose: '结构化' },
         { flag: '--narrate', purpose: '让 LLM 朋友式说一句' },
       ], jsonOutput: true, example: 'tinker goodnight --json' },
-      { name: 'push', purpose: '发一笔进展 (可直接非交互跑)', args: [
+      { name: 'push', purpose: '发一笔进展 · 直接 / 从草稿文件 / experience 单篇都支持', args: [
         { flag: '-m / --message', purpose: '内容' },
         { flag: '-p / --project', purpose: '指定项目 id (不指定时自动选唯一一个)' },
-      ], jsonOutput: false, example: 'tinker push -m "..." -p p-xxx' },
+        { arg: '<file.md>', purpose: '从草稿文件发布 (含 autopsy 生成的 experience 草稿)' },
+        { flag: '--as-experience', purpose: '把这条标为踩坑经验 (发完自动 markAsExperience)' },
+        { flag: '--yes / -y', purpose: '跳过确认 (autopsy 草稿一键发用)' },
+      ], jsonOutput: false, example: 'tinker push .tinker/drafts/experience-xxx.md --as-experience' },
       { name: 'ship', purpose: '完工仪式 · 进陈列馆', args: [
         { flag: '-m / --message', purpose: '感想' },
         { flag: '-p / --project', purpose: '项目 id' },
@@ -5094,6 +5580,11 @@ async function main() {
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
       case 'triggers': cmdTriggers(opts); break;
+      case 'struggle': await cmdStruggle(args[1], opts); break;
+      case '__autopsy':
+        // 内部命令 · 不暴露给 user help · 由 spawnAutopsyAsync detached child 调
+        await cmdAutopsy(args[1]);
+        return;
       case 'schema': cmdSchema(opts); break;
       case 'mcp':
         // 启动 MCP server · stdio 模式 · 给 Claude Code / Cursor 等当作 first-class tool
