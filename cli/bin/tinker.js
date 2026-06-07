@@ -1680,6 +1680,91 @@ async function cmdHookInstall() {
   log(sepia('  静音: ') + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('tinker mute today'));
 }
 
+// v0.13 装 Claude Code SessionStart compact hook
+// 当用户跑 /compact · Claude Code 触发 SessionStart 事件 (matcher: compact)
+// 我们的 hook 跑 tinker situation backfill --type design-loop --hours 4 --quiet
+// 后台起草草稿到 .tinker/drafts/ · 用户在新 session 第一眼能看到
+async function cmdClaudeHookInstall(opts = {}) {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  let settings = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    } catch (e) {
+      err('~/.claude/settings.json 解析失败:' + e.message + ' · 手动修一下再来');
+      process.exit(1);
+    }
+  } else {
+    // .claude 目录已经存在 (用户用 Claude Code 必然有) · 但 settings.json 可能没建
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  }
+
+  settings.hooks = settings.hooks || {};
+  settings.hooks.SessionStart = settings.hooks.SessionStart || [];
+
+  // 检测是否已有 compact matcher · 避免重复装
+  const existingIdx = settings.hooks.SessionStart.findIndex(h => h && h.matcher === 'compact');
+  // 命令:每个 lifecycle 都试一遍 (design-loop 优先 · 不命中再 learning · 都不命中静默退)
+  // 用 || true 让 hook 失败不影响 Claude Code 新 session 启动
+  const cmd = 'tinker situation backfill --type design-loop --hours 4 --quiet 2>/dev/null || tinker situation backfill --type learning --hours 4 --quiet 2>/dev/null || true';
+  const newHook = {
+    matcher: 'compact',
+    hooks: [{ type: 'command', command: cmd }],
+  };
+
+  if (existingIdx >= 0) {
+    // 已有 compact matcher · 看是不是我们自己的 (含 tinker situation backfill 字串)
+    const cur = settings.hooks.SessionStart[existingIdx];
+    const isOurs = cur.hooks && cur.hooks.some(h => h.command && h.command.includes('tinker situation'));
+    if (isOurs) {
+      settings.hooks.SessionStart[existingIdx] = newHook;
+      log(sepia('  已存在 Tinker compact hook · 更新一下'));
+    } else {
+      // 别人的 hook · 我们附加进 hooks 数组而不是覆盖
+      cur.hooks = cur.hooks || [];
+      cur.hooks.push({ type: 'command', command: cmd });
+      log(sepia('  已有别的 compact hook · 我们附加进去 · 不覆盖'));
+    }
+  } else {
+    settings.hooks.SessionStart.push(newHook);
+  }
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+  log('');
+  ok('Claude Code compact hook 装好了');
+  log(sepia('  下次跑 /compact · Tinker 会自动:'));
+  log(sepia('    1. 扫这段对话的过去 4 小时'));
+  log(sepia('    2. 推断是 design-loop 还是 learning'));
+  log(sepia('    3. LLM 起草工作日志气质的草稿'));
+  log(sepia('    4. 写到 .tinker/drafts/'));
+  log(sepia('  你在新 session 第一眼就能看见草稿路径'));
+  log('');
+  log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
+}
+
+function cmdClaudeHookUninstall() {
+  const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+  if (!fs.existsSync(settingsPath)) { log(sepia('  没装 · 直接退')); return; }
+  let settings;
+  try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')); }
+  catch { err('settings.json 解析失败 · 手动看一下'); process.exit(1); }
+
+  const before = JSON.stringify(settings);
+  const list = (settings.hooks && settings.hooks.SessionStart) || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].matcher !== 'compact') continue;
+    list[i].hooks = (list[i].hooks || []).filter(h => !(h.command || '').includes('tinker situation'));
+    if (list[i].hooks.length === 0) list.splice(i, 1);
+  }
+
+  if (JSON.stringify(settings) === before) {
+    log(sepia('  没找到 Tinker compact hook · 没动'));
+    return;
+  }
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+  ok('Claude Code compact hook 删了');
+}
+
 function cmdHookUninstall() {
   if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
@@ -3579,8 +3664,38 @@ async function cmdGoodnight(opts = {}) {
     } catch {}
   }
 
+  // v0.88 给 maybe-goodnight 用 · 标记今天已收尾 · 让对话触发器今晚不再 prompt
+  // 仅今日范围 · --week / --month 不算今日收尾
+  if (daysBack === 1) {
+    const ps = loadPromptState();
+    ps.lastGoodnightDate = todayKey();
+    savePromptState(ps);
+  }
+
   log(sepia('  晚安。'));
   log('');
+}
+
+// v0.88 `tinker maybe-goodnight` · 静默检查"今天值得收尾吗"
+// 给 Claude Code user-prompt-submit-hook 调用 · 听到"晚安/收工"等词时跑这个
+// 命中条件 → stdout 输出一行 reminder 给 hook 注入对话
+// 不命中 → 静默退出 · stdout 空
+function cmdMaybeGoodnight() {
+  // 今日已 goodnight 过 → 静默
+  const ps = loadPromptState();
+  if (ps.lastGoodnightDate === todayKey()) return;
+  // 不在 git repo → 静默 · 没法判断今日活动
+  if (!inGitRepo()) return;
+  // 今日 commit 数 (本地今日 4am 起算 · todayKey 返回本地日期 · 不走 toISOString UTC 坑)
+  let commitCount = 0;
+  try {
+    const since = `${todayKey()} 04:00`;
+    const out = execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' }).toString().trim();
+    commitCount = out ? out.split('\n').length : 0;
+  } catch { return; }
+  if (commitCount === 0) return;
+  // 命中 · 输出 reminder 给 hook 注入到 Claude Code 对话
+  process.stdout.write(`用户今天在当前 repo commit 了 ${commitCount} 次但还没跑 tinker goodnight 收尾 · 用户刚说了收工类的话 · 可以主动提醒一下\n`);
 }
 
 // v0.12 `tinker struggle` · 看 / 关 / 重新激活 当前 struggle 状态
@@ -3704,18 +3819,22 @@ async function cmdSituationBackfill(opts) {
   const type = opts.type || 'design-loop';
   const config = struggleMod.LIFECYCLE_CONFIGS[type];
   if (!config) {
+    if (opts.quiet) return;  // hook 调用时安静失败 · 不卡 Claude Code
     err('不支持的 lifecycle 类型: ' + type + ' · 可用: ' + Object.keys(struggleMod.LIFECYCLE_CONFIGS).join(' / '));
     process.exit(1);
   }
 
-  log('');
-  log(bold('━━━ tinker situation backfill ━━━'));
-  log(sepia('  类型: ') + config.label + sepia(' · 时间窗: ') + hours + sepia(' 小时'));
-  log('');
+  if (!opts.quiet) {
+    log('');
+    log(bold('━━━ tinker situation backfill ━━━'));
+    log(sepia('  类型: ') + config.label + sepia(' · 时间窗: ') + hours + sepia(' 小时'));
+    log('');
+  }
 
   // 扫整个 N 小时 · cwd 跟 parent 都试
   const scan = struggleMod.scanClaudeRecent({ minutesBack: hours * 60, cwd: process.cwd() });
   if (scan.userMessages.length < 5) {
+    if (opts.quiet) return;
     err('扫到只 ' + scan.userMessages.length + ' 条 user message · 太少 · 调大 --hours 试试');
     process.exit(1);
   }
@@ -3729,6 +3848,7 @@ async function cmdSituationBackfill(opts) {
     .map(m => ({ at: m.ts, type: signalType, text: m.text.slice(0, 200) }));
 
   if (signals.length < 3) {
+    if (opts.quiet) return;
     err('信号数 ' + signals.length + ' 太少 · 这段时间可能不是 ' + config.label + ' · 试别的 --type');
     process.exit(1);
   }
@@ -3748,16 +3868,24 @@ async function cmdSituationBackfill(opts) {
   };
   struggleMod.saveDossier(dossier);
 
-  log(sepia('  扫到: ') + bold(scan.userMessages.length + ' 条 user message'));
-  log(sepia('  信号: ') + bold(signals.length + ' 条匹配'));
-  log(sepia('  话题推断: ') + bold(dossier.topic || '(未推)'));
-  log(sepia('  dossier id: ') + dossier.id);
-  log('');
-  log(sepia('  起草中 (调 LLM · 可能需要 10-20 秒)...'));
-  log('');
+  if (!opts.quiet) {
+    log(sepia('  扫到: ') + bold(scan.userMessages.length + ' 条 user message'));
+    log(sepia('  信号: ') + bold(signals.length + ' 条匹配'));
+    log(sepia('  话题推断: ') + bold(dossier.topic || '(未推)'));
+    log(sepia('  dossier id: ') + dossier.id);
+    log('');
+    log(sepia('  起草中 (调 LLM · 可能需要 10-20 秒)...'));
+    log('');
+  }
 
   // 同步跑 autopsy · 不 spawn 因为用户主动等结果
-  await cmdAutopsy(dossier.id, type);
+  // hook 场景下也同步等 · 因为 SessionStart 后用户会立刻看新 Claude session · 草稿要就绪
+  try {
+    await cmdAutopsy(dossier.id, type);
+  } catch (e) {
+    if (opts.quiet) return;  // hook 场景失败安静吞 · 不卡 Claude Code
+    throw e;
+  }
 
   // 找新写的草稿 (按 mtime 排序)
   const draftDir = path.join(process.cwd(), '.tinker', 'drafts');
@@ -3769,14 +3897,20 @@ async function cmdSituationBackfill(opts) {
         .map(f => ({ f, mtime: fs.statSync(path.join(draftDir, f)).mtimeMs }))
         .sort((a, b) => b.mtime - a.mtime)[0];
       const draftPath = path.join('.tinker/drafts', newest.f);
-      log(moss('  ✓ 草稿就绪: ') + draftPath);
-      log('');
-      log(sepia('  改完一键发: ') + vermilion(`tinker push ${draftPath} --as-${config.productTag}`));
-      log(sepia('  或者打开看一眼:'));
-      log(sepia('    ') + vermilion('cat ' + draftPath));
+      if (opts.quiet) {
+        // quiet 模式仍输出一行 · 给 Claude Code 用户看
+        log(moss('  ✓ Tinker 起草了 ' + config.label + '草稿: ') + draftPath);
+        log(sepia('     发: ') + vermilion(`tinker push ${draftPath} --as-${config.productTag}`));
+      } else {
+        log(moss('  ✓ 草稿就绪: ') + draftPath);
+        log('');
+        log(sepia('  改完一键发: ') + vermilion(`tinker push ${draftPath} --as-${config.productTag}`));
+        log(sepia('  或者打开看一眼:'));
+        log(sepia('    ') + vermilion('cat ' + draftPath));
+      }
     }
   }
-  log('');
+  if (!opts.quiet) log('');
 }
 
 async function cmdAutopsy(situationId, lifecycleTypeArg) {
@@ -5551,6 +5685,8 @@ function parseArgs(args) {
     else if (a.startsWith('--kind=')) opts.kind = a.slice('--kind='.length);
     else if (a === '--as-experience' || a === '--asExperience') opts.asExperience = true;
     else if (a === '--as-learning' || a === '--asLearning') opts.asLearning = true;
+    else if (a === '--as-decision' || a === '--asDecision') opts.asDecision = true;
+    else if (a === '--quiet' || a === '-q') opts.quiet = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (a === '--tag') {
       // v0.84 支持多次 · 收集 · contribute 时一并发上
@@ -5944,7 +6080,9 @@ async function main() {
       case 'hook':
         if (args[1] === 'install') await cmdHookInstall();
         else if (args[1] === 'uninstall') cmdHookUninstall();
-        else { err('用法: tinker hook install | uninstall'); process.exit(1); }
+        else if (args[1] === 'install-claude') await cmdClaudeHookInstall(opts);
+        else if (args[1] === 'uninstall-claude') cmdClaudeHookUninstall();
+        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude'); process.exit(1); }
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook, json: opts.json }); break;
       case 'resolve': await cmdResolve(args[1], opts); break;
@@ -6001,6 +6139,11 @@ async function main() {
           daysBack: opts.daysBack,
         });
         break;
+      case 'maybe-goodnight':
+        // 静默触发器 · 给 Claude Code user-prompt-submit-hook 调
+        cmdMaybeGoodnight();
+        return; // 不走末尾 showUpdateBannerIfNeeded · 保持 stdout 干净
+
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
       case 'triggers': cmdTriggers(opts); break;
