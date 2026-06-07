@@ -541,8 +541,20 @@ function syncUpdateToFts(updateId) {
 // v0.81 methods 是 first-class entity · 不再是 updates 上的 flag
 // 兼容路径: 旧 markAsMethod / unmarkMethod 仍可用 · 内部 proxy 到 new methods table
 //
+// v0.84 tag 规范化 helper · 用户输入清理 · 去重 · 限长
+// 输入: 字符串数组 / undefined · 输出: JSON 数组 string 或 null
+function normalizeTags(tags) {
+  if (!Array.isArray(tags) || tags.length === 0) return null;
+  const cleaned = tags
+    .map(t => typeof t === 'string' ? t.trim().replace(/^#+/, '').slice(0, 20) : '')
+    .filter(Boolean);
+  if (cleaned.length === 0) return null;
+  const unique = [...new Set(cleaned)].slice(0, 8); // 最多 8 个 tag
+  return JSON.stringify(unique);
+}
+
 // createMethod · 新建独立方法资产
-function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath, title }, { currentUserId }) {
+function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath, title, tags }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('方法内容不能空');
   if (text.trim().length < 20) throw new Error('内容太短 · 至少写两句 (回头自己看也认得出)');
   // project 可选 · 但传了要校验是自己的
@@ -560,18 +572,19 @@ function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath
   const now = Date.now();
   const scenarioVal = scenario && scenario.trim() ? scenario.trim().slice(0, 100) : null;
   const titleVal = title && title.trim() ? title.trim().slice(0, 100) : null;
+  const tagsVal = normalizeTags(tags);
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO methods (id, owner_id, title, scenario, text, at, updated_at, project_id, source_update_id, source_doc_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(methodId, currentUserId, titleVal, scenarioVal, text.trim(), now, now, projectId || null, sourceUpdateId || null, sourceDocPath || null);
+      INSERT INTO methods (id, owner_id, title, scenario, text, at, updated_at, project_id, source_update_id, source_doc_path, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(methodId, currentUserId, titleVal, scenarioVal, text.trim(), now, now, projectId || null, sourceUpdateId || null, sourceDocPath || null, tagsVal);
     syncMethodToFts(methodId);
   });
   txn();
   return { ok: true, methodId };
 }
 
-function editMethod({ methodId, text, scenario, projectId, title }, { currentUserId }) {
+function editMethod({ methodId, text, scenario, projectId, title, tags }, { currentUserId }) {
   if (!methodId) throw new Error('methodId 必填');
   const m = db.prepare('SELECT owner_id, project_id FROM methods WHERE id = ?').get(methodId);
   if (!m) throw new Error('找不到这条方法');
@@ -598,6 +611,10 @@ function editMethod({ methodId, text, scenario, projectId, title }, { currentUse
     if (title !== undefined) {
       fields.push('title = ?');
       vals.push(title && title.trim() ? title.trim().slice(0, 100) : null);
+    }
+    if (tags !== undefined) {
+      fields.push('tags = ?');
+      vals.push(normalizeTags(tags));
     }
     if (fields.length === 0) return;
     fields.push('updated_at = ?'); vals.push(Date.now());
@@ -847,7 +864,11 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
       LIMIT ?
     `).all(ftsQ, limit);
     if (methodRows.length === 0) {
-      // LIKE 兜底 (2 字 CJK)
+      // LIKE 兜底 (2 字 CJK) · 多词 AND
+      const words = q.trim().split(/\s+/).filter(Boolean);
+      const conds = words.map(() => '(m.text LIKE ? OR (m.scenario IS NOT NULL AND m.scenario LIKE ?))').join(' AND ');
+      const params = [];
+      words.forEach(w => { params.push('%' + w + '%'); params.push('%' + w + '%'); });
       methodRows = db.prepare(`
         SELECT m.id, m.text, m.scenario, m.title, m.at,
                p.name AS project_name, usr.handle AS owner_handle,
@@ -855,10 +876,10 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
         FROM methods m
         JOIN users usr ON usr.id = m.owner_id
         LEFT JOIN projects p ON p.id = m.project_id
-        WHERE m.text LIKE ? OR (m.scenario IS NOT NULL AND m.scenario LIKE ?)
+        WHERE ${conds}
         ORDER BY m.at DESC
         LIMIT ?
-      `).all('%' + q.trim() + '%', '%' + q.trim() + '%', limit);
+      `).all(...params, limit);
     }
     allRows.push(...methodRows);
   }
@@ -884,6 +905,12 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
       LIMIT ?
     `).all(ftsQ, limit);
     if (flagRows.length === 0) {
+      // v0.13 LIKE fallback 改成多词 AND · 让"方法 进展" 这种 2 字 CJK 拆词查询也能命中
+      // (trigram 对 ≤2 字 CJK term 不匹配 · 只能 LIKE 兜底)
+      const words = q.trim().split(/\s+/).filter(Boolean);
+      const likeConds = words.map(() => 'u.text LIKE ?').join(' AND ');
+      const likeParams = words.map(w => '%' + w + '%');
+      const finalLikeWhere = likeConds ? 'AND (' + likeConds + ')' : '';
       flagRows = db.prepare(`
         SELECT u.id, u.text, u.scenario, NULL AS title, u.at,
                u.is_experience, u.is_learning, u.is_decision,
@@ -892,10 +919,10 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
         FROM updates u
         JOIN projects p ON p.id = u.project_id
         JOIN users usr ON usr.id = p.owner_id
-        WHERE u.text LIKE ? ${whereSql}
+        WHERE 1=1 ${whereSql} ${finalLikeWhere}
         ORDER BY u.at DESC
         LIMIT ?
-      `).all('%' + q.trim() + '%', limit);
+      `).all(...likeParams, limit);
     }
     flagRows.forEach(r => {
       // 一条 update 可能同时多 flag · 这里取最稀缺优先 (decision > experience > learning > method)

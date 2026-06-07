@@ -1057,13 +1057,20 @@ async function cmdPushFromDraft(cfg, opts) {
   if (!fs.existsSync(file)) { err('找不到草稿:' + file); process.exit(1); }
   const md = fs.readFileSync(file, 'utf-8');
 
-  // v0.12 检测 autopsy 草稿 (frontmatter as_experience: true 或 --as-experience flag)
+  // v0.13 检测 autopsy 草稿 · 支持 experience / learning / decision 三种 productTag
   // autopsy 草稿是单一 markdown · 没 "## 候选 N" 切割 · 整篇当 text
   const fmMatch = md.match(/^---\n([\s\S]*?)\n---\n+([\s\S]*)$/);
-  const isExperienceDraft = opts.asExperience
-    || (fmMatch && /as_experience:\s*true/i.test(fmMatch[1]));
-  if (isExperienceDraft) {
-    return cmdPushExperienceDraft(cfg, opts, fmMatch ? fmMatch[2].trim() : md.trim());
+  let productTag = null;
+  if (opts.asExperience) productTag = 'experience';
+  else if (opts.asLearning) productTag = 'learning';
+  else if (opts.asDecision) productTag = 'decision';
+  else if (fmMatch) {
+    if (/as_experience:\s*true/i.test(fmMatch[1])) productTag = 'experience';
+    else if (/as_learning:\s*true/i.test(fmMatch[1])) productTag = 'learning';
+    else if (/as_decision:\s*true/i.test(fmMatch[1])) productTag = 'decision';
+  }
+  if (productTag) {
+    return cmdPushExperienceDraft(cfg, opts, fmMatch ? fmMatch[2].trim() : md.trim(), productTag);
   }
 
   const candidates = parseDraftMarkdown(md);
@@ -1136,8 +1143,12 @@ async function cmdPushFromDraft(cfg, opts) {
 
 // v0.12 experience 草稿一键发 · 单 update + 自动 markAsExperience
 // text 已经去掉 frontmatter · 用户在 confirm 前能预览
-async function cmdPushExperienceDraft(cfg, opts, text) {
-  if (!text || text.length < 20) { err('草稿内容太短 · experience 池要求 ≥ 20 字'); process.exit(1); }
+async function cmdPushExperienceDraft(cfg, opts, text, productTag = 'experience') {
+  const PRODUCT_LABELS = { experience: '踩坑经验', learning: '上手指南', decision: '决策推演' };
+  const ACTION_MAP = { experience: 'markAsExperience', learning: 'markAsLearning', decision: 'markAsDecision' };
+  const CMD_MAP = { experience: 'tinker mark-experience', learning: 'tinker mark-learning', decision: 'tinker mark-decision' };
+  const productLabel = PRODUCT_LABELS[productTag] || '踩坑经验';
+  if (!text || text.length < 20) { err('草稿内容太短 · ' + productLabel + ' 池要求 ≥ 20 字'); process.exit(1); }
   const state = await apiState(cfg);
   const me = cfg.handle;
   const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck'].includes(p.status));
@@ -1163,7 +1174,7 @@ async function cmdPushExperienceDraft(cfg, opts, text) {
 
   // 预览 + 确认 (除非 --yes)
   log('');
-  log(sepia('  踩坑经验草稿预览 (前 300 字):'));
+  log(sepia('  ' + productLabel + '草稿预览 (前 10 行):'));
   log(sepia('  ─────────'));
   text.split('\n').slice(0, 10).forEach(line => log('  ' + line));
   log(sepia('  ─────────'));
@@ -1177,14 +1188,14 @@ async function cmdPushExperienceDraft(cfg, opts, text) {
     if (!yes) { log(sepia('  取消了')); return; }
   }
 
-  // 发 + 自动 mark · v0.13 phase 2 完整版:learning → markAsLearning · experience → markAsExperience
+  // 发 + 自动 mark · v0.13 phase 2 完整版
   try {
     const res = await apiAction(cfg, 'addUpdate', { projectId, text });
     recordPushAt(projectId);
     const updateId = res && (res.id || (res.result && res.result.id));
     if (updateId) {
-      const markAction = isLearning ? 'markAsLearning' : 'markAsExperience';
-      const manualCmd = isLearning ? 'tinker mark-learning' : 'tinker mark-experience';
+      const markAction = ACTION_MAP[productTag] || 'markAsExperience';
+      const manualCmd = CMD_MAP[productTag] || 'tinker mark-experience';
       try {
         await apiAction(cfg, markAction, { updateId });
       } catch (e) {
@@ -3855,61 +3866,81 @@ async function llmAutopsy(cfg, ctx) {
   const infoLabel = isLearning ? '这次学习信息' : isDesignLoop ? '这次推演信息' : '这次踩坑信息';
   const commitLabel = isLearning ? '关键完成那一笔 commit' : isDesignLoop ? '相关 commit (推演不一定 commit 代码)' : '突破那一笔 commit';
 
-  const designLoopTemplate = `## 我在想什么
-[1-2 句 · 推演的核心问题是什么 · 比如"X 跟 Y 该不该分 / A 跟 B 哪个更合适"]
+  const designLoopTemplate = `工作日志气质 · 一段连贯的散文 · 不用 ## 标题切段 · 不用 bullet 列表 ·
+段落之间用空行隔开 · 长度 200-400 字。
 
-## 考虑过哪几种方案
-[bullet 列表 · 列 2-4 种方案 · 每种 1 行描述]
-[关键: 把真实推演过的所有路径都列出来 · 不是事后修饰]
+像作者平时写的进展那样:第一段直接说"刚理清楚一件事 / 想明白了..." 然后顺着叙述。
 
-## 各自权衡
-[每个方案的优缺点 / 适用边界]
-[这一段是最有 product sense 价值的 · 别人能从中学到怎么思考]
+要包含的内容 (但用散文连起来 · 不是分点):
+  1. 这次理清的核心问题是什么 (具体 · 不是 meta · 来自 signals 反复出现的具体业务名词)
+  2. 真实考虑过的几种路径 (用"想过 X · 也想过 Y · 还试过 Z" 这种自然语言)
+  3. 各自的权衡 (引用 signals 里出现过的具体约束 · 比如"alpha 期"  "vibe coder 新手")
+  4. 最后选了什么 · 决定性理由
 
-## 选了哪种 · 为什么
-[1 段 · 最终决策 + 决定性理由]
-[要诚实写"alpha 期 YAGNI" / "用户场景不确定" 这种真实约束]`;
+参考已有 update 气质 (作者自己写过的):
+  "邮箱登录从代码到能真发出去 · 中间和阿里云邮件服务纠缠了 6 个小时。
+   重设了 3 次密码、改了 2 次端口、查了 5 个怀疑点(账号未实名?账号余额?...) · 全部排除。
+   ...
+   问题在我们用的邮件库默认走 PLAIN 认证 · 阿里云只认 LOGIN。两行配置改完立刻通。"
 
-  const outputTemplate = isDesignLoop ? designLoopTemplate : isLearning ? `## 想做什么 · 想学什么
-[1-2 句 · 具体到工具 / SDK / 框架 / API]
+  这是踩坑的真实 voice · 决策推演也用这种工作日志连贯叙事的气质。`;
 
-## 几个核心概念
-[bullet 列表 · 这个东西的关键概念有哪几个 · 每条 1-2 行]
-[不超过 5 条 · 别人能从这一段就建立心智模型]
+  const learningTemplate = `工作日志气质 · 一段连贯的散文 · 不用 ## 标题切段 · 不用 bullet 列表 ·
+段落之间用空行隔开 · 长度 200-400 字。
 
-## 关键陷阱
-[bullet 列表 · 入门时容易踩的几个坑 · 每条 1 行]
-[2-4 条 · 这是 vibe coder 真实学习过程留下的 · 教程不会告诉的事]
+像作者写真实学习笔记那样:开头直接说"今天/这段时间把 X 大概搞清楚了" 然后顺着叙述。
 
-## 最小可用代码 / 配置
-[一段可被直接 copy 跑通的代码或配置]
-[要可被其他 AI 直接注入 prompt · 别人 5 分钟内能跑出 hello world]` : `## 撞到的问题
-[1-2 句 · 具体到平台 / 错误码 / 表现]
+要包含 (用散文连起来 · 不是分点):
+  1. 想学什么具体技术 (来自 signals 的具体 SDK / API / 框架名)
+  2. 几个核心概念是怎么想清楚的 (用散文描述心智模型 · 不列表)
+  3. 入门时踩到的坑 (教程不会告诉的事 · 用"试了 X 发现 Y" 的叙事)
+  4. 最后怎么跑通的 (含关键配置 / 代码片段 · 但用 inline 引号嵌进散文 · 不用 code block)
 
-## 试过的
-[bullet 列表 · 按时间顺序 · 最多 5 条 · 每条 1 行]
+参考已有 update 气质:作者写阿里云邮件那段就是范例 · 保留具体错误码 / 配置名 ·
+但全部用连贯散文 · 不用 markdown 装饰。`;
 
-## 真正原因
-[1 段 · 解释为什么之前方向都不对]
-[关键: 别人能从这一段 google 找到答案]
+  const struggleTemplate = `工作日志气质 · 一段连贯的散文 · 不用 ## 标题切段 · 不用 bullet 列表 ·
+段落之间用空行隔开 · 长度 200-400 字。
 
-## 解法
-[1 段 · 含可被直接 copy 的配置 / 代码片段]
-[要可被其他 AI 直接注入 prompt]`;
+参考作者真实写过的踩坑总结 (照这个 voice 写):
+  "邮箱登录从代码到能真发出去 · 中间和阿里云邮件服务纠缠了 6 个小时。
+   重设了 3 次密码、改了 2 次端口、查了 5 个怀疑点(账号未实名?账号余额?...) · 全部排除。
+   问题在我们用的邮件库默认走 PLAIN 认证 · 阿里云只认 LOGIN。两行配置改完立刻通。"
+
+要包含 (用散文连起来 · 不是分点):
+  1. 撞到什么具体问题 (含错误码 / 平台 / 表现)
+  2. 试过的几条路 (用"试了 X 不行 · 又改了 Y 还是不行" 这种自然叙事)
+  3. 最后发现的真正原因 (具体到平台限制 / 配置细节)
+  4. 怎么解决的 (含关键配置 · 用 inline 引号嵌进散文 · 不要 code block)`;
+
+  const outputTemplate = isDesignLoop ? designLoopTemplate : isLearning ? learningTemplate : struggleTemplate;
 
   const sceneSpecificConstraints = isLearning ? [
-    '- 写给"完全没用过这个东西" 的读者 · 不要假设知识',
-    '- 核心概念部分要真"概念" · 不是 API list',
-    '- 关键陷阱要具体 (跟教程的差异 · 自己撞到的事) · 不是"小心配置" 这种空话',
+    '- ★ 工作日志气质 · 不是教程/文档气质 (这是 update 进展 · 不是方法库)',
+    '  不用 ## 标题 · 不用 bullet 列表 · 不用 code block · 一段段散文',
+    '- 用作者真实 voice · 自然段落 + 中文标点',
+    '- 写给"也在想学这东西" 的读者 · 是工作笔记不是教程',
+    '- 真实保留你撞过的具体陷阱 (跟教程的差异 · 自己摸过的边)',
+    '- 含关键技术细节 (具体 SDK 版本 / API 名 / 配置) · 但用 inline 引号嵌进散文',
+    '- 200-400 字 · 不必长 · 工作日志就该克制',
   ] : isDesignLoop ? [
-    '- 写给"也在做类似决策" 的读者 · 不是事后修饰过的纪录片',
-    '- 真实保留考虑过但拒绝的方案 · 不要只写选了的那个',
-    '- 权衡部分要具体到约束 (alpha 期 / 用户量 / 团队能力 / 时间窗)',
-    '- 不替作者下"正确答案" 定论 · 决策有上下文 · 别人换上下文可能选别的',
+    '- ★ 工作日志气质 · 不是文档/说明书气质',
+    '  不用 ## 标题 · 不用 bullet · 一段一段连贯叙事',
+    '- ★ 主题必须来自 signals 实际讨论的具体事 · 不是 meta 抽象',
+    '  反例: "决策怎么沉淀给别人复用"  "推演机制怎么打造"  这种 meta 元话题不可接受',
+    '  正例: "方法跟进展项目是什么关系"  "接走该不该改名启发"  "borrow 搜什么池"',
+    '- 用作者真实 voice (从 fingerprint 学) · 自然段落 + 中文标点',
+    '- 真实保留考虑过但拒绝的方案 · 但用"想过 X 也试过 Y" 散文连',
+    '- 权衡引用 signals 里的具体约束 (alpha 期 / 用户量 / 信息密度 / 自动化优先)',
+    '- 不下"正确答案" 定论 · 决策有上下文 · 别人换上下文可能选别的',
+    '- 200-400 字 · 不必长 · 工作日志就该克制',
   ] : [
+    '- ★ 工作日志气质 · 不是教程/文档气质 (这是 update 进展 · 不是方法库)',
+    '  不用 ## 标题 · 不用 bullet 列表 · 不用 code block · 一段段散文',
+    '- 用作者真实 voice · 自然段落 + 中文标点',
     '- 不替作者编情绪 · "终于" 这种词只在 commit msg 真说过时用',
-    '- 不下产品定论',
-    '- 保留具体平台名 / 错误码 / 配置 (这些是检索的钩子)',
+    '- 保留具体平台名 / 错误码 / 配置 (这些是检索的钩子) · 但用 inline 引号嵌进散文',
+    '- 200-400 字 · 工作日志就该克制 · 不必长',
   ];
 
   const prompt = `${taskLine}
@@ -4036,53 +4067,39 @@ ${fixTitle ? '\\n相关 commit:\\n' + fixTitle : ''}
   }
 
   if (isLearning) {
-    return `## 想做什么 · 想学什么
+    return `(LLM 没起草 · template 兜底 · 把下面信息组成一段工作日志气质的连贯散文 · 不用 markdown 标题)
 
-(待补 · 看下面时序自己写一句具体到工具 / SDK / 框架)
+最近这段时间在搞 (具体技术 / SDK / 框架 · 看下面信号补)。
 
-## 几个核心概念
+试着摸了一遍 · 几个核心概念是 (待补)。
 
-(待补 · 这个东西的关键概念有哪几个 · 列 3-5 条)
-
-## 关键陷阱
-
-(待补 · 入门时撞到的几个坑 · 教程不会告诉的事)
-
+入门时撞到的坑:
 ${signalLines || '(信号不足 · 自己回忆补一下)'}
 
-## 最小可用代码 / 配置
-
+最后跑通的方式:
 ${fixTitle}
-
-${fixBody || '(commit body 是空的 · 自己补一段可 copy 跑通的代码)'}
+${fixBody ? '\\n' + fixBody : ''}
 
 ---
 
-(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-${productTag}\`)
+(LLM 没起草 · 这是 template 兜底 · 改成连贯散文再发 · \`tinker push <这个文件> --as-${productTag}\`)
 `;
   }
 
-  return `## 撞到的问题
+  return `(LLM 没起草 · template 兜底 · 把下面信息组成一段工作日志气质的连贯散文 · 不用 markdown 标题)
 
-(待补 · 看下面时序自己写一句)
+这次撞到 (待补 · 具体平台 / 错误码 / 表现 · 看下面信号)。
 
-## 试过的
-
+试了几条路:
 ${signalLines || '(信号不足 · 自己回忆补一下)'}
 
-## 真正原因
-
-(待补 · 看 fix commit body 补一段)
-
-## 解法
-
+最后发现真正原因 · 解法是:
 ${fixTitle}
-
-${fixBody || '(commit body 是空的 · 自己补一句配置 / 代码片段)'}
+${fixBody ? '\\n' + fixBody : ''}
 
 ---
 
-(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-${productTag}\`)
+(LLM 没起草 · 这是 template 兜底 · 改成连贯散文再发 · \`tinker push <这个文件> --as-${productTag}\`)
 `;
 }
 
@@ -5095,11 +5112,13 @@ async function cmdContributeFromFile(cfg, opts) {
     try {
       // v0.81: methods 是 first-class entity · 不再 addUpdate + isMethod=true
       // 直接 createMethod · 关联 projectId · 记 source_doc_path
+      // v0.84: 支持 --tag · 跨用户聚类
       const r = await apiAction(cfg, 'createMethod', {
         text: sec.fullText,
         scenario: sec.llmReason || null,
         projectId,
         sourceDocPath: filePath,
+        tags: opts.tags && opts.tags.length > 0 ? opts.tags : undefined,
       });
       const newId = r.result && r.result.methodId;
       successes.push({ heading: sec.heading, methodId: newId, charCount: sec.charCount });
@@ -5517,6 +5536,21 @@ function parseArgs(args) {
     else if (a === '--as-experience' || a === '--asExperience') opts.asExperience = true;
     else if (a === '--as-learning' || a === '--asLearning') opts.asLearning = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
+    else if (a === '--tag') {
+      // v0.84 支持多次 · 收集 · contribute 时一并发上
+      const v = (args[++i] || '').trim();
+      if (v) {
+        if (!opts.tags) opts.tags = [];
+        opts.tags.push(v);
+      }
+    }
+    else if (a.startsWith('--tag=')) {
+      const v = a.slice('--tag='.length).trim();
+      if (v) {
+        if (!opts.tags) opts.tags = [];
+        opts.tags.push(v);
+      }
+    }
     else if (a === '--from-file') opts.fromFile = args[++i];
     else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
     else if (a === '--auto') opts.auto = true;
