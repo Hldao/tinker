@@ -7671,7 +7671,9 @@ function renderWorkshop(handle) {
     const autoSunk = opts.region === 'alsoDoing' && inFlight(p) && isStale(p);
     const statusLabel = autoSunk ? '一段时间没动' : statusText(p.status);
     // v0.74: 内嵌最近 2 条进展预览 · 项目-进展关联 · 取代底部独立 timeline
-    const recentUpdates = opts.showUpdates ? (p.updates || []).slice(0, 2) : [];
+    // v0.88: 过滤 isMethod · 老 backfill 方法还留在 updates 里 · 这里直接平铺 markdown 不好看
+    // 方法有独立的"沉淀方法"板块 · pcard preview 只显示进展
+    const recentUpdates = opts.showUpdates ? (p.updates || []).filter(u => !u.isMethod).slice(0, 2) : [];
     const updatesHtml = recentUpdates.length > 0 ? `
       <div class="pcard-updates">
         ${recentUpdates.map(u => `
