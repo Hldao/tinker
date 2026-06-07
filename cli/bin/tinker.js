@@ -1755,13 +1755,40 @@ async function cmdClaudeHookInstall(opts = {}) {
   const goodnightWords = '晚安|收工|今天就到|明天继续|睡了|累了|下班|收摊|休息|不弄了|做到这|歇了';
   installClaudeHookEntry(settings.hooks.UserPromptSubmit, goodnightWords, 'tinker maybe-goodnight 2>/dev/null || true', 'goodnight');
 
+  // v0.14 把 keyword 触发从 commit message 搬到对话 · 6 组 matcher 配 6 个 maybe-X 命令
+  // 每个 maybe-X 静默检查 per-kind 冷却 (默认 60min) · 命中输出 reminder 给 hook 注入 Claude context
+  // matcher 命中只是"候选" · LLM 看上下文判断是否真的提醒用户 · 不每次都打扰
+  const stuckWords = '卡住了|卡了|不行|怎么都|还是错|搞不定|不知道哪|找不到|为什么不|跑不起来';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, stuckWords, 'tinker maybe-stuck 2>/dev/null || true', 'stuck');
+
+  const breakthroughWords = '懂了|明白了|哦哦|原来如此|终于通了|噢|啊我懂|找到原因|找到问题|搞清楚了';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, breakthroughWords, 'tinker maybe-breakthrough 2>/dev/null || true', 'breakthrough');
+
+  const decisionWords = '决定用|还是用|改用|选 |不用 |换成|放弃|敲定|决定不|敲定下来';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, decisionWords, 'tinker maybe-decision 2>/dev/null || true', 'decision');
+
+  const subtractionWords = '砍了|砍掉|删了|算了|不做了|不要这个|去掉|移除|撤了|拿掉|不做这';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, subtractionWords, 'tinker maybe-subtraction 2>/dev/null || true', 'subtraction');
+
+  const cleverFixWords = '跑通了|搞通了|搞定了|搞定|跑起来了|修好了|改好了|通了|终于跑|终于成|成功了';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, cleverFixWords, 'tinker maybe-clever-fix 2>/dev/null || true', 'clever-fix');
+
+  const shipWords = '完工|发出去|上线了|发布了|做完了|部署了|deploy 了|push 了|release 了|线上了|搞完了';
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, shipWords, 'tinker maybe-ship 2>/dev/null || true', 'ship');
+
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   log('');
-  ok('Claude Code hooks 装好了 · 三件套:');
-  log(sepia('    SessionStart compact     · /compact 时'));
-  log(sepia('    SessionEnd                · 关 Claude Code / 系统 sleep 时'));
-  log(sepia('    UserPromptSubmit          · 你对 AI 说"晚安/收工/累了" 等词时'));
-  log(sepia('  全部扫过去 4h 对话 · LLM 起草工作日志气质草稿 · 写到 .tinker/drafts/'));
+  ok('Claude Code hooks 装好了:');
+  log(sepia('    SessionStart compact              · /compact 时'));
+  log(sepia('    SessionEnd                         · 关 Claude Code / 系统 sleep 时'));
+  log(sepia('    UserPromptSubmit goodnight        · 说收工类的话'));
+  log(sepia('    UserPromptSubmit stuck            · 说卡住类的话'));
+  log(sepia('    UserPromptSubmit breakthrough     · 说顿悟类的话'));
+  log(sepia('    UserPromptSubmit decision         · 做工具/方案选择'));
+  log(sepia('    UserPromptSubmit subtraction      · 说砍 / 删类的话'));
+  log(sepia('    UserPromptSubmit clever-fix       · 说搞通 / 跑通类的话'));
+  log(sepia('    UserPromptSubmit ship             · 说完工 / 上线类的话'));
+  log(sepia('  matcher 命中 → maybe-X 静默判断 → 输出 reminder 注入 AI 上下文 → AI 看上下文决定是否提醒'));
   log('');
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
 }
@@ -3839,6 +3866,50 @@ function cmdMaybeGoodnight() {
   if (commitCount === 0) return;
   // 命中 · 输出 reminder 给 hook 注入到 Claude Code 对话
   process.stdout.write(`用户今天在当前 repo commit 了 ${commitCount} 次但还没跑 tinker goodnight 收尾 · 用户刚说了收工类的话 · 可以主动提醒一下\n`);
+}
+
+// v0.14 对话内 maybe-X 触发器 · 把 keyword 触发从 commit message 搬到 Claude Code 对话
+// 思路:commit message 是事后总结 · 真正的卡住/顿悟/决策/砍/修通/完工 都发生在跟 AI 对话里
+// 每个命令静默检查 per-kind 冷却 (默认 60 min) · 命中 → stdout reminder 给 hook 注入我的 context
+// 我看到 reminder 才主动跟用户说 · 不命中静默退出
+const MAYBE_KINDS = {
+  stuck: {
+    cooldownMin: 60,
+    reminder: '用户跟 Claude Code 对话里出现卡住相关的话 · 如果是真的困住没思路 (不是一句普通描述) · 可以建议跑 `tinker stuck "一句话说卡哪"` 让在意 ta 的人看到 · 看上下文判断 · 不是每次都建议',
+  },
+  breakthrough: {
+    cooldownMin: 30,
+    reminder: '用户刚说了顿悟类的话 (懂了 / 明白了 / 哦哦 等) · 顿悟时刻的十秒钟难复现 · 如果是真的有发现 · 可以建议跑 `tinker push -m "..."` 留一笔 · 上下文判断',
+  },
+  decision: {
+    cooldownMin: 60,
+    reminder: '用户在对话里做了工具链 / 方案选择 · 几个月后自己都想不起为什么选这个 · 如果是有思考的决策 · 可以建议跑 `tinker push -m "..."` 记下来 (或者 push-decision) · 不是每次都建议',
+  },
+  subtraction: {
+    cooldownMin: 60,
+    reminder: '用户刚说了砍 / 删除 / 不做了类的话 · 减法决策是工程师圈最难学的事 · 如果是有理由的取舍 (不是临时改主意) · 可以建议记一笔说为什么砍',
+  },
+  cleverFix: {
+    cooldownMin: 30,
+    reminder: '用户刚说了跑通 / 搞通 / 搞定类的话 · 如果是修复了别人能学的真坑 · 可以建议跑 `tinker push -m "..."` 把这个修法留下来 · 上下文判断不是每次都建议',
+  },
+  ship: {
+    cooldownMin: 60,
+    reminder: '用户刚说了完工 / 发出去 / 上线类的话 · 如果是真的发布了 (不只是计划) · 可以建议跑 `tinker ship -m "一句话感想"` 进陈列馆',
+  },
+};
+
+function cmdMaybe(kind) {
+  const cfg = MAYBE_KINDS[kind];
+  if (!cfg) return;
+  const ps = loadPromptState();
+  ps.lastMaybeAtByKind = ps.lastMaybeAtByKind || {};
+  const last = ps.lastMaybeAtByKind[kind];
+  const now = Date.now();
+  if (last && (now - last) < cfg.cooldownMin * 60 * 1000) return;
+  ps.lastMaybeAtByKind[kind] = now;
+  savePromptState(ps);
+  process.stdout.write(cfg.reminder + '\n');
 }
 
 // v0.12 `tinker struggle` · 看 / 关 / 重新激活 当前 struggle 状态
@@ -6335,6 +6406,12 @@ async function main() {
         // 静默触发器 · 给 Claude Code user-prompt-submit-hook 调
         cmdMaybeGoodnight();
         return; // 不走末尾 showUpdateBannerIfNeeded · 保持 stdout 干净
+      case 'maybe-stuck':         cmdMaybe('stuck'); return;
+      case 'maybe-breakthrough':  cmdMaybe('breakthrough'); return;
+      case 'maybe-decision':      cmdMaybe('decision'); return;
+      case 'maybe-subtraction':   cmdMaybe('subtraction'); return;
+      case 'maybe-clever-fix':    cmdMaybe('cleverFix'); return;
+      case 'maybe-ship':          cmdMaybe('ship'); return;
 
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
