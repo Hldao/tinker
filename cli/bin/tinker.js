@@ -2654,6 +2654,115 @@ async function cmdLlm(sub) {
   ok('LLM 配好了 · 下次 prompt 选"发"就能看到自动起草');
 }
 
+// 解 Claude Code 的 jsonl session 文件 · 拉今天的 token 用量
+// ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
+// 每条 assistant message 都有 usage + timestamp · 按今日 (4am 算一天) 过滤
+function getClaudeCodeUsageToday() {
+  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+  if (!fs.existsSync(claudeRoot)) return null;
+
+  // "今天" 从凌晨 4 点算 · 跟 cmdGoodnight 的 git since 对齐
+  const dayStart = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.getTime(); })();
+  const now = Date.now();
+
+  const byModel = {};
+  let totalMessages = 0;
+  let sessionFiles = new Set();
+
+  try {
+    const projDirs = fs.readdirSync(claudeRoot).filter(d => {
+      try { return fs.statSync(path.join(claudeRoot, d)).isDirectory(); } catch { return false; }
+    });
+    for (const projDir of projDirs) {
+      const fullProjDir = path.join(claudeRoot, projDir);
+      let files;
+      try { files = fs.readdirSync(fullProjDir).filter(f => f.endsWith('.jsonl')); } catch { continue; }
+      for (const f of files) {
+        const fullPath = path.join(fullProjDir, f);
+        // 文件 mtime 在今天 4am 之前 · 整个文件跳过
+        try {
+          const stat = fs.statSync(fullPath);
+          if (stat.mtimeMs < dayStart) continue;
+        } catch { continue; }
+        // 流式逐行扫 · 大文件 (10MB+) 也能跑
+        let content;
+        try { content = fs.readFileSync(fullPath, 'utf-8'); } catch { continue; }
+        const lines = content.split('\n');
+        let sawTodayMessage = false;
+        for (const line of lines) {
+          if (!line || line[0] !== '{') continue;
+          let obj;
+          try { obj = JSON.parse(line); } catch { continue; }
+          if (obj.type !== 'assistant' || !obj.message || !obj.message.usage) continue;
+          const ts = obj.timestamp ? new Date(obj.timestamp).getTime() : 0;
+          if (ts < dayStart || ts > now) continue;
+          const model = obj.message.model || 'unknown';
+          // 跳过 Claude Code 内部 synthetic / system 消息 · 不是真实 LLM 调用
+          if (model === '<synthetic>' || model.startsWith('<')) continue;
+          sawTodayMessage = true;
+          totalMessages++;
+          const u = obj.message.usage;
+          if (!byModel[model]) byModel[model] = { input: 0, cacheCreate: 0, cacheRead: 0, output: 0 };
+          byModel[model].input += u.input_tokens || 0;
+          byModel[model].cacheCreate += u.cache_creation_input_tokens || 0;
+          byModel[model].cacheRead += u.cache_read_input_tokens || 0;
+          byModel[model].output += u.output_tokens || 0;
+        }
+        if (sawTodayMessage) sessionFiles.add(fullPath);
+      }
+    }
+  } catch { return null; }
+
+  if (totalMessages === 0) return { messages: 0, models: {}, sessions: 0, totalUsd: 0, totalRmb: 0 };
+
+  // 估算成本 · USD per million tokens
+  // Anthropic 官网公开定价 (2026 标准 200K context 版本):
+  //   Opus 4: $15 input / $75 output · cache write 1.25x input · cache read 10% input
+  //   Sonnet 4: $3 input / $15 output
+  //   Haiku 4: $0.8 input / $4 output
+  // 1M context 版本 (claude-opus-4-7 / claude-sonnet-4-6 等带 "1m" / 高版本号) 标准 2x:
+  //   Opus 1M: $30 input / $150 output
+  // 这里按 model 名字推断 · 不准时按 standard 算 · 用户可以认为是 "下限估算"
+  const PRICING = {
+    opus: { input: 15, output: 75, cacheCreate: 18.75, cacheRead: 1.5 },
+    opus1m: { input: 30, output: 150, cacheCreate: 37.5, cacheRead: 3.0 },
+    sonnet: { input: 3, output: 15, cacheCreate: 3.75, cacheRead: 0.3 },
+    sonnet1m: { input: 6, output: 30, cacheCreate: 7.5, cacheRead: 0.6 },
+    haiku: { input: 0.8, output: 4, cacheCreate: 1, cacheRead: 0.08 },
+  };
+  function priceFor(modelStr) {
+    const s = (modelStr || '').toLowerCase();
+    // claude-opus-4-7 / claude-opus-4-8 等高版本走 1M 价 (1M context premium)
+    if (s.includes('opus')) {
+      const m = s.match(/opus-(\d+)-(\d+)/);
+      if (m && parseInt(m[2], 10) >= 5) return PRICING.opus1m;
+      return PRICING.opus;
+    }
+    if (s.includes('sonnet')) {
+      const m = s.match(/sonnet-(\d+)-(\d+)/);
+      if (m && parseInt(m[2], 10) >= 5) return PRICING.sonnet1m;
+      return PRICING.sonnet;
+    }
+    if (s.includes('haiku')) return PRICING.haiku;
+    return PRICING.sonnet; // 兜底
+  }
+  let totalUsd = 0;
+  for (const [model, u] of Object.entries(byModel)) {
+    const p = priceFor(model);
+    totalUsd += (u.input * p.input + u.output * p.output + u.cacheCreate * p.cacheCreate + u.cacheRead * p.cacheRead) / 1000000;
+  }
+  // 汇率按 7.2 估算 (人民币)
+  const totalRmb = totalUsd * 7.2;
+
+  return {
+    messages: totalMessages,
+    models: byModel,
+    sessions: sessionFiles.size,
+    totalUsd: totalUsd,
+    totalRmb: totalRmb,
+  };
+}
+
 // `tinker goodnight` · 今日总结 · 给 sleepy 时刻收个尾
 // 也被 GOODNIGHT 关键词触发器命中时自动出现
 async function cmdGoodnight(opts = {}) {
@@ -2724,6 +2833,20 @@ async function cmdGoodnight(opts = {}) {
     log(sepia('    最后一条: ') + sepia(gitCommits[0].msg.slice(0, 60)));
   }
   log('');
+
+  // Claude Code 今日 token 用量 · 编程工具的真实账
+  const ccUsage = getClaudeCodeUsageToday();
+  if (ccUsage && ccUsage.messages > 0) {
+    log('  ' + bold('Coding 跟 AI'));
+    log(sepia('    Claude Code ') + bold(ccUsage.messages + ' 条 assistant') + sepia(' · 跨 ') + bold(ccUsage.sessions + ' 个 session'));
+    // 按 model 分行
+    for (const [model, u] of Object.entries(ccUsage.models)) {
+      const totalInput = u.input + u.cacheCreate + u.cacheRead;
+      log(sepia('      · ') + model + sepia(' · 入 ') + sepia(totalInput.toLocaleString()) + sepia(' (') + sepia('cache 读 ' + u.cacheRead.toLocaleString()) + sepia(') · 出 ') + sepia(u.output.toLocaleString()));
+    }
+    log(sepia('    估算成本 $') + bold(ccUsage.totalUsd.toFixed(2)) + sepia(' ≈ ¥') + bold(ccUsage.totalRmb.toFixed(2)) + sepia(' (粗略 · 实际看 Anthropic console)'));
+    log('');
+  }
 
   log('  ' + bold('Tinker'));
   if (todayUpdates.length === 0) {
