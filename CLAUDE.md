@@ -104,3 +104,27 @@ LLM 工作流:
 4. 按 reminder 里的建议跟用户对话 (但仍然看上下文判断 · 不强弹)
 
 两条路径**共享同一份 matcher 词典 + 同一份冷却**(写 `~/.tinker/prompt-state.json` 的 `lastMaybeAtByKind`) · 30/60 分钟内同 kind 不会重复触发。不论谁调一次 · 另一条路径都会被节流。
+
+## post-commit hook 触发的待处理 reminder
+
+git commit 时 · post-commit hook 跑 `tinker check --from-hook --json` 评估 24 个触发器 (clever-fix / tool-combo / ship / decision / ai-limit / ui-session 等) · 命中的会 append 到 `~/.tinker/pending-reminders.jsonl`。
+
+任何 AI 工具的 LLM 都能查:
+
+```bash
+tinker pending --json     # 列待处理 reminder (JSON)
+tinker pending            # 人可读
+tinker pending --check    # 静默注入 · UserPromptSubmit hook 用 · 没 reminder 不输出
+tinker pending --mark-handled <id>   # 标已处理
+tinker pending --clear    # 全清
+```
+
+Claude Code 装了 install-claude 后 · 每次用户 prompt 都自动跑 `tinker pending --check` · 命中 reminder 注入 context · 你会主动汇报给用户 "刚才 hook 触发了 ship · 要不要进陈列馆"。
+
+其他 AI (Cursor / Aider / 等) 没这个自动化 · LLM 应该在合适时机主动 Bash 跑 `tinker pending --json`(比如 session 开头、用户问"今天怎么样"、commit 之后) 查未处理 reminder · 主动跟用户对话。
+
+**处理 reminder 的标准流程**:
+1. 看 reminder 的 `kind` / `msg` / `suggestion` / `choices`
+2. 看上下文判断是不是真值得提醒用户 (不是每次都提)
+3. 决定提醒 → 建议用户跑对应命令 (push / ship / stuck 等)
+4. 处理完 → `tinker pending --mark-handled <id>`

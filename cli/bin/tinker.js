@@ -1611,9 +1611,12 @@ async function cmdUpdateReal() {
 const PROMPT_STATE_FILE = path.join(CONFIG_DIR, 'prompt-state.json');
 const HOOK_BEGIN = '# >>> tinker-hook-v2 >>>';
 const HOOK_END = '# <<< tinker-hook-v2 <<<';
+// v0.17 post-commit hook 默认走 --json · 命中触发器只 stdout JSON + append pending-reminders.jsonl
+// 不再弹 inquirer (Claude Code Bash tool 没 TTY · 弹了立刻 fall back 到 later · 用户感受不到)
+// 用户后续可以跑 tinker pending --json 看待处理 reminder · AI 工具也能主动调
 const HOOK_BLOCK = `${HOOK_BEGIN}
 # 装/改/卸: tinker hook install | uninstall
-command -v tinker >/dev/null 2>&1 && tinker check --from-hook || true
+command -v tinker >/dev/null 2>&1 && tinker check --from-hook --json >/dev/null 2>&1 || true
 ${HOOK_END}
 `;
 
@@ -1789,11 +1792,16 @@ async function cmdClaudeHookInstall(opts = {}) {
     installClaudeHookEntry(settings.hooks.UserPromptSubmit, cfg.matcher, `tinker maybe-${cmdName} 2>/dev/null || true`, cmdName);
   }
 
+  // v0.17 全局 UserPromptSubmit (无 matcher) · 每次用户 prompt 都 check pending reminders
+  // post-commit hook 触发的 reminder 没人处理时 · 这里会注入 AI context · 让 AI 主动汇报
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, null, 'tinker pending --check 2>/dev/null || true', 'pending-check');
+
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   log('');
   ok('Claude Code hooks 装好了:');
   log(sepia('    SessionStart compact              · /compact 时'));
   log(sepia('    SessionEnd                         · 关 Claude Code / 系统 sleep 时'));
+  log(sepia('    UserPromptSubmit pending-check    · 每次用户 prompt · 检查 hook 触发的待处理 reminder'));
   log(sepia('    UserPromptSubmit goodnight        · 说收工类的话'));
   log(sepia('    UserPromptSubmit stuck            · 说卡住类的话'));
   log(sepia('    UserPromptSubmit breakthrough     · 说顿悟类的话'));
@@ -3286,6 +3294,26 @@ async function cmdCheck(opts) {
       session: result.session || null,  // ui-session 时携带 before snapshot path 等
     };
     savePending(pending);
+    // v0.17 累积模式 · 同时 append 到 pending-reminders.jsonl
+    // savePending 是单条覆盖 (给 tinker resolve 走 pending.json 路径用 · 兼容老 flow)
+    // pending-reminders.jsonl 是累积 · 不覆盖 · AI 工具 / 用户随时能扫"待处理 reminder 列表"
+    // post-commit hook 跑这条路径 · 命中触发器自动 append · 用户 / LLM 后续 tinker pending --json 看
+    appendPendingReminder({
+      id: 'pr-' + now + '-' + Math.random().toString(36).slice(2, 6),
+      at: new Date(now).toISOString(),
+      kind: result.kind,
+      reason: result.reason,
+      priority: result.priority,
+      msg: stripAnsi(result.msg),
+      suggestion: result.suggestion || '',
+      projectId: repoCfg.projectId,
+      projectName: repoCfg.projectName,
+      commitSha: (() => { try { return execSync('git log -1 --pretty=%h', { encoding: 'utf-8' }).trim(); } catch { return ''; } })(),
+      commitTitle: pending.commitTitle,
+      cwd: process.cwd(),
+      choices: choices.map(c => ({ id: c.value, label: stripAnsi(c.name) })),
+      handled: false,
+    });
     // 写 state · 标记已 prompt · 防重复触发
     state.lastPromptedAt = now;
     state.lastPromptedAtByReason = state.lastPromptedAtByReason || {};
@@ -4073,6 +4101,69 @@ function cmdMaybeCheck(opts) {
   }
 }
 
+// v0.17 `tinker pending` · 看 / 处理 hook 触发的待处理 reminder
+// 设计:
+//   --json           列待处理 (给 AI 工具用)
+//   --check          UserPromptSubmit hook 用 · 命中静默 stdout 注入 AI context · 不打扰
+//   --mark-handled <id>  标某条已处理
+//   --clear          全清
+//   不带 flag        人可读列表 (最近 10 条)
+// 跨 AI 通用:Claude Code 用 hook 自动 check · Cursor / Aider 等 LLM 主动 Bash 跑 --json
+function cmdPending(opts) {
+  if (opts.clear) {
+    if (fs.existsSync(pendingRemindersPath())) {
+      try { fs.unlinkSync(pendingRemindersPath()); } catch {}
+    }
+    if (opts.json) return outputJson({ ok: true, cleared: true });
+    ok('清空 pending reminders');
+    return;
+  }
+  const reminders = readPendingReminders();
+  if (opts.markHandled) {
+    const id = opts.markHandled;
+    let found = false;
+    const updated = reminders.map(r => {
+      if (r.id === id) { found = true; return { ...r, handled: true, handledAt: new Date().toISOString() }; }
+      return r;
+    });
+    writePendingReminders(updated);
+    if (opts.json) return outputJson({ ok: true, markedHandled: id, found });
+    if (found) ok('标了 ' + id + ' 为已处理');
+    else err('找不到 id: ' + id);
+    return;
+  }
+  const pending = reminders.filter(r => !r.handled);
+  if (opts.check) {
+    // UserPromptSubmit hook 调用 · 跟用户每次说话时触发
+    // 命中 pending → stdout 注入我 (AI) 的 context · 我看上下文判断要不要提醒用户
+    // 没 pending → 静默退出 · 不打扰
+    if (pending.length === 0) return;
+    const recent = pending.slice(-3).map(r => `[${r.kind}] ${r.msg.slice(0, 60)}`).join(' / ');
+    process.stdout.write(`Tinker hook 触发了 ${pending.length} 条待处理 reminder · 最近: ${recent} · 看完整列表 \`tinker pending --json\` · 跟用户聊到合适时机时建议 \`tinker resolve <choice> -m "..."\` 处理 · 或者 \`tinker pending --mark-handled <id>\` 标已处理 · 不每次都打扰用户\n`);
+    return;
+  }
+  if (opts.json) return outputJson({ ok: true, count: pending.length, pending, handledCount: reminders.length - pending.length });
+  if (pending.length === 0) {
+    log(sepia('  没有待处理 reminder'));
+    if (reminders.length > 0) log(sepia('  历史已处理 ' + reminders.length + ' 条 · 清掉跑 ') + vermilion('tinker pending --clear'));
+    return;
+  }
+  log('');
+  log(bold('  待处理 ' + pending.length + ' 条 (最近 10 条):'));
+  log('');
+  for (const r of pending.slice(-10)) {
+    const t = new Date(r.at).toLocaleTimeString();
+    log(vermilion('  [' + r.kind + ']') + sepia(' · ' + t + ' · ' + (r.commitSha || '').slice(0, 7) + ' · ' + (r.projectName || '')));
+    log('  ' + r.msg);
+    if (r.suggestion) log(sepia('    ' + r.suggestion));
+    log(sepia('    id: ') + r.id);
+    log('');
+  }
+  log(sepia('  处理一条: ') + vermilion('tinker resolve <choice> -m "..."'));
+  log(sepia('  标已处理: ') + vermilion('tinker pending --mark-handled <id>'));
+  log(sepia('  全清:     ') + vermilion('tinker pending --clear'));
+}
+
 // v0.12 `tinker struggle` · 看 / 关 / 重新激活 当前 struggle 状态
 // 信任建设:让用户能看见 Tinker 在后台跟踪什么 · 能一键关
 async function cmdStruggle(sub, opts = {}) {
@@ -4725,6 +4816,30 @@ function loadPending() {
 function clearPending() {
   if (fs.existsSync(pendingPath())) { try { fs.unlinkSync(pendingPath()); } catch {} }
 }
+
+// v0.17 pending-reminders.jsonl · 累积所有 hook 触发的 reminder
+// 跟 pending.json 不同:pending.json 是单条覆盖 (老 flow tinker resolve 用 · 同 commit 内只能记一个)
+// jsonl 是累积 · 历史所有 reminder 都在 · 任何 AI / 用户能 scan 看到"漏掉的 ship / clever-fix 等"
+function pendingRemindersPath() { return path.join(CONFIG_DIR, 'pending-reminders.jsonl'); }
+function appendPendingReminder(entry) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.appendFileSync(pendingRemindersPath(), JSON.stringify(entry) + '\n');
+  } catch { /* 失败静默 · 别阻塞 hook */ }
+}
+function readPendingReminders() {
+  if (!fs.existsSync(pendingRemindersPath())) return [];
+  try {
+    const lines = fs.readFileSync(pendingRemindersPath(), 'utf-8').split('\n').filter(Boolean);
+    return lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
+function writePendingReminders(arr) {
+  try {
+    fs.writeFileSync(pendingRemindersPath(), arr.map(r => JSON.stringify(r)).join('\n') + (arr.length > 0 ? '\n' : ''));
+  } catch { /* 失败静默 */ }
+}
+
 // strip ANSI 颜色码 · JSON 里不该带终端控制符
 function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, ''); }
 
@@ -6396,6 +6511,7 @@ function help() {
   log('  ' + vermilion('tinker state --json') + sepia('                读 prompt-state 当前快照'));
   log('  ' + vermilion('tinker stream <resource>') + sepia('            长跑 NDJSON 事件流 (triggers / today)'));
   log('  ' + vermilion('tinker maybe-check --text "..."') + sepia('     跨 AI 通用入口 · 非 Claude Code 的 LLM 主动调拿 matcher 命中 reminder'));
+  log('  ' + vermilion('tinker pending [--json|--check|--mark-handled <id>|--clear]') + sepia(' 看/处理 post-commit hook 触发的待处理 reminder'));
   log('  ' + vermilion('tinker mcp') + sepia('                          启 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool'));
   log(sepia('  ') + dim('几乎所有命令支持 --json · 错误统一 { ok: false, error, code } 形态'));
   log('');
@@ -6420,6 +6536,8 @@ function help() {
   log(sepia('  用户要删测试条 / 误发条              → ') + vermilion('tinker delete <updateId> --yes ') + dim('(非 TTY 必须 --yes)'));
   log(sepia('  用户开新项目                       → ') + vermilion('tinker project new --name "..." --desc "..."'));
   log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
+  log(sepia('  查 post-commit hook 触发的待处理      → ') + vermilion('tinker pending --json'));
+  log(sepia('  ') + dim('  LLM 主动调:session 开头 / 用户问"今天怎么样" / commit 之后 · 看有没有漏掉的 ship / clever-fix 等'));
   log(sepia('  非 Claude Code (Cursor/Aider 等) · 没有 hook → ') + vermilion('tinker maybe-check --text "<用户消息>" --json'));
   log(sepia('  ') + dim('  上面这个跟 Claude Code hook 共用词典 + 冷却 · LLM 主动调拿命中 reminder'));
   log(sepia('  ') + dim('调前看 ') + vermilion('tinker state --json') + dim(' · 静音/冷却中别打扰'));
@@ -6466,6 +6584,10 @@ function parseArgs(args) {
     else if (a === '--inspired-by') opts.inspiredBy = args[++i];
     else if (a.startsWith('--inspired-by=')) opts.inspiredBy = a.slice('--inspired-by='.length);
     else if (a === '--undo') opts.undo = true;
+    else if (a === '--check') opts.check = true;
+    else if (a === '--clear') opts.clear = true;
+    else if (a === '--mark-handled') opts.markHandled = args[++i];
+    else if (a.startsWith('--mark-handled=')) opts.markHandled = a.slice('--mark-handled='.length);
     else if (a === '--desc') opts.desc = args[++i];
     else if (a.startsWith('--desc=')) opts.desc = a.slice('--desc='.length);
     else if (a === '--scenario') opts.scenario = args[++i];
@@ -6971,6 +7093,7 @@ async function main() {
       case 'maybe-clever-fix':    cmdMaybe('cleverFix'); return;
       case 'maybe-ship':          cmdMaybe('ship'); return;
       case 'maybe-check':         cmdMaybeCheck(opts); return;
+      case 'pending':             cmdPending(opts); return;
 
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
