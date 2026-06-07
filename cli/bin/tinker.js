@@ -1526,6 +1526,31 @@ async function cmdUpdate(opts = {}) {
 
 async function cmdUpdateReal() {
   log('');
+  // v0.14 命名错位兜底:tinker update 在 CLI 业内是"升级自己" · 但 Tinker 里 update 是
+  // 核心概念词 (一条进展记录) · 新用户手敲 tinker update 大概率是想"记一条进展"
+  // TTY 时先确认 · 防误用 · 非 TTY (LLM / hook / pipe) 直接跑升级 不打扰
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    log(sepia('  ── ') + vermilion('提醒一下') + sepia(' ──'));
+    log('  你是想' + bold('记一条进展') + '? 那个命令是 ' + vermilion("tinker push -m '...'"));
+    log(sepia('  这个 ') + vermilion('tinker update') + sepia(' 是升级 CLI 自己 · 拉最新代码 + npm install -g'));
+    log('');
+    try {
+      const { confirm } = require('@inquirer/prompts');
+      const go = await confirm({ message: '要继续升级 CLI 吗?', default: false });
+      if (!go) {
+        log('');
+        log(sepia('  好 · 没升级'));
+        log(sepia('  记一条进展跑 ') + vermilion("tinker push -m '今天搞了 ...'"));
+        log('');
+        return;
+      }
+    } catch {
+      log(sepia('  好 · 没升级'));
+      return;
+    }
+    log('');
+  }
+
   if (!fs.existsSync(SRC_DIR)) {
     err('找不到 ' + sepia(SRC_DIR) + err('  这意味着你不是按官方一键命令装的'));
     log('');
