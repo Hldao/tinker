@@ -17,17 +17,23 @@ function runMigrations(db) {
     );
   `);
 
-  const currentVersionRow = db.prepare('SELECT MAX(version) AS v FROM schema_version').get();
-  const currentVersion = currentVersionRow.v || 0;
+  // v0.12 修补:之前用 MAX(version) 判断 currentVersion · 但如果新 migration
+  // 文件用了比当前 max 小的版本号 (并行开发常见 · 文件命名跟 commit 顺序不一致)
+  // runner 会漏跑。改成"应用所有 file version 不在 schema_version 表里的"。
+  const appliedVersions = new Set(
+    db.prepare('SELECT version FROM schema_version').all().map(r => r.version)
+  );
+  const currentVersion = appliedVersions.size > 0 ? Math.max(...appliedVersions) : 0;
 
-  // 找所有 NNN_xxx.sql 文件 · 按数字排序
+  // 找所有 NNN_xxx.sql 文件 · 按 version 升序
+  // filter: version 不在 appliedVersions 集合里的 (含 missing 的旧 version 跟新加的)
   const files = fs.readdirSync(__dirname)
     .filter(f => /^\d+_.*\.sql$/i.test(f))
     .map(f => ({
       file: f,
       version: parseInt(f.match(/^(\d+)/)[1], 10),
     }))
-    .filter(x => x.version > currentVersion)
+    .filter(x => !appliedVersions.has(x.version))
     .sort((a, b) => a.version - b.version);
 
   if (files.length === 0) return { applied: [], currentVersion };
