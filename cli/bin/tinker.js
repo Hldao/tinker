@@ -2497,11 +2497,10 @@ async function cmdWatch(taskFile) {
 }
 
 // 把所有触发器汇总 · 选 priority 最高的那个
-function evaluateAllTriggers(state, repoCfg, cfg) {
-  // UI session 单独评估 · 因为它需要写 state (启动 session 时)
+// v0.12 详细版 · 返回所有命中 + winner · 用于 tinker triggers 自检
+// evaluateAllTriggers 是兼容老 API 的薄包装
+function evaluateAllTriggersDetailed(state, repoCfg, cfg) {
   const uiResult = evaluateUiSession(state, cfg);
-  // v0.6 第一波 3 个 + v0.7 第二波 7 个 高价值瞬间触发器
-  // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 接受 state · 一天 1 次
   const results = [
     triggerKeywordMatch(),
     triggerAiDebugBreakthrough(),
@@ -2521,9 +2520,32 @@ function evaluateAllTriggers(state, repoCfg, cfg) {
     triggerCrossRepoDrift(state, repoCfg),
   ].filter(r => r.fired);
   if (uiResult.fired) results.push(uiResult);
-  if (results.length === 0) return null;
   results.sort((a, b) => b.priority - a.priority);
-  return results[0];
+  return {
+    winner: results[0] || null,
+    allFired: results,
+  };
+}
+
+function evaluateAllTriggers(state, repoCfg, cfg) {
+  return evaluateAllTriggersDetailed(state, repoCfg, cfg).winner;
+}
+
+// v0.12 记录今日触发器命中分布 · 给 tinker triggers + goodnight 用
+// 只记 winner · 因为这是最有意义的"今天替我做了什么"
+// 跨天 (todayKey 变化) 自动清零
+function recordTriggerWinner(state, winner, suppressedByCooldown) {
+  const tk = todayKey();
+  if (!state.todayTriggerHits || state.todayTriggerHits.date !== tk) {
+    state.todayTriggerHits = { date: tk, winners: {} };
+  }
+  if (!winner) return;
+  const k = winner.kind || winner.reason || 'unknown';
+  if (!state.todayTriggerHits.winners[k]) {
+    state.todayTriggerHits.winners[k] = { count: 0, suppressed: 0 };
+  }
+  state.todayTriggerHits.winners[k].count++;
+  if (suppressedByCooldown) state.todayTriggerHits.winners[k].suppressed++;
 }
 
 async function cmdCheck(opts) {
@@ -2576,7 +2598,11 @@ async function cmdCheck(opts) {
   }
 
   // 冷却:30 分钟内已经 prompt 过 + 不是 keyword 级 (priority < 100) 不再 prompt
-  if (state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000 && result.priority < 100) {
+  const suppressedByCooldown = state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000 && result.priority < 100;
+  // v0.12 不管最后是否 prompt · 都记 winner 到今日 hits (给 goodnight + tinker triggers 看)
+  recordTriggerWinner(state, result, suppressedByCooldown);
+  savePromptState(state);
+  if (suppressedByCooldown) {
     return;
   }
 
@@ -3250,6 +3276,27 @@ async function cmdGoodnight(opts = {}) {
         const by = b.lastBorrower ? '@' + b.lastBorrower : '(匿名)';
         log(sepia('      · ') + b.projectName + sepia(' · ') + b.excerpt.slice(0, 32) + sepia('... · ×') + bold(b.count) + sepia(' · 最近 ') + by);
       });
+    }
+  } catch {}
+
+  // v0.12 触发器今日 (从 prompt-state.json) · 让作者看见触发器系统在后台做了什么
+  // 0 命中沉默不显示 · 跟方法被借同样的"压力友好"原则
+  try {
+    const ps = loadPromptState();
+    const tk = todayKey();
+    if (ps.todayTriggerHits && ps.todayTriggerHits.date === tk) {
+      const ws = ps.todayTriggerHits.winners || {};
+      const kinds = Object.keys(ws).sort((a, b) => ws[b].count - ws[a].count);
+      if (kinds.length > 0) {
+        log('');
+        log(sepia('    触发器 (后台默默工作):'));
+        kinds.forEach(k => {
+          const w = ws[k];
+          const supStr = w.suppressed > 0 ? sepia(' (其中 ' + w.suppressed + ' 次被冷却拦)') : '';
+          log(sepia('      · ') + k + sepia(' ×') + bold(w.count) + supStr);
+        });
+        log(sepia('    要看为什么没 prompt: ') + vermilion('tinker triggers'));
+      }
     }
   } catch {}
   log('');
@@ -3967,6 +4014,10 @@ async function cmdContribute(updateIdArg, opts) {
     log(sepia('  已取消方法标: ') + id);
     return;
   }
+  // v0.13 --from-file: 从 markdown 文件按段 contribute (走 CLI 路径承载长文档)
+  if (opts.fromFile) {
+    return cmdContributeFromFile(cfg, opts);
+  }
   let updateId = updateIdArg;
   if (!updateId) {
     // 找最近一条自己的 update
@@ -3990,6 +4041,198 @@ async function cmdContribute(updateIdArg, opts) {
   log(moss('  已标为方法 · 别人 tinker borrow 时能搜到这条'));
   log(sepia('  id: ') + updateId);
   log(sepia('  反悔: ') + vermilion(`tinker contribute --unmark ${updateId}`));
+  log('');
+}
+
+// v0.13 markdown 切段 · 按 H1/H2/H3 标题切 · 跳过代码块里的 #
+// 返回 [{ level, heading, body, fullText, lineStart }]
+// fullText 包含 heading 自身 · 直接 push 时拿这个
+function parseMarkdownSections(content) {
+  const lines = content.split('\n');
+  const sections = [];
+  let inCode = false;
+  let current = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^```/.test(line)) inCode = !inCode;
+    const m = inCode ? null : line.match(/^(#{1,3})\s+(.+?)\s*$/);
+    if (m) {
+      if (current) sections.push(current);
+      current = {
+        level: m[1].length,
+        heading: m[2].trim(),
+        bodyLines: [],
+        headingLine: line,
+        lineStart: i + 1,
+      };
+    } else if (current) {
+      current.bodyLines.push(line);
+    }
+  }
+  if (current) sections.push(current);
+  // 拼 fullText · 去掉 body 头尾空行
+  return sections.map(s => {
+    let body = s.bodyLines.join('\n').replace(/^\s+|\s+$/g, '');
+    const fullText = s.headingLine + (body ? '\n\n' + body : '');
+    return {
+      level: s.level,
+      heading: s.heading,
+      body,
+      fullText,
+      charCount: fullText.length,
+      lineStart: s.lineStart,
+    };
+  }).filter(s => s.charCount > 30); // 太短的段没 contribute 价值
+}
+
+// v0.13 隐私扫描 · 给作者上传前提示 · 不强删 · 让作者决定
+// 返回 [{ kind, sample, hint }] 命中列表
+function scanPrivacyRisks(text, cfg) {
+  const hits = [];
+  // IPv4 (排除 0.0.0.0 跟 127. 跟 localhost · 那些不算敏感)
+  const ipMatches = text.match(/\b(?!0\.|127\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g);
+  if (ipMatches) hits.push({ kind: 'IPv4 地址', sample: ipMatches[0], hint: '可能是你的服务器 IP · 考虑替换成 <服务器 IP>' });
+  // API key 类
+  const keyMatch = text.match(/\b(sk-[A-Za-z0-9_-]{16,}|tk_[A-Za-z0-9_-]{16,}|pk_[A-Za-z0-9_-]{16,}|Bearer\s+[A-Za-z0-9_.-]{16,})/);
+  if (keyMatch) hits.push({ kind: 'API key / token', sample: keyMatch[0].slice(0, 20) + '...', hint: '上传前一定要删 · 或者改成 <你的 API key>' });
+  // 长 base64 / hex (40+ 连续无空格字母数字)
+  const longTokenMatch = text.match(/\b[A-Za-z0-9+/=]{40,}\b/);
+  if (longTokenMatch) hits.push({ kind: '长随机串', sample: longTokenMatch[0].slice(0, 20) + '...', hint: '看起来像密钥 · 上传前确认' });
+  // 本地路径
+  if (/\/Users\/[a-zA-Z0-9_-]+\//.test(text) || /\/home\/[a-zA-Z0-9_-]+\//.test(text)) {
+    hits.push({ kind: '本地用户路径', sample: '/Users/<name>/...', hint: '路径里有你的用户名 · 考虑替换成 ~/...' });
+  }
+  // LLM apiKey 直接命中 (用户 config 里有就检测)
+  if (cfg && cfg.llm && cfg.llm.apiKey && text.includes(cfg.llm.apiKey.slice(0, 12))) {
+    hits.push({ kind: '!!! 你的 LLM apiKey', sample: cfg.llm.apiKey.slice(0, 12) + '...', hint: '上传前一定要删 · 不要 contribute 含 key 的内容' });
+  }
+  return hits;
+}
+
+// v0.13 contribute --from-file · 从 markdown 文件按 H1/H2/H3 切段
+// 让用户挑要 contribute 的段 · 每段一条 update + 自动 isMethod=true
+// 隐私扫描 + 预览 + 确认 · 默认交互 (--json 模式走 --section 直接选)
+async function cmdContributeFromFile(cfg, opts) {
+  const filePath = opts.fromFile;
+  if (!fs.existsSync(filePath)) {
+    if (opts.json) return errJson('文件不存在: ' + filePath, 'NO_FILE');
+    err('文件不存在: ' + filePath); process.exit(1);
+  }
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const sections = parseMarkdownSections(content);
+  if (sections.length === 0) {
+    if (opts.json) return errJson('没切出可发的段 (≥30 字带标题的段)', 'NO_SECTIONS');
+    err('没切出可发的段 (要求每段 ≥30 字 · 且要有 #/##/### 标题)'); process.exit(1);
+  }
+
+  // 决定 projectId
+  // 优先级: --project <slug> > 当前 cwd repoConfig > 交互选 > 报错
+  let projectId = null;
+  let projectName = null;
+  if (opts.project) {
+    const state = await apiState(cfg);
+    const p = state.projects.find(x => x.owner === cfg.handle && (x.slug === opts.project || x.name === opts.project));
+    if (!p) {
+      if (opts.json) return errJson('找不到项目: ' + opts.project, 'NO_PROJECT');
+      err('找不到你的项目: ' + opts.project); process.exit(1);
+    }
+    projectId = p.id; projectName = p.name;
+  } else {
+    const repoCfg = loadRepoConfig();
+    if (repoCfg) {
+      projectId = repoCfg.projectId; projectName = repoCfg.projectName;
+      log(sepia('  当前 repo 绑定 ') + bold(projectName) + sepia(' · 这次 contribute 挂在它名下'));
+    } else if (!opts.json) {
+      // 交互选项目
+      const { select } = require('@inquirer/prompts');
+      const state = await apiState(cfg);
+      const mine = state.projects.filter(x => x.owner === cfg.handle && x.status !== 'done');
+      if (mine.length === 0) { err('你还没建项目 · 先发一条 push 创建'); process.exit(1); }
+      const picked = await select({
+        message: 'contribute 到哪个项目?',
+        choices: mine.map(p => ({ name: p.name + sepia(' · ' + p.desc.slice(0, 40)), value: p.id })),
+      });
+      projectId = picked;
+      projectName = mine.find(p => p.id === picked).name;
+    } else {
+      return errJson('未指定项目 (--project) 且当前 repo 未绑定', 'NO_PROJECT_CTX');
+    }
+  }
+
+  // JSON 模式必须指定 --section · 否则没法非交互运行
+  if (opts.json && !opts.section) {
+    return errJson('--json 模式需要 --section "<标题>"', 'NO_SECTION_IN_JSON');
+  }
+
+  // 选段
+  let chosen = [];
+  if (opts.section) {
+    // --section "标题" 支持多次 · 模糊匹配 (大小写不敏感 · 子串)
+    const want = (Array.isArray(opts.section) ? opts.section : [opts.section]).map(s => s.toLowerCase());
+    chosen = sections.filter(s => want.some(w => s.heading.toLowerCase().includes(w)));
+    if (chosen.length === 0) {
+      const errMsg = '没匹配上 · 文件里的段: ' + sections.map(s => '"' + s.heading + '"').join(' / ');
+      if (opts.json) return errJson(errMsg, 'NO_MATCH');
+      err(errMsg); process.exit(1);
+    }
+  } else {
+    // 交互式选 (复选)
+    const { checkbox } = require('@inquirer/prompts');
+    log('');
+    log(sepia('  从 ') + bold(filePath) + sepia(' 切了 ') + bold(sections.length + ' 段') + sepia(' · 勾你想 contribute 的'));
+    log('');
+    chosen = await checkbox({
+      message: '选要 contribute 的段 (空格勾选 · 回车确认)',
+      pageSize: 12,
+      choices: sections.map(s => ({
+        name: '  '.repeat(s.level - 1) + s.heading + sepia(' (' + s.charCount + ' 字)'),
+        value: s,
+      })),
+    });
+    if (chosen.length === 0) { log(sepia('  没勾任何段 · 取消')); return; }
+  }
+
+  // 隐私扫描 · 每段单独扫
+  log('');
+  const successes = [];
+  const skipped = [];
+  for (const sec of chosen) {
+    const risks = scanPrivacyRisks(sec.fullText, cfg);
+    log(sepia('  ── ') + bold(sec.heading) + sepia(' · ' + sec.charCount + ' 字 ──'));
+    if (risks.length > 0) {
+      log(vermilion('  ⚠ 隐私扫描命中 ' + risks.length + ' 处:'));
+      risks.forEach(r => log(sepia('    · ') + bold(r.kind) + sepia(' (') + r.sample + sepia(') · ') + r.hint));
+      if (opts.json) {
+        skipped.push({ heading: sec.heading, reason: 'PRIVACY', risks });
+        log(sepia('    --json 模式 · 自动跳过含隐私风险段'));
+        continue;
+      }
+      const { confirm } = require('@inquirer/prompts');
+      const goAnyway = await confirm({ message: '还是要 contribute 这段? (你看过没问题就 y)', default: false });
+      if (!goAnyway) { skipped.push({ heading: sec.heading, reason: 'PRIVACY_USER' }); log(sepia('    跳过')); continue; }
+    }
+    // 预览前 200 字
+    const preview = sec.fullText.slice(0, 200).replace(/\n/g, ' ');
+    log(sepia('    预览: ') + preview + (sec.charCount > 200 ? sepia('...') : ''));
+    if (!opts.json) {
+      const { confirm } = require('@inquirer/prompts');
+      const go = await confirm({ message: '发这段 (标方法)?', default: true });
+      if (!go) { skipped.push({ heading: sec.heading, reason: 'USER_NO' }); log(sepia('    跳过')); continue; }
+    }
+    try {
+      const r = await apiAction(cfg, 'addUpdate', { projectId, text: sec.fullText, isMethod: true });
+      successes.push({ heading: sec.heading, updateId: r.result && r.result.id, charCount: sec.charCount });
+      log(moss('    ✓ 发了 · 自动标方法 · id ' + (r.result && r.result.id || '?')));
+    } catch (e) {
+      log(vermilion('    ✗ 失败: ' + e.message));
+      skipped.push({ heading: sec.heading, reason: 'API_ERROR', error: e.message });
+    }
+    log('');
+  }
+  if (opts.json) return outputJson({ ok: true, projectId, projectName, file: filePath, contributed: successes, skipped });
+  log('');
+  log(moss('  完成 · ') + bold(successes.length + ' 段') + sepia(' 进了方法库 · ') + sepia(skipped.length + ' 段') + sepia(' 跳过'));
+  log(sepia('  别人 ') + vermilion('tinker borrow "<关键词>"') + sepia(' 时就能搜到你这些段了'));
   log('');
 }
 
@@ -4204,6 +4447,21 @@ function parseArgs(args) {
     else if (a === '--limit') opts.limit = parseInt(args[++i], 10);
     else if (a.startsWith('--limit=')) opts.limit = parseInt(a.slice('--limit='.length), 10);
     else if (a === '--methods-only' || a === '--methodsOnly') opts.methodsOnly = true;
+    else if (a === '--from-file') opts.fromFile = args[++i];
+    else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
+    else if (a === '--section') {
+      // 支持多次 · 收集成数组 (匹配多段一起 contribute)
+      const v = args[++i];
+      if (opts.section) opts.section = Array.isArray(opts.section) ? [...opts.section, v] : [opts.section, v];
+      else opts.section = v;
+    }
+    else if (a.startsWith('--section=')) {
+      const v = a.slice('--section='.length);
+      if (opts.section) opts.section = Array.isArray(opts.section) ? [...opts.section, v] : [opts.section, v];
+      else opts.section = v;
+    }
+    else if (a === '--project') opts.project = args[++i];
+    else if (a.startsWith('--project=')) opts.project = a.slice('--project='.length);
     else if (a === '--unmark') {
       // 既支持 --unmark <id> 也支持 --unmark=<id> · 单独 --unmark 走 positional id
       const next = args[i + 1];
@@ -4255,6 +4513,160 @@ function cmdState(opts = {}) {
   log('');
 }
 
+// v0.12 触发器自检 · 让作者看见 Tinker 触发器系统的工作
+// 三段:当前 commit 信号 / state 拦截原因 / 今日累计胜出分布
+// 解决"我 commit 完了为什么没看到 prompt" 这个黑盒
+function cmdTriggers(opts = {}) {
+  const now = Date.now();
+  const state = loadPromptState();
+
+  // 收集结构化数据 (json 输出用 + 人类输出共用同一份)
+  const data = {
+    inGitRepo: inGitRepo(),
+    cwd: process.cwd(),
+    state: {
+      muted: state.mutedUntil && state.mutedUntil > now
+        ? { until: state.mutedUntil, remainingMs: state.mutedUntil - now } : null,
+      later: state.laterUntil && state.laterUntil > now
+        ? { until: state.laterUntil, remainingMs: state.laterUntil - now } : null,
+      dismissedToday: state.dismissedTodayKey === todayKey(),
+      cooldownActive: !!(state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000),
+      cooldownRemainingMin: state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000
+        ? Math.ceil((30 * 60 * 1000 - (now - state.lastPromptedAt)) / 60000) : 0,
+    },
+    commit: null,
+    repoBound: false,
+    fired: [],
+    winner: null,
+    wouldPrompt: false,
+    blockReason: null,
+    todayHits: null,
+    triggerCount: 24,
+  };
+
+  if (data.inGitRepo) {
+    try {
+      const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+      const bodyLen = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim().length;
+      let stat = null;
+      try {
+        const out = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
+        const im = out.match(/(\d+) insertion/);
+        const dm = out.match(/(\d+) deletion/);
+        const fm = out.match(/(\d+) files? changed/);
+        stat = { files: fm ? +fm[1] : 0, ins: im ? +im[1] : 0, del: dm ? +dm[1] : 0 };
+      } catch {}
+      data.commit = { title, bodyLen, stat };
+    } catch {}
+
+    const repoCfg = loadRepoConfig();
+    if (repoCfg) {
+      data.repoBound = true;
+      data.project = { id: repoCfg.projectId, name: repoCfg.projectName };
+      const cfgForUi = (() => { try { return mustHaveConfig({ requireToken: false }); } catch { return null; } })();
+      const { winner, allFired } = evaluateAllTriggersDetailed(state, repoCfg, cfgForUi);
+      data.fired = allFired.map(r => ({
+        kind: r.kind || r.reason || null,
+        reason: r.reason || null,
+        priority: r.priority,
+        msg: stripAnsi(r.msg || ''),
+      }));
+      if (winner) {
+        data.winner = {
+          kind: winner.kind || winner.reason || null,
+          priority: winner.priority,
+          msg: stripAnsi(winner.msg || ''),
+        };
+        const blockedByMute = data.state.muted;
+        const blockedByLater = data.state.later;
+        const blockedByDismissed = data.state.dismissedToday;
+        const blockedByCooldown = data.state.cooldownActive && winner.priority < 100;
+        if (blockedByMute) data.blockReason = '静音中';
+        else if (blockedByLater) data.blockReason = '延后中';
+        else if (blockedByDismissed) data.blockReason = '今日已 skip';
+        else if (blockedByCooldown) data.blockReason = '冷却内 + priority < 100';
+        data.wouldPrompt = !data.blockReason;
+      }
+    }
+  }
+
+  // 今日累计 (跨天清零的 state.todayTriggerHits)
+  const tk = todayKey();
+  if (state.todayTriggerHits && state.todayTriggerHits.date === tk) {
+    const ws = state.todayTriggerHits.winners || {};
+    const kinds = Object.keys(ws).sort((a, b) => ws[b].count - ws[a].count);
+    data.todayHits = kinds.map(k => ({ kind: k, count: ws[k].count, suppressed: ws[k].suppressed }));
+  }
+
+  if (opts.json) { outputJson(data); return; }
+
+  // 人类可读
+  log('');
+  log(bold('Tinker 触发器自检'));
+  log('');
+
+  // state
+  log(sepia('state:'));
+  log(sepia('  静音:    ') + (data.state.muted ? bold('是 · 到 ' + new Date(data.state.muted.until).toLocaleString()) : sepia('否')));
+  log(sepia('  延后:    ') + (data.state.later ? bold('是 · 到 ' + new Date(data.state.later.until).toLocaleString()) : sepia('否')));
+  log(sepia('  今日 skip:') + (data.state.dismissedToday ? bold(' 是 · 明天再问') : sepia(' 否')));
+  if (data.state.cooldownActive) {
+    log(sepia('  冷却:    ') + bold('是 · 还剩 ' + data.state.cooldownRemainingMin + ' 分钟') + sepia(' · priority < 100 不 prompt'));
+  } else {
+    log(sepia('  冷却:    ') + sepia('否'));
+  }
+  log('');
+
+  // commit
+  if (!data.inGitRepo) {
+    log(sepia('  ⚠ 不在 git 仓库 · 触发器扫描跳过'));
+  } else if (data.commit) {
+    log(sepia('当前 commit: ') + bold(data.commit.title.slice(0, 80)));
+    const statStr = data.commit.stat
+      ? `${data.commit.stat.files} 文件 / +${data.commit.stat.ins} / -${data.commit.stat.del}`
+      : '(无 diff)';
+    log(sepia('  body ') + bold(data.commit.bodyLen + ' 字') + sepia(' · diff ') + bold(statStr));
+    log('');
+  }
+
+  // 触发器扫描
+  if (!data.repoBound) {
+    log(sepia('  ⚠ 这个 repo 没绑定 Tinker 项目 · 跑 ') + vermilion('tinker hook install') + sepia(' 才能用'));
+  } else {
+    log(sepia('触发器扫描 (24 个):'));
+    if (data.fired.length === 0) {
+      log(sepia('  全部没命中 · 安静'));
+    } else {
+      data.fired.forEach(r => {
+        const label = (r.kind || r.reason || '?').padEnd(28);
+        log('  ' + vermilion('✓') + ' ' + label + sepia('priority ' + r.priority));
+      });
+      const notFired = data.triggerCount - data.fired.length;
+      if (notFired > 0) log(sepia('  其他 ' + notFired + ' 个没命中'));
+      log('');
+      if (data.winner) {
+        log(sepia('胜出: ') + bold(data.winner.kind) + sepia(' (priority ' + data.winner.priority + ')'));
+        if (data.wouldPrompt) {
+          log(sepia('  ') + vermilion('→') + bold(' 会 prompt'));
+        } else {
+          log(sepia('  ') + sepia('被拦: ') + bold(data.blockReason));
+        }
+      }
+    }
+  }
+
+  // 今日累计
+  if (data.todayHits && data.todayHits.length > 0) {
+    log('');
+    log(sepia('今天累计 (04:00 起):'));
+    data.todayHits.forEach(h => {
+      const supStr = h.suppressed > 0 ? sepia(' (' + h.suppressed + ' 次被冷却拦)') : '';
+      log(sepia('  ') + h.kind.padEnd(28) + bold(h.count + ' 次胜出') + supStr);
+    });
+  }
+  log('');
+}
+
 // `tinker schema --json` · 给 AI agent 一次拿到完整 CLI 能力地图
 // 不需要解析 help 文本 · 不会因为 --help 改文案而变
 function cmdSchema(opts = {}) {
@@ -4279,6 +4691,9 @@ function cmdSchema(opts = {}) {
       { name: 'state', purpose: '读 prompt-state.json (mute/cooldown/uiSession 等)', args: [
         { flag: '--json', purpose: '结构化' },
       ], jsonOutput: true, example: 'tinker state --json' },
+      { name: 'triggers', purpose: '触发器自检 · 当前 commit 上 24 个触发器命中情况 + state 拦截原因 + 今日累计', args: [
+        { flag: '--json', purpose: '结构化' },
+      ], jsonOutput: true, example: 'tinker triggers' },
       { name: 'session', purpose: '看 / 强制结束 UI session', args: [
         { arg: 'status | end', purpose: 'status 看 · end 标结束' },
         { flag: '--json', purpose: '结构化' },
@@ -4326,11 +4741,14 @@ function cmdSchema(opts = {}) {
         { flag: '--limit N', purpose: '返回条数 · 默认 10 · 上限 50' },
         { flag: '--json', purpose: 'machine-readable 输出' },
       ], jsonOutput: true, example: 'tinker borrow "supabase 邮箱登录" --json' },
-      { name: 'contribute', purpose: '标自己一条 update 为方法 · 让别人 borrow 能看到', args: [
+      { name: 'contribute', purpose: '标方法 · 现有 update 升格 / 或从 markdown 文件按段批量发', args: [
         { arg: '<updateId>', purpose: '不传默认拿最近一条 push' },
         { flag: '--unmark <updateId>', purpose: '取消方法标' },
+        { flag: '--from-file <path.md>', purpose: '按 H1/H2/H3 切段交互选 · 隐私扫描 · 每段一条 update + 自动标方法' },
+        { flag: '--section "<标题>"', purpose: '配合 --from-file · 直接选指定段 (可多次)' },
+        { flag: '--project <slug>', purpose: '配合 --from-file · 指定项目 (否则当前 repo 绑定 / 交互选)' },
         { flag: '--json', purpose: 'machine-readable 输出' },
-      ], jsonOutput: true, example: 'tinker contribute u-xxx' },
+      ], jsonOutput: true, example: 'tinker contribute --from-file docs/08.md --section "能力地图"' },
       { name: 'mcp', purpose: '启动 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool', args: [], jsonOutput: false, example: 'tinker mcp' },
     ],
     pendingFile: path.join(CONFIG_DIR, 'pending.json'),
@@ -4419,6 +4837,7 @@ async function main() {
         break;
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
+      case 'triggers': cmdTriggers(opts); break;
       case 'schema': cmdSchema(opts); break;
       case 'mcp':
         // 启动 MCP server · stdio 模式 · 给 Claude Code / Cursor 等当作 first-class tool
@@ -4473,6 +4892,8 @@ module.exports = {
   withIdempotency, idemGet, idemSet,
   // drift 检测的注册表 (MCP 也可暴露)
   loadReposRegistry, registerRepoForDrift,
+  // v0.13 markdown 工具 (单测可见)
+  parseMarkdownSections, scanPrivacyRisks,
 };
 
 // 直接 ./tinker 跑才走 main · require 拿模块时不跑
