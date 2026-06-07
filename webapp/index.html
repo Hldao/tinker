@@ -227,6 +227,26 @@
   .entry-status.done { color: var(--moss); }
   /* v0.79 feed 卡片文本最多 6 行 · 超出 ... 截断 · 点卡片进项目页看全文 */
   .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; text-overflow: ellipsis; }
+  /* v0.82 方法 hero 板块 · 首页顶部跟下方进展 feed 板块分离
+     不被时间倒序压 · 永远在顶 · 沉淀型资产应有的位置
+     视觉: 浅米底 + 苔色边 · 跟 feed 主区背景区分 */
+  .method-hero-section { margin-bottom: 40px; padding: 24px 28px; background: rgba(120, 113, 108, 0.04); border-left: 3px solid var(--moss); border-radius: 2px; }
+  .method-hero-section:empty { display: none; }
+  .method-hero-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; gap: 16px; flex-wrap: wrap; }
+  .method-hero-title { font-family: 'Newsreader', 'Songti SC', serif; font-size: 19px; color: var(--ink); font-weight: 500; letter-spacing: 0.02em; }
+  .method-hero-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; }
+  .method-hero-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
+  .method-hero-card:hover { border-color: var(--moss); transform: translateY(-1px); }
+  .method-hero-card-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; align-self: flex-start; }
+  .method-hero-card-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.5; color: var(--ink); }
+  .method-hero-card-untitled { font-family: 'Newsreader', 'Songti SC', serif; font-size: 14px; color: var(--sepia); font-style: italic; }
+  .method-hero-card-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-top: 4px; flex-wrap: wrap; }
+  .method-hero-card-meta .nh { color: var(--sepia); cursor: pointer; }
+  .method-hero-card-meta .nh:hover { color: var(--vermilion); }
+  .method-hero-card-actions { display: flex; gap: 12px; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .method-hero-card-copy { color: var(--moss); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .method-hero-card-copy:hover { color: var(--vermilion); }
   /* v0.80 方法 first-class feed 卡片 · 跟进展同尺寸但结构不同 (scenario 主 / markdown 走 CTA) */
   .entry-method { /* 跟普通 entry 同 padding · 不降级 */ }
   .entry-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-left: 8px; font-weight: 500; }
@@ -6366,6 +6386,9 @@
         <span id="feed-stats" class="ribbon-stats"></span>
       </div>
     </div>
+    <!-- v0.82 沉淀方法 hero · 跟下方进展 feed 是两个平行板块 · 不被时间倒序压底 -->
+    <div id="method-hero-section" class="method-hero-section"></div>
+
     <div id="feed-list">
       <div class="loading-initial text-center py-16 serif italic" style="color: var(--sepia);">
         在拉取动静 ·
@@ -7319,12 +7342,12 @@ function getFeedEvents() {
   const events = [];
   // spec §5.2 + status-picker 文案: 「归档」从 feed 移除
   // active / stuck / done / paused 都在 feed · archive 不在
-  // v0.81 methods 是独立 entity · 跟 updates 平级进 feed · 各自走自己卡片模板
+  // v0.82 methods 不进 feed 时间倒序 · 方法是沉淀型资产 · 不该被时间压底
+  // 走顶部独立 method-hero-section (renderMethodHero) · 跟 feed 是两个平行板块
   state.projects.forEach(p => {
     if (p.status === 'archive') return;
     p.updates.forEach((u, idx) => {
-      // 老数据 isMethod=true 的 update 可能还在 · 这次迁移没删 · 跳过 (方法走 methods 表)
-      if (u.isMethod) return;
+      if (u.isMethod) return; // 老数据兼容
       events.push({
         owner:p.owner, projectId:p.id, projectName:p.name, projectSlug:p.slug,
         updateId: u.id,
@@ -7337,39 +7360,71 @@ function getFeedEvents() {
       });
     });
   });
-
-  // v0.81 全站 methods · 拼 events 进 feed · 走 makeMethodEntryEl 模板
-  // 没绑定 project 的 method (projectId=null) 也进 feed · 项目维度走 fallback "（无关联项目）"
-  const projectsById = new Map(state.projects.map(p => [p.id, p]));
-  (state.methods || []).forEach(m => {
-    const p = m.projectId ? projectsById.get(m.projectId) : null;
-    if (p && p.status === 'archive') return;
-    events.push({
-      owner: m.owner,
-      projectId: p ? p.id : null,
-      projectName: p ? p.name : '（独立方法）',
-      projectSlug: p ? p.slug : null,
-      methodId: m.id,
-      updateId: m.id, // 兼容 makeMethodEntryEl 现有 e.updateId 字段
-      text: m.text,
-      at: m.at,
-      agoOrder: parseAgoOrder(m.at),
-      tools: p ? p.tools : [],
-      status: p ? p.status : 'active',
-      images: null,
-      feedbackAsk: undefined,
-      productLink: p ? p.productLink : null,
-      isMethod: true,
-      scenario: m.scenario || null,
-      title: m.title || null,
-    });
-  });
-
   events.sort((a,b) => a.agoOrder - b.agoOrder);
   return events;
 }
 
+// v0.82 沉淀方法 hero · 跟下方 feed 是两个平行板块
+// 排序优先级:
+// 1. 借用次数 (有数据时 · borrowCount desc · 沉淀价值越高越靠前)
+// 2. 最近更新 (没借用数据时 · updated_at / at desc)
+// 永远在首页顶部 · 不被时间倒序压底 · 沉淀资产应有的位置
+function renderMethodHero() {
+  const root = document.getElementById('method-hero-section');
+  if (!root) return;
+  const methods = state.methods || [];
+  if (methods.length === 0) { root.innerHTML = ''; return; }
+
+  // 排序: borrowCount desc → updatedAt desc → at desc
+  // borrowCount 字段还没在 state.js 加 (后续优化) · 现在 fallback updatedAt / at
+  const sorted = [...methods].sort((a, b) => {
+    const ba = a.borrowCount || 0;
+    const bb = b.borrowCount || 0;
+    if (ba !== bb) return bb - ba;
+    const ua = a.updatedAt || a.at;
+    const ub = b.updatedAt || b.at;
+    return ub - ua;
+  }).slice(0, 8); // 最多 8 张 · 防屏幕被刷一屏
+
+  const projectsById = new Map(state.projects.map(p => [p.id, p]));
+
+  const cards = sorted.map(m => {
+    const p = m.projectId ? projectsById.get(m.projectId) : null;
+    const scenarioOrFallback = m.scenario
+      ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
+      : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 80))}…</div>`;
+    const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
+    const projectLine = p
+      ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
+      : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
+    return `
+      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+        <span class="method-hero-card-badge">✤ 方法</span>
+        ${scenarioOrFallback}
+        <div class="method-hero-card-meta">
+          <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
+          <span style="color: var(--sepia-light);">·</span>
+          ${projectLine}
+        </div>
+        <div class="method-hero-card-actions">
+          <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="method-hero-head">
+      <span class="method-hero-title">沉淀方法 · ${methods.length} 条</span>
+      <span class="method-hero-sub">跨项目复用 · 不按时间排</span>
+    </div>
+    <div class="method-hero-scroll">${cards}</div>
+  `;
+}
+
 function renderFeed() {
+  // v0.82 沉淀方法 hero · 板块平行于下方 feed · 永远在顶
+  renderMethodHero();
   let events = getFeedEvents();
 
   // v0.58 今日集体统计 · 跟陈列馆/工作室 mini-stats 系统呼应
