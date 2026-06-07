@@ -360,7 +360,11 @@
   /* 完工 ship update · 视觉强调 · 跟普通进展区分 */
   .tl-ship-badge { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); letter-spacing: 0.28em; margin-bottom: 10px; font-weight: 500; }
   /* 方法标 (v0.12 · 方法库) · 比 ship 低调 · 苔色 + 极细外框 · 提示性而非主角 */
-  .tl-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.22em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-bottom: 10px; font-weight: 500; }
+  /* v0.76 方法库双轨制 ·
+     私人书签 = 作者自标 (".tl-method-badge" sepia 弱化 · 不承诺公共价值)
+     公共认证 = 被 3+ 人 "用了·跑通了" 后系统升格 (".tl-proven-badge" moss 强调 · 真实复用反馈链承担) */
+  .tl-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); letter-spacing: 0.18em; padding: 2px 8px; border: 1px solid var(--sepia-light); border-radius: 2px; margin-bottom: 10px; font-weight: 400; }
+  .tl-proven-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.22em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-bottom: 10px; font-weight: 500; }
   /* v0.13 长方法折叠 · 默认收起 · 点开看全文 */
   .tl-text-foldable { max-height: 150px; overflow: hidden; position: relative; }
   .tl-text-foldable.expanded { max-height: none; }
@@ -7812,12 +7816,16 @@ function renderProject(owner, slug) {
         const usedByList = u.usedBy || [];
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
         const notesAboutThis = (p.notes || []).filter(n => n.updateId === u.id);
+        // v0.76 方法库双轨制 · proven (公共认证) 优先覆盖 method (私人书签)
+        // 3 人独立"用了·跑通了"反馈 = 达成 spec §5.1 #2 真实复用门槛 · social engineering 难门槛
+        const isProven = usedByList.length >= 3;
+        const isMethodOrProven = u.isMethod || isProven;
         return `
           <div class="tl-entry ${u.kind === 'ship' ? 'tl-entry-ship' : ''}" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
               ${u.kind === 'ship' ? `<div class="tl-ship-badge">✦ 完工</div>` : ''}
-              ${u.isMethod ? `<div class="tl-method-badge">✿ 方法</div>` : ''}
+              ${isProven ? `<div class="tl-proven-badge">✿ 跑通过的方法</div>` : (u.isMethod ? `<div class="tl-method-badge">✤ 存了</div>` : '')}
               ${u.feedbackAsk !== undefined ? `
                 <div class="tl-feedback-ask-block">
                   <div class="tl-feedback-ask-label">求反馈</div>
@@ -7825,11 +7833,11 @@ function renderProject(owner, slug) {
                 </div>
               ` : ''}
               ${(() => {
-                // v0.13 方法标的长内容默认折叠 (≥400 字才折)
-                const isLongMethod = u.isMethod && (u.text || '').length >= 400;
+                // v0.76: 长内容默认折叠 · 私人书签 OR 公共认证都触发 (≥400 字才折)
+                const isLongMethod = isMethodOrProven && (u.text || '').length >= 400;
                 return `
                   <div class="tl-text ${isLongMethod ? 'tl-text-foldable' : ''}" id="tl-text-${u.id}">${renderRichText(u.text)}</div>
-                  ${isLongMethod ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整方法 ↓</span>` : ''}
+                  ${isLongMethod ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整 ↓</span>` : ''}
                 `;
               })()}
               ${u.prompt ? `
@@ -7841,11 +7849,11 @@ function renderProject(owner, slug) {
               ` : ''}
               ${imagesHtml}
               <div class="tl-actions">
-                ${u.isMethod ? `<span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>` : ''}
+                ${isMethodOrProven ? `<span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>` : ''}
                 ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
                 <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
-                  <span class="small-action tl-method-toggle ${u.isMethod ? 'active' : ''}" onclick="toggleMethodFlag('${u.id}', ${u.isMethod ? 'true' : 'false'})">${u.isMethod ? '取消方法标' : '标方法'}</span>
+                  <span class="small-action tl-method-toggle ${u.isMethod ? 'active' : ''}" onclick="toggleMethodFlag('${u.id}', ${u.isMethod ? 'true' : 'false'})">${u.isMethod ? '不存了' : '存一笔'}</span>
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
@@ -9563,16 +9571,17 @@ function toggleFold(id) {
   }
 }
 
-// 方法标 (v0.12 方法库) · 让作者把自己一条 update 升格成"方法"
-// 被标的进入方法库 FTS 搜索时排在前面 · 别人 tinker borrow 能优先看到
+// v0.76 双轨制 · 作者自标 = 私人书签 ("存一笔" · 不承诺公共价值)
+// 公共认证 = 被 3+ 人 "用了·跑通了" 后系统升格 (前端动态算 usedByList.length)
+// 之前文案 "标方法 · 别人 borrow 时能搜到" 暗示了公共承诺 · AI 装大佬轻量版 · 已降级
 async function toggleMethodFlag(updateId, isCurrentlyMethod) {
   try {
     if (isCurrentlyMethod) {
       await apiAction('unmarkMethod', { updateId });
-      showToast('取消方法标了');
+      showToast('不存了 · 撤回了');
     } else {
       await apiAction('markAsMethod', { updateId });
-      showToast('已标为方法 · 别人 borrow 时能搜到');
+      showToast('存下了 · 以后可以在你的底稿里翻到');
     }
     // 重新渲染当前项目页 · 简单方式: 找到这条 update 所属项目重新 render
     for (const p of state.projects) {

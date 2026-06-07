@@ -536,7 +536,7 @@ function markAsMethod({ updateId }, { currentUserId }) {
   `).get(updateId);
   if (!u) throw new Error('找不到这条进展');
   if (u.owner_id !== currentUserId) throw new Error('只能把自己写的标成方法');
-  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 方法库希望有点干货 (至少 20 字)');
+  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 至少写两句吧 (太短回头自己也认不出)');
   db.prepare('UPDATE updates SET is_method = 1 WHERE id = ?').run(updateId);
   return { ok: true, updateId };
 }
