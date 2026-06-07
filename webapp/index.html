@@ -7908,7 +7908,7 @@ function renderProject(owner, slug) {
               <span id="method-library-arrow" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: none; letter-spacing: 0.05em;">展开 ↓</span>
             </div>
             <div id="method-library-content" style="display: none;">
-              <p style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-bottom: 16px; letter-spacing: 0.03em;">作者自己沉淀的方法 / 经验 · 不混进主时间线 · 别人 <span style="color: var(--vermilion);">tinker borrow</span> 时能搜到</p>
+              <p style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-bottom: 16px; letter-spacing: 0.03em;">作者自己沉淀的方法 / 经验 · 不混进主时间线 · 别人搜方法时能搜到</p>
               ${methodUpdates.map(renderUpdateEntry).join('')}
             </div>
           </div>
@@ -7937,7 +7937,7 @@ function renderProject(owner, slug) {
         <div class="mb-12 psect">
           <div class="section-label">反馈区</div>
           ${p.reactions.tinkered.length > 0 ? `
-            <div class="sub-label">因这个启发动手 · ${p.reactions.tinkered.length} 人</div>
+            <div class="sub-label">因这个启发动手</div>
             ${p.reactions.tinkered.map(t=>{
               // v0.12 显示具体哪条 update 启发了 · 老数据 (没 inspiredByUpdateId) 自动 fallback
               const insp = t.inspiredByUpdateId
@@ -7958,7 +7958,7 @@ function renderProject(owner, slug) {
             `}).join('')}
           ` : ''}
           ${p.reactions.wantToTry.length > 0 ? `
-            <div class="sub-label">想试试 · ${p.reactions.wantToTry.length} 人</div>
+            <div class="sub-label">想试试</div>
             <div class="serif" style="font-size: 15px; padding: 4px 0;">
               ${p.reactions.wantToTry.map(u=>`<a class="react-action" onclick="showScreen('workshop','${u}')">@${u}</a>`).join(' ')}
             </div>
@@ -7973,7 +7973,7 @@ function renderProject(owner, slug) {
         <span>便签墙 (${p.notes.length})</span>
         <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNote()">+ 留个便签</span>
       </div>
-      <p class="mb-4 text-xs serif" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接 commit 一条进展</p>
+      <p class="mb-4 text-xs serif" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接记一笔进展</p>
       ${p.notes.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
       ${p.notes.map((n, nIdx) => {
         const refUpdate = n.updateId ? p.updates.find(u => u.id === n.updateId) : null;
