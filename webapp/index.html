@@ -816,6 +816,12 @@
   .modal-paper { background: var(--bg); border: 1px solid var(--ink); padding: 28px 32px; max-width: 520px; }
   .modal-title { font-family: 'Newsreader', serif; font-size: 24px; font-weight: 500; letter-spacing: -0.01em; margin-bottom: 4px; }
   .modal-sub { color: var(--sepia); font-style: italic; font-family: 'Newsreader', serif; font-size: 14px; margin-bottom: 18px; }
+  /* v0.82 update modal 双形态 toggle · 记一笔 (进展) | 沉淀一笔 (方法)
+     跟 view-pill / category-pill 视觉一致 · vermilion active */
+  .update-mode-toggle { display: flex; gap: 24px; align-items: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+  .update-mode-pill { font-family: 'Newsreader', serif; font-size: 17px; color: var(--sepia); cursor: pointer; padding: 4px 0; border-bottom: 1px solid transparent; transition: all 0.15s; }
+  .update-mode-pill:hover { color: var(--ink); }
+  .update-mode-pill.active { color: var(--vermilion); border-bottom-color: var(--vermilion); font-weight: 500; }
 
   /* 图片上传区 */
   .upload-area {
@@ -6620,9 +6626,28 @@
 <div id="modal-update" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper update-modal w-full" style="max-width: 580px;">
     <div class="modal-context-bar" id="update-context-bar"></div>
-    <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.28em;">记 进 展</div>
-    <h3 class="modal-title">今天动了什么</h3>
-    <p class="modal-sub">跑通了什么、卡在哪儿、试错了什么，都行。短句就好。</p>
+
+    <!-- v0.82 双形态 toggle · 默认进展 -->
+    <div class="update-mode-toggle">
+      <span class="update-mode-pill active" data-mode="progress" onclick="setUpdateMode('progress')">记一笔</span>
+      <span class="update-mode-pill" data-mode="method" onclick="setUpdateMode('method')">沉淀一笔</span>
+    </div>
+
+    <!-- 进展形态 头部 (default) -->
+    <div id="update-progress-head">
+      <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.28em;">记 进 展</div>
+      <h3 class="modal-title">今天动了什么</h3>
+      <p class="modal-sub">跑通了什么、卡在哪儿、试错了什么，都行。短句就好。</p>
+    </div>
+
+    <!-- 方法形态 头部 (hidden by default) -->
+    <div id="update-method-head" class="hidden">
+      <div class="mono text-xs mb-2" style="color: var(--vermilion); letter-spacing: 0.28em;">沉 淀 方 法</div>
+      <h3 class="modal-title">沉淀一笔方法</h3>
+      <p class="modal-sub">完整的实操步骤 · 给自己备查 · 别人搜方法时也能用上。</p>
+      <label class="mono text-xs block mb-1 mt-3" style="color: var(--sepia); letter-spacing: 0.18em;">用于什么场景</label>
+      <input id="update-scenario" class="input-bare" placeholder="比如 给 Supabase auth 配 magic link 时" style="font-size: 15px; margin-bottom: 14px;">
+    </div>
 
     <textarea id="update-text" class="input-bare" rows="4" placeholder="今天..." style="font-size: 17px; resize: vertical;"></textarea>
 
@@ -6635,7 +6660,7 @@
       <div class="upload-hint">调 bug 截图、运行效果、设计稿，随手粘屏（⌘V）也行。</div>
     </div>
 
-    <!-- v0.4: 跟反馈闭环联动的可选项 · 默认都不勾 · 不轰炸接走的人 -->
+    <!-- 进展形态独享 · v0.4 反馈闭环 checkbox · 默认都不勾 -->
     <div id="update-extras" class="update-extras">
       <label class="update-extra-row">
         <input type="checkbox" id="update-alsostuck">
@@ -6657,7 +6682,7 @@
 
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">先不记</button>
-      <button onclick="submitUpdate()" class="btn-act-primary">✎ 记上</button>
+      <button id="update-submit-btn" onclick="submitUpdate()" class="btn-act-primary">✎ 记上</button>
     </div>
   </div>
 </div>
@@ -9151,6 +9176,35 @@ async function submitTinkered() {
   } catch (e) { showToast(e.message); }
 }
 
+// v0.82 双形态: progress = 记一笔进展 (addUpdate) · method = 沉淀一笔方法 (createMethod)
+let currentUpdateMode = 'progress';
+
+function setUpdateMode(mode) {
+  if (mode !== 'progress' && mode !== 'method') return;
+  currentUpdateMode = mode;
+  document.querySelectorAll('#modal-update .update-mode-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.mode === mode);
+  });
+  document.getElementById('update-progress-head').classList.toggle('hidden', mode !== 'progress');
+  document.getElementById('update-method-head').classList.toggle('hidden', mode !== 'method');
+  // 方法是纯文本资产 · 不要图片 / 不要 checkbox (不通知 不卡住 不求反馈)
+  const upload = document.querySelector('#modal-update .upload-area');
+  if (upload) upload.style.display = (mode === 'method') ? 'none' : '';
+  const extras = document.getElementById('update-extras');
+  if (extras) extras.style.display = (mode === 'method') ? 'none' : '';
+  // 文本框 placeholder / 高度跟随形态
+  const textEl = document.getElementById('update-text');
+  if (mode === 'method') {
+    textEl.placeholder = '完整步骤、代码、注意点 · markdown 可用';
+    textEl.rows = 8;
+  } else {
+    textEl.placeholder = '今天...';
+    textEl.rows = 4;
+  }
+  const btn = document.getElementById('update-submit-btn');
+  if (btn) btn.textContent = mode === 'method' ? '✤ 存下' : '✎ 记上';
+}
+
 function openUpdate(projectId) {
   isEditingUpdate = null;
   currentUpdateCtx = projectId || currentProjectCtx;
@@ -9160,9 +9214,13 @@ function openUpdate(projectId) {
   const draftKey = 'update-' + currentUpdateCtx;
   const draft = loadDraft(draftKey);
   document.getElementById('update-text').value = (draft && draft.text) || '';
+  document.getElementById('update-scenario').value = '';
 
   renderPendingImages();
   resetUpdateExtras(currentUpdateCtx, /* isEdit */ false);
+  // v0.82: 新建默认 progress · toggle 可见
+  document.querySelector('#modal-update .update-mode-toggle').style.display = '';
+  setUpdateMode('progress');
 
   // v0.68 顶部 context bar · "在 [项目名] 记 · 今天的第 N 笔"
   const ctxBar = document.getElementById('update-context-bar');
@@ -9816,6 +9874,9 @@ function editUpdate(projectId, updateIdx) {
   // 编辑模式 · feedbackAsk 已存在的话预填回去(undefined = 没勾过)
   const existingAsk = (u.feedbackAsk !== undefined && u.feedbackAsk !== null) ? (u.feedbackAsk || true) : false;
   resetUpdateExtras(projectId, /* isEdit */ true, existingAsk);
+  // v0.82: 编辑模式锁 progress (现有 update 不切形态 · 方法是独立 entity 不在这编辑)
+  document.querySelector('#modal-update .update-mode-toggle').style.display = 'none';
+  setUpdateMode('progress');
   document.getElementById('modal-update').classList.remove('hidden');
   setTimeout(() => document.getElementById('update-text').focus(), 50);
 }
@@ -9990,6 +10051,27 @@ function openPickProject() {
 async function submitUpdate() {
   const text = document.getElementById('update-text').value.trim();
   if (!text) { showToast('写点什么?'); return; }
+
+  // v0.82: method 形态走 createMethod · 跟 progress 路径完全独立
+  if (currentUpdateMode === 'method' && !isEditingUpdate) {
+    if (text.length < 20) { showToast('内容太短 · 至少写两句 (回头自己看也认得出)'); return; }
+    const scenario = document.getElementById('update-scenario').value.trim();
+    const p = projectById(currentUpdateCtx);
+    try {
+      await apiAction('createMethod', {
+        text,
+        scenario: scenario || undefined,
+        projectId: p ? p.id : undefined,
+      });
+      pendingImages = [];
+      clearDraft('update-' + currentUpdateCtx);
+      closeModal('modal-update');
+      if (p) renderProject(p.owner, p.slug);
+      showToast('沉淀下来了 · 进了方法库');
+    } catch (e) { showToast(e.message); }
+    return;
+  }
+
   const images = pendingImages.length > 0
     ? pendingImages.map(i => ({ src: i.src, caption: i.caption || '上传的图' }))
     : undefined;
