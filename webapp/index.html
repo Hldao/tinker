@@ -6364,7 +6364,7 @@
         </span>
         <span class="view-pill" data-view="gallery" onclick="switchMainView('gallery')">
           <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-          项目分组看积累
+          看陈列馆
         </span>
       </div>
       <div class="workshop-ribbon-right">
@@ -6474,7 +6474,7 @@
         </span>
         <span class="view-pill active" data-view="gallery" onclick="switchMainView('gallery')">
           <svg class="view-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-          项目分组看积累
+          看陈列馆
         </span>
       </div>
       <div class="workshop-ribbon-right">
@@ -7380,9 +7380,10 @@ function renderFeed() {
     }
     items.forEach(e => list.appendChild(makeEntryEl(e)));
   });
-  // 静态 footer 跟 list 一起出场 · 初始化时是 hidden · 防止 "在拉取" + "就这些了" 同框矛盾
+  // v0.78: footer 条件渲染 · feed 满了时 "我们刚起步" 显得多余甚至滑稽
+  // 仅 events < 5 时显示 (空 / 稀疏时 anti-AI 焦虑营销文案才有意义)
   const footer = document.getElementById('feed-static-footer');
-  if (footer) footer.style.display = '';
+  if (footer) footer.style.display = events.length < 5 ? '' : 'none';
 }
 
 // 按日 group · 返回 [{day, items, dateKey}, ...] · 保持时间倒序
@@ -7452,7 +7453,7 @@ function makeEntryEl(e) {
         <span class="entry-slash">/</span>
         <span class="entry-project">${escapeHtml(e.projectName)}</span>
         ${seeking ? `<span class="entry-seeking-badge">求反馈</span>` : ''}
-        <span class="entry-status ${e.status}" title="${statusText(e.status)}">${statusText(e.status)}</span>
+        ${e.status !== 'active' ? `<span class="entry-status ${e.status}" title="${statusText(e.status)}">${statusText(e.status)}</span>` : ''}
       </div>
       ${seeking && e.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(e.feedbackAsk)}</div>` : ''}
       <div class="entry-text">${renderRichText(e.text)}</div>
