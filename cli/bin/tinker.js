@@ -48,6 +48,16 @@ function sepia(s) { return C.sepia + s + C.reset; }
 function err(s) { process.stderr.write(C.red + '✗ ' + s + C.reset + '\n'); }
 function ok(s) { log(moss('✓ ') + s); }
 
+// JSON 模式输出 helper · 给 AI agent 用 · 错误也走 JSON 走 stdout + exit 1
+// 所有 --json 命令统一用这两个 · 不要走 log/err 文本输出
+function outputJson(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
+function errJson(msg, code, extra) {
+  const out = { ok: false, error: msg, code: code || 'ERROR' };
+  if (extra) Object.assign(out, extra);
+  outputJson(out);
+  process.exit(1);
+}
+
 // =============================================
 // Config
 // =============================================
@@ -756,8 +766,21 @@ async function cmdLogin() {
   log(dim('  下一步: ') + vermilion('tinker draft') + sepia(' 起草 · ') + vermilion('tinker push <draft.md>') + sepia(' 发布'));
 }
 
-async function cmdConfig() {
+async function cmdConfig(opts = {}) {
   const cfg = loadConfig();
+  if (opts.json) {
+    if (!cfg) { errJson('还没配置 · 先跑 tinker login', 'NO_CONFIG'); return; }
+    outputJson({
+      ok: true,
+      serverUrl: cfg.serverUrl,
+      handle: cfg.handle || null,
+      tokenSet: !!cfg.token,
+      tokenSuffix: cfg.token ? cfg.token.slice(-4) : null,
+      llm: cfg.llm ? { provider: cfg.llm.provider, configured: true } : { configured: false },
+      configFile: CONFIG_FILE,
+    });
+    return;
+  }
   if (!cfg) { err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1); }
   log(sepia('\n  current config:'));
   log('    server     ' + bold(cfg.serverUrl));
@@ -781,11 +804,33 @@ async function cmdConfig() {
   log('');
 }
 
-async function cmdProjects() {
+async function cmdProjects(opts = {}) {
   const cfg = mustHaveConfig();
   const state = await apiState(cfg);
   const me = cfg.handle;
   const mine = state.projects.filter(p => p.owner === me);
+
+  if (opts.json) {
+    outputJson({
+      ok: true,
+      handle: me,
+      projects: mine.map(p => ({
+        id: p.id,
+        slug: p.slug,
+        name: p.name,
+        desc: p.desc,
+        status: p.status,
+        productLink: p.productLink || null,
+        updateCount: (p.updates || []).length,
+        lastUpdateAt: p.updates && p.updates[0] ? p.updates[0].at : null,
+        shippedAt: p.shippedAt || null,
+        hiddenFromShowcase: !!p.hiddenFromShowcase,
+        url: cfg.serverUrl + '/#/p/' + me + '/' + p.slug,
+      })),
+    });
+    return;
+  }
+
   if (mine.length === 0) {
     log(sepia('\n  你还没有项目 · 去 ' + cfg.serverUrl + ' 开张工作室\n'));
     return;
@@ -2577,13 +2622,17 @@ async function cmdCheck(opts) {
 }
 
 // `tinker llm [set|off|status]` · 单独配 LLM key · 不用重跑整个 login
-async function cmdLlm(sub) {
+async function cmdLlm(sub, opts = {}) {
   const cfg = loadConfig();
-  if (!cfg) { err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1); }
+  if (!cfg) {
+    if (opts.json) { errJson('还没配置 · 先跑 tinker login', 'NO_CONFIG'); return; }
+    err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1);
+  }
 
   if (sub === 'off' || sub === 'clear') {
     delete cfg.llm;
     saveConfig(cfg);
+    if (opts.json) { outputJson({ ok: true, cleared: true }); return; }
     ok('LLM 配置已清掉 · prompt 流程回到手敲模式');
     return;
   }
@@ -2592,15 +2641,28 @@ async function cmdLlm(sub) {
     // 看 Tinker 自己用 LLM 的 token 累积 · 跟 goodnight 解耦 (不混进日总结)
     let history = [];
     try { history = JSON.parse(fs.readFileSync(LLM_USAGE_FILE, 'utf-8')); } catch {}
-    if (!Array.isArray(history) || history.length === 0) {
-      log(sepia('  还没记录过 LLM 用量'));
-      return;
-    }
+    if (!Array.isArray(history)) history = [];
     const today = getTodayLLMUsage();
     const total = history.reduce((s, h) => s + (h.tokens || 0), 0);
     const todayTokens = today.reduce((s, h) => s + (h.tokens || 0), 0);
     const byKind = {};
     history.forEach(h => { byKind[h.kind] = (byKind[h.kind] || 0) + h.tokens; });
+
+    if (opts.json) {
+      outputJson({
+        ok: true,
+        today: { tokens: todayTokens, calls: today.length },
+        total: { tokens: total, calls: history.length },
+        byKind,
+        note: '这是 Tinker 自己消耗的 token · 不包含 Cursor / Claude Code 等编程工具',
+      });
+      return;
+    }
+
+    if (history.length === 0) {
+      log(sepia('  还没记录过 LLM 用量'));
+      return;
+    }
     log('');
     log(sepia('  Tinker 自己用 LLM 的 token (起草 / 重写 / voice 分析 / narrate 等)'));
     log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
@@ -2766,7 +2828,10 @@ function getClaudeCodeUsageToday() {
 // `tinker goodnight` · 今日总结 · 给 sleepy 时刻收个尾
 // 也被 GOODNIGHT 关键词触发器命中时自动出现
 async function cmdGoodnight(opts = {}) {
-  const cfg = mustHaveConfig();
+  const cfg = opts.json
+    ? (loadConfig() || (errJson('还没配置 · 先跑 tinker login', 'NO_CONFIG'), null))
+    : mustHaveConfig();
+  if (!cfg) return;
 
   // 1. git commits today (cwd 是 git repo 的话)
   let gitCommits = [];
@@ -2818,6 +2883,40 @@ async function cmdGoodnight(opts = {}) {
     lastAt = new Date(gitCommits[0].at);
   }
 
+  // Claude Code 今日 token (已统一拉了 · JSON 也要用)
+  const ccUsageEarly = getClaudeCodeUsageToday();
+
+  // JSON 输出 (AI agent 用 · 跳过人类可读)
+  if (opts.json) {
+    const projectCounts = {};
+    todayUpdates.forEach(u => { projectCounts[u.projectName] = (projectCounts[u.projectName] || 0) + 1; });
+    outputJson({
+      ok: true,
+      date: new Date().toISOString().slice(0, 10),
+      coding: {
+        commits: gitCommits.length,
+        spanHours: firstAt && lastAt ? +((lastAt - firstAt) / 3600 / 1000).toFixed(2) : null,
+        files: gitStat ? gitStat.files : 0,
+        ins: gitStat ? gitStat.ins : 0,
+        del: gitStat ? gitStat.del : 0,
+        firstCommit: gitCommits.length > 0 ? gitCommits[gitCommits.length - 1].msg : null,
+        lastCommit: gitCommits.length > 0 ? gitCommits[0].msg : null,
+      },
+      claudeCode: ccUsageEarly && ccUsageEarly.messages > 0 ? {
+        messages: ccUsageEarly.messages,
+        sessions: ccUsageEarly.sessions,
+        models: ccUsageEarly.models,
+        estimatedUsd: +ccUsageEarly.totalUsd.toFixed(2),
+        estimatedRmb: +ccUsageEarly.totalRmb.toFixed(2),
+      } : null,
+      tinker: {
+        updates: todayUpdates.length,
+        byProject: projectCounts,
+      },
+    });
+    return;
+  }
+
   // 输出
   log('');
   log(sepia('  ── ') + vermilion('晚安 · 今日总结') + sepia(' ── ') + sepia(new Date().toLocaleDateString()));
@@ -2834,8 +2933,8 @@ async function cmdGoodnight(opts = {}) {
   }
   log('');
 
-  // Claude Code 今日 token 用量 · 编程工具的真实账
-  const ccUsage = getClaudeCodeUsageToday();
+  // Claude Code 今日 token 用量 (复用上面 ccUsageEarly · 避免重新扫一遍 jsonl)
+  const ccUsage = ccUsageEarly;
   if (ccUsage && ccUsage.messages > 0) {
     log('  ' + bold('Coding 跟 AI'));
     log(sepia('    Claude Code ') + bold(ccUsage.messages + ' 条 assistant') + sepia(' · 跨 ') + bold(ccUsage.sessions + ' 个 session'));
@@ -2895,9 +2994,43 @@ async function cmdGoodnight(opts = {}) {
 }
 
 // `tinker session status | end` · 看 / 强制结束 当前 UI session
-async function cmdSession(sub) {
+async function cmdSession(sub, opts = {}) {
   const state = loadPromptState();
   const session = state.uiSession;
+
+  if (opts.json) {
+    if (sub === 'end') {
+      if (!session) { outputJson({ ok: true, ended: false, note: '没有 session 在进行' }); return; }
+      session.startedAt = Date.now() - 61 * 60 * 1000;
+      state.uiSession = session;
+      savePromptState(state);
+      outputJson({ ok: true, ended: true });
+      return;
+    }
+    // status (默认)
+    if (!session) {
+      outputJson({ ok: true, active: false });
+      return;
+    }
+    const elapsed = Math.round((Date.now() - session.startedAt) / 60000);
+    outputJson({
+      ok: true,
+      active: true,
+      startedAt: session.startedAt,
+      startCommitHash: session.startCommitHash,
+      commitCount: session.commitCount,
+      elapsedMinutes: elapsed,
+      beforeSnapshotPath: session.beforeSnapshotPath || null,
+      endConditions: {
+        timeWindowMinutesLeft: Math.max(0, 60 - elapsed),
+        commitsLeft: Math.max(0, 6 - session.commitCount),
+        timeExpired: elapsed >= 60,
+        tooMany: session.commitCount >= 6,
+      },
+    });
+    return;
+  }
+
   if (sub === 'status' || !sub) {
     if (!session) {
       log(sepia('  当前没有 UI session 进行中'));
@@ -3502,6 +3635,123 @@ function parseArgs(args) {
 // =============================================
 // main
 // =============================================
+// `tinker state` · 给 AI agent 读 prompt-state.json 当前快照
+// 看 mute/cooldown/dismissed/uiSession 状态 · 决定要不要 prompt
+function cmdState(opts = {}) {
+  const state = loadPromptState();
+  const now = Date.now();
+  const summary = {
+    ok: true,
+    now,
+    muted: state.mutedUntil && state.mutedUntil > now
+      ? { until: state.mutedUntil, remainingMs: state.mutedUntil - now }
+      : null,
+    later: state.laterUntil && state.laterUntil > now
+      ? { until: state.laterUntil, remainingMs: state.laterUntil - now }
+      : null,
+    dismissedToday: state.dismissedTodayKey === todayKey(),
+    lastPromptedAt: state.lastPromptedAt || null,
+    cooldownActive: state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000,
+    uiSession: state.uiSession || null,
+    lastPushAtByProject: state.lastPushAtByProject || {},
+  };
+  if (opts.json) { outputJson(summary); return; }
+  // 人类可读 fallback
+  log('');
+  log(sepia('  prompt 状态:'));
+  log(sepia('    mute       ') + (summary.muted ? bold('到 ' + new Date(summary.muted.until).toLocaleString()) : sepia('(无)')));
+  log(sepia('    later      ') + (summary.later ? bold('到 ' + new Date(summary.later.until).toLocaleString()) : sepia('(无)')));
+  log(sepia('    今日 skip  ') + (summary.dismissedToday ? bold('是') : sepia('否')));
+  log(sepia('    冷却中     ') + (summary.cooldownActive ? bold('是 · 30min 内 prompt 过') : sepia('否')));
+  log(sepia('    UI session ') + (summary.uiSession ? bold('进行中 · ' + summary.uiSession.commitCount + ' commits') : sepia('(无)')));
+  log('');
+}
+
+// `tinker schema --json` · 给 AI agent 一次拿到完整 CLI 能力地图
+// 不需要解析 help 文本 · 不会因为 --help 改文案而变
+function cmdSchema(opts = {}) {
+  const schema = {
+    ok: true,
+    version: '0.8',
+    commands: [
+      { name: 'check', purpose: '评估触发器 · 看现在该不该 prompt', args: [
+        { flag: '--json', purpose: '结构化输出 · pending 写盘' },
+        { flag: '--from-hook', purpose: '标记 hook 调用 · 静默非命中' },
+      ], jsonOutput: true, example: 'tinker check --json' },
+      { name: 'resolve', purpose: '响应 check 返的 pending · 执行动作', args: [
+        { arg: '<choice>', purpose: '从 check 返的 choices 里挑一个 id' },
+        { flag: '-m / --message', purpose: '文本动作必填: push / ship / stuck 等' },
+      ], jsonOutput: false, example: 'tinker resolve push -m "..."' },
+      { name: 'projects', alias: 'ls', purpose: '列我的所有项目 (含 id/slug/status)', args: [
+        { flag: '--json', purpose: '结构化数组' },
+      ], jsonOutput: true, example: 'tinker projects --json' },
+      { name: 'config', purpose: '看当前 server/handle/token/llm 配置', args: [
+        { flag: '--json', purpose: '结构化 · token 只露后 4 位' },
+      ], jsonOutput: true, example: 'tinker config --json' },
+      { name: 'state', purpose: '读 prompt-state.json (mute/cooldown/uiSession 等)', args: [
+        { flag: '--json', purpose: '结构化' },
+      ], jsonOutput: true, example: 'tinker state --json' },
+      { name: 'session', purpose: '看 / 强制结束 UI session', args: [
+        { arg: 'status | end', purpose: 'status 看 · end 标结束' },
+        { flag: '--json', purpose: '结构化' },
+      ], jsonOutput: true, example: 'tinker session status --json' },
+      { name: 'llm', purpose: '看 / 设 / 清 LLM 配置 · 看 token 用量', args: [
+        { arg: 'set | status | off | usage', purpose: '子命令' },
+        { flag: '--json', purpose: '结构化' },
+      ], jsonOutput: true, example: 'tinker llm usage --json' },
+      { name: 'goodnight', alias: 'recap', purpose: '今日总结 (commits / Tinker push / Claude Code token)', args: [
+        { flag: '--json', purpose: '结构化' },
+        { flag: '--narrate', purpose: '让 LLM 朋友式说一句' },
+      ], jsonOutput: true, example: 'tinker goodnight --json' },
+      { name: 'push', purpose: '发一笔进展 (可直接非交互跑)', args: [
+        { flag: '-m / --message', purpose: '内容' },
+        { flag: '-p / --project', purpose: '指定项目 id (不指定时自动选唯一一个)' },
+      ], jsonOutput: false, example: 'tinker push -m "..." -p p-xxx' },
+      { name: 'ship', purpose: '完工仪式 · 进陈列馆', args: [
+        { flag: '-m / --message', purpose: '感想' },
+        { flag: '-p / --project', purpose: '项目 id' },
+        { flag: '--image <path>', purpose: '本地图当封面' },
+        { flag: '--no-screenshot', purpose: '不带封面' },
+      ], jsonOutput: false, example: 'tinker ship -m "..."' },
+      { name: 'stuck', purpose: '标卡住 + 写"卡在哪" + 通知关心你的人', args: [
+        { flag: '-m / --message', purpose: '卡在哪' },
+      ], jsonOutput: false, example: 'tinker stuck -m "..."' },
+      { name: 'draft', purpose: 'LLM 看 git 历史起草 1-3 条候选', args: [
+        { flag: '--since', purpose: '时间窗 · 默认 1h' },
+      ], jsonOutput: false, example: 'tinker draft --since 2h' },
+      { name: 'mute', purpose: '静音/解除触发器', args: [
+        { arg: 'Nm | Nh | Nd | today | forever | off', purpose: '时长' },
+      ], jsonOutput: false, example: 'tinker mute today' },
+      { name: 'hook', purpose: '装 / 卸 post-commit hook', args: [
+        { arg: 'install | uninstall', purpose: '子命令' },
+      ], jsonOutput: false, example: 'tinker hook install' },
+      { name: 'voice', purpose: 'voice fingerprint 系统', args: [
+        { arg: 'analyze | teach', purpose: 'analyze 从 pool 生成 fingerprint · teach 手动喂样本' },
+      ], jsonOutput: false, example: 'tinker voice analyze' },
+      { name: 'update', purpose: '拉最新代码 + 重装 CLI', args: [
+        { flag: '--check-only', purpose: '只刷新 cache 不真升级' },
+      ], jsonOutput: false, example: 'tinker update' },
+      { name: 'login', purpose: '配置 server / handle / token / LLM (交互)', args: [], jsonOutput: false, example: 'tinker login' },
+    ],
+    pendingFile: path.join(CONFIG_DIR, 'pending.json'),
+    promptStateFile: path.join(CONFIG_DIR, 'prompt-state.json'),
+    configFile: CONFIG_FILE,
+    notes: [
+      'AI agent 工作流: 1) tinker check --json 看是否命中 · 2) 若命中读 pending · 3) tinker resolve <choice> -m "text" 执行',
+      'AI 也可绕开触发器直接 push / ship / stuck (需要 -m 和 -p)',
+      'json 模式下错误也走 JSON: { ok: false, error, code, exitCode: 1 }',
+    ],
+  };
+  if (opts.json) { outputJson(schema); return; }
+  // 人类可读 fallback (压缩版)
+  log('');
+  log(sepia('  CLI 命令清单 (用 ') + vermilion('--json') + sepia(' 拿结构化):'));
+  schema.commands.forEach(c => {
+    log(sepia('    ') + bold(c.name.padEnd(12)) + sepia(' ' + c.purpose));
+  });
+  log('');
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
@@ -3509,8 +3759,8 @@ async function main() {
   try {
     switch (cmd) {
       case 'login': await cmdLogin(); break;
-      case 'config': await cmdConfig(); break;
-      case 'projects': case 'ls': await cmdProjects(); break;
+      case 'config': await cmdConfig(opts); break;
+      case 'projects': case 'ls': await cmdProjects(opts); break;
       case 'push': await cmdPush(opts); break;
       case 'stuck': await cmdStuck(opts); break;
       case 'ship': await cmdShip(opts); break;
@@ -3537,14 +3787,18 @@ async function main() {
         }
         break;
       case 'mute': cmdMute(args[1]); break;
-      case 'session': await cmdSession(args[1]); break;
+      case 'session': await cmdSession(args[1], opts); break;
       case 'goodnight': case 'recap':
-        await cmdGoodnight({ narrate: args.includes('--narrate') });
+        await cmdGoodnight({ narrate: args.includes('--narrate'), json: opts.json });
         break;
-      case 'llm': await cmdLlm(args[1]); break;
+      case 'llm': await cmdLlm(args[1], opts); break;
+      case 'state': cmdState(opts); break;
+      case 'schema': cmdSchema(opts); break;
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
-      default: err('未知命令: ' + cmd); help(); process.exit(1);
+      default:
+        if (opts.json) errJson('未知命令: ' + cmd, 'UNKNOWN_COMMAND');
+        else { err('未知命令: ' + cmd); help(); process.exit(1); }
     }
     // 命令跑完 · 如果 cache 显示有更新就在末尾静静提示一行
     // 不在 hook / watch / check (--from-hook) / update 等后台/系统命令里显示
