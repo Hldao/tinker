@@ -1029,7 +1029,18 @@ async function cmdPush(opts) {
       ok('记上了 — ' + bold(p.name));
     }
     log(sepia('  内容: ') + pushText);
-    log(sepia('  去看: ') + cfg.serverUrl + '/');
+    // v0.12: 用 server 返的 projectSlug + ownerHandle 拼项目页 URL
+    // (webapp hash routing 不支持从 URL 传 anchor · 但项目页打开最新 update 就在顶)
+    const slug = (result && result.projectSlug) || p.slug;
+    const handle = (result && result.ownerHandle) || cfg.handle;
+    if (slug && handle) {
+      log(sepia('  去看: ') + cfg.serverUrl + '/#/p/' + handle + '/' + slug);
+    } else {
+      log(sepia('  去看: ') + cfg.serverUrl + '/');
+    }
+    if (result && result.id) {
+      log(sepia('  update id: ') + result.id);
+    }
     log('');
   } catch (e) { err(e.message); process.exit(1); }
 }
@@ -2128,6 +2139,122 @@ function triggerReversal() {
   } catch { return { fired: false }; }
 }
 
+// v0.12 跨上下文触发器
+// AI 跟人折腾几小时 · 最后小修复 · 这种瞬间在 commit msg 里看不出来
+// 信号源: ~/.claude/projects/ 最近 6 小时 jsonl + 当前 commit fix + diff 小
+// 对社区价值 ★★★★ · vibe coder 时代最稀缺的"踩坑经验"
+function triggerAiDebugBreakthrough() {
+  try {
+    // 1) 当前 commit 是 fix 类
+    const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
+    const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
+    const scanText = title + '\n' + body;
+    const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|\bworkaround\b|修好|修了|搞定|搞通|跑通|通了|解决了|绕过|绕开)/i;
+    if (!FIX_WORDS.test(scanText)) return { fired: false };
+
+    // 2) diff 小 (< 50 行 · 长 debug 最终小修复的特征)
+    let ins = 0, del = 0;
+    try {
+      const statOut = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
+      const insMatch = statOut.match(/(\d+) insertion/);
+      const delMatch = statOut.match(/(\d+) deletion/);
+      ins = insMatch ? parseInt(insMatch[1], 10) : 0;
+      del = delMatch ? parseInt(delMatch[1], 10) : 0;
+    } catch {}
+    const netChange = ins + del;
+    if (netChange === 0 || netChange > 50) return { fired: false };
+
+    // 3) 扫 ~/.claude/projects/ 最近 6 小时的对话
+    const claudeBase = path.join(os.homedir(), '.claude', 'projects');
+    if (!fs.existsSync(claudeBase)) return { fired: false };
+
+    // Claude Code 编码方式: cwd 把 / 换 - · 但 Claude session 起点不一定是 cwd
+    // 试两层: cwd 自己 + cwd parent · 都不在就不触发 (避免扫全 base 跨项目误报)
+    const cwdEncoded = process.cwd().replace(/\//g, '-');
+    const parentEncoded = path.dirname(process.cwd()).replace(/\//g, '-');
+    const searchDirs = [
+      path.join(claudeBase, cwdEncoded),
+      path.join(claudeBase, parentEncoded),
+    ].filter(p => fs.existsSync(p));
+    if (searchDirs.length === 0) return { fired: false };
+
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    const now = Date.now();
+    const userMessages = [];
+    let scanned = 0;
+
+    function walkConv(dir) {
+      try {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) walkConv(full);
+          else if (e.name.endsWith('.jsonl')) {
+            try {
+              const stat = fs.statSync(full);
+              // 只读最近 6 小时改过的 jsonl · 跳过冷文件 (省 IO)
+              if (now - stat.mtimeMs > SIX_HOURS) continue;
+              scanned++;
+              if (scanned > 30) return;  // 上限 30 个文件防爆
+              const lines = fs.readFileSync(full, 'utf-8').split('\n').filter(Boolean);
+              for (const line of lines) {
+                try {
+                  const obj = JSON.parse(line);
+                  if (obj.type !== 'user' || !obj.message) continue;
+                  const ts = obj.timestamp ? new Date(obj.timestamp).getTime() : 0;
+                  if (!ts || now - ts > SIX_HOURS) continue;
+                  let text = '';
+                  if (typeof obj.message.content === 'string') text = obj.message.content;
+                  else if (Array.isArray(obj.message.content)) {
+                    text = obj.message.content
+                      .filter(c => c.type === 'text' && c.text)
+                      .map(c => c.text)
+                      .join('\n');
+                  }
+                  text = (text || '').trim();
+                  // skip slash command · tool_result · 短水水
+                  if (!text || text.startsWith('/') || text.length < 8) continue;
+                  userMessages.push({ text, ts });
+                } catch {}
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    }
+    searchDirs.forEach(d => walkConv(d));
+
+    // 4) 信号 A · 长对话 (>= 20 条 user message)
+    if (userMessages.length < 20) return { fired: false };
+    userMessages.sort((a, b) => a.ts - b.ts);
+
+    // 5) 信号 B · 中段挣扎 (失败信号 >= 3 次)
+    const joined = userMessages.map(m => m.text).join('\n');
+    const STRUGGLE_WORDS = /(还是不行|不行啊|又报错|又试|怎么还是|奇怪|为什么不|不对啊|失败|报错|debug|没用|没生效|没反应|还是不通|又挂了|又错|又崩)/g;
+    const struggleMatches = (joined.match(STRUGGLE_WORDS) || []).length;
+    if (struggleMatches < 3) return { fired: false };
+
+    // 6) 信号 C · 后段破局 (最后 5 条 user message 出现 cracked 关键词)
+    const lastChunk = userMessages.slice(-5).map(m => m.text).join('\n');
+    const CRACK_WORDS = /(终于|搞定|找到了|原来是|原来这样|通了|可以了|成了|破了|奏效|生效了|懂了|是这个|对了|过了)/;
+    if (!CRACK_WORDS.test(lastChunk)) return { fired: false };
+
+    // 7) 时间跨度 · 第一条到最后一条至少跨 30 分钟 (否则只是短聊不算折腾)
+    const span = userMessages[userMessages.length - 1].ts - userMessages[0].ts;
+    if (span < 30 * 60 * 1000) return { fired: false };
+
+    const hours = Math.round(span / 60000 / 10) / 6;  // 保留 1 位小数小时
+    const titleSnippet = '"' + title.slice(0, 50) + '"';
+    return {
+      fired: true,
+      priority: 92,
+      reason: 'ai-debug-breakthrough',
+      kind: 'ai-debug-breakthrough',
+      msg: `像跟 AI 折腾 ${hours}h 破局的瞬间 (${userMessages.length} 轮对话 · ${netChange} 行修复): ${dim(titleSnippet)}`,
+      suggestion: '这种坑写出来能帮到下一个人 · 包括其他 AI',
+    };
+  } catch { return { fired: false }; }
+}
+
 // D · 当天首次 commit · 早安式
 function triggerFirstCommitOfDay(state) {
   // v0.2 #6: 一天只触发一次低优先级 · 避免 first-commit 被后续 cumulative 抢走
@@ -2377,6 +2504,7 @@ function evaluateAllTriggers(state, repoCfg, cfg) {
   // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 接受 state · 一天 1 次
   const results = [
     triggerKeywordMatch(),
+    triggerAiDebugBreakthrough(),
     triggerCleverFix(),
     triggerSubtraction(),
     triggerAiLimit(),
@@ -2854,12 +2982,18 @@ async function cmdLlm(sub, opts = {}) {
 // 解 Claude Code 的 jsonl session 文件 · 拉今天的 token 用量
 // ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
 // 每条 assistant message 都有 usage + timestamp · 按今日 (4am 算一天) 过滤
-function getClaudeCodeUsageToday() {
+function getClaudeCodeUsageToday(opts = {}) {
   const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
   if (!fs.existsSync(claudeRoot)) return null;
 
-  // "今天" 从凌晨 4 点算 · 跟 cmdGoodnight 的 git since 对齐
-  const dayStart = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.getTime(); })();
+  // 默认"今天" 4am 起 · daysBack 支持周/月扫
+  const daysBack = opts.daysBack || 1;
+  const dayStart = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - (daysBack - 1));
+    d.setHours(4, 0, 0, 0);
+    return d.getTime();
+  })();
   const now = Date.now();
 
   const byModel = {};
@@ -2968,12 +3102,22 @@ async function cmdGoodnight(opts = {}) {
     : mustHaveConfig();
   if (!cfg) return;
 
-  // 1. git commits today (cwd 是 git repo 的话)
+  // 时间范围:--week 7 天 · --month 30 天 · --days N 自定义 · 默认今日
+  const daysBack = opts.month ? 30 : opts.week ? 7 : (opts.daysBack || 1);
+  const periodLabel = daysBack >= 30 ? '近 30 天' : daysBack >= 7 ? '近 7 天' : '今日';
+  const isMultiDay = daysBack > 1;
+
+  // 1. git commits in range (cwd 是 git repo 的话)
   let gitCommits = [];
   let gitStat = null;
   if (inGitRepo()) {
     try {
-      const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
+      const since = (() => {
+        const d = new Date();
+        d.setDate(d.getDate() - (daysBack - 1));
+        d.setHours(4, 0, 0, 0);
+        return d.toISOString().slice(0, 10) + ' 04:00';
+      })();
       gitCommits = execSync(`git log --since="${since}" --no-merges --pretty=format:"%h|%s|%ai"`, { encoding: 'utf-8' })
         .trim().split('\n').filter(Boolean).map(l => {
           const [sha, msg, at] = l.split('|');
@@ -2990,17 +3134,16 @@ async function cmdGoodnight(opts = {}) {
     } catch {}
   }
 
-  // 2. updates pushed to Tinker today
+  // 2. updates pushed to Tinker (按范围)
   let todayUpdates = [];
   try {
     const state = await apiState(cfg);
-    const tk = todayKey();
+    // 范围起始: 当前时间往回 daysBack 天 · 凌晨 4 点
+    const rangeStart = (() => { const d = new Date(); d.setDate(d.getDate() - (daysBack - 1)); d.setHours(4, 0, 0, 0); return d.getTime(); })();
     for (const p of state.projects) {
       if (p.owner !== cfg.handle) continue;
       for (const u of (p.updates || [])) {
-        const d = new Date(u.at);
-        const dk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-        if (dk === tk) todayUpdates.push({ projectName: p.name, text: u.text, at: u.at, kind: u.kind });
+        if (u.at >= rangeStart) todayUpdates.push({ projectName: p.name, text: u.text, at: u.at, kind: u.kind });
       }
     }
   } catch {}
@@ -3019,7 +3162,7 @@ async function cmdGoodnight(opts = {}) {
   }
 
   // Claude Code 今日 token (已统一拉了 · JSON 也要用)
-  const ccUsageEarly = getClaudeCodeUsageToday();
+  const ccUsageEarly = getClaudeCodeUsageToday({ daysBack });
 
   // JSON 输出 (AI agent 用 · 跳过人类可读)
   if (opts.json) {
@@ -3054,7 +3197,8 @@ async function cmdGoodnight(opts = {}) {
 
   // 输出
   log('');
-  log(sepia('  ── ') + vermilion('晚安 · 今日总结') + sepia(' ── ') + sepia(new Date().toLocaleDateString()));
+  const titleText = daysBack === 1 ? '晚安 · 今日总结' : daysBack === 7 ? '周总结 · ' + periodLabel : daysBack === 30 ? '月总结 · ' + periodLabel : '总结 · ' + periodLabel;
+  log(sepia('  ── ') + vermilion(titleText) + sepia(' ── ') + sepia(new Date().toLocaleDateString()));
   log('');
 
   log('  ' + bold('Coding'));
@@ -3091,6 +3235,23 @@ async function cmdGoodnight(opts = {}) {
     todayUpdates.forEach(u => { projectCounts[u.projectName] = (projectCounts[u.projectName] || 0) + 1; });
     Object.entries(projectCounts).forEach(([name, n]) => log(sepia('      · ') + name + sepia(' ×') + bold(n)));
   }
+
+  // 反馈闭环 (v0.12): 自己的方法被别人借了几次
+  // 沉默是金 · 0 次完全不显示 · 不让这段变成压力
+  try {
+    const days = daysBack >= 30 ? 30 : daysBack >= 7 ? 7 : 1;
+    const r = await safeFetch(cfg, '/api/method/borrows-for-me?days=' + days, { headers: authHeaders(cfg) });
+    const borrows = await r.json();
+    if (borrows && borrows.total > 0) {
+      log('');
+      const periodWord = days >= 30 ? '近 30 天' : days >= 7 ? '近 7 天' : '今天';
+      log(sepia('    你的方法被借 ') + bold(borrows.total + ' 次') + sepia(' · ') + sepia(periodWord));
+      borrows.byUpdate.slice(0, 3).forEach(b => {
+        const by = b.lastBorrower ? '@' + b.lastBorrower : '(匿名)';
+        log(sepia('      · ') + b.projectName + sepia(' · ') + b.excerpt.slice(0, 32) + sepia('... · ×') + bold(b.count) + sepia(' · 最近 ') + by);
+      });
+    }
+  } catch {}
   log('');
 
   // Tinker 自己用 LLM 帮起草 / 分析 / narrate 的 token 用量是自指 · 不在晚安里显示
@@ -3392,18 +3553,99 @@ async function cmdResolve(choice, opts) {
 //   tinker voice teach --from-claude        从 Claude Code 对话历史抽 user message
 //   tinker voice teach --from-claude --limit 50   自定义条数 (默认 100)
 //   tinker voice teach --file path/to/file.md     从单个文件读
+// 交互式让用户标 y/n/skip · 分别进 good 池 / bad 池 / 跳过
+// 直接监督 fingerprint 学习 · 是 v0.11 voice teach review 模式的核心
+async function reviewCandidatesInteractively(candidates, cfg, sourceTag) {
+  const { select } = require('@inquirer/prompts');
+  const goodDir = path.join(CONFIG_DIR, 'style-pool', 'good');
+  const badDir = path.join(CONFIG_DIR, 'style-pool', 'bad');
+  fs.mkdirSync(goodDir, { recursive: true });
+  fs.mkdirSync(badDir, { recursive: true });
+
+  let nGood = 0, nBad = 0, nSkip = 0, stopped = false;
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    log('');
+    log(sepia('  ── ') + bold((i + 1) + ' / ' + candidates.length) + sepia(' ──'));
+    log('  ' + c.text.split('\n').join('\n  '));
+    log('');
+    let choice;
+    try {
+      choice = await select({
+        message: '这条像不像你写的?',
+        choices: [
+          { name: '✓ 像我 · 进 good 池', value: 'y' },
+          { name: '✗ 不像 · 进 bad 池 (告诉 LLM "别学这种")', value: 'n' },
+          { name: '— 跳过 · 不打标', value: 'skip' },
+          { name: '⏹ 停下 · 不看了', value: 'stop' },
+        ],
+      });
+    } catch { choice = 'stop'; }
+
+    if (choice === 'stop') { stopped = true; break; }
+    if (choice === 'skip') { nSkip++; continue; }
+
+    const targetDir = choice === 'y' ? goodDir : badDir;
+    const ts = c.ts || Date.now();
+    const stamp = new Date(ts).toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    const file = path.join(targetDir, `${stamp}-teach-${sourceTag}-${i}.md`);
+    const meta = ['---',
+      `handle: ${cfg.handle || ''}`,
+      `at: ${new Date(ts).toISOString()}`,
+      `choice: teach-${sourceTag}-${choice === 'y' ? 'good' : 'bad'}`,
+      `source: ${sourceTag}`,
+      `reviewed_at: ${new Date().toISOString()}`,
+      '---'].join('\n');
+    fs.writeFileSync(file, `${meta}\n\n${c.text}\n`);
+    if (choice === 'y') nGood++; else nBad++;
+  }
+
+  log('');
+  log(sepia('  ── 完成 ──'));
+  log(sepia('    good ') + moss(nGood + ' 篇'));
+  log(sepia('    bad  ') + vermilion(nBad + ' 篇'));
+  log(sepia('    skip ') + sepia(nSkip + ' 篇'));
+  if (stopped) log(sepia('  (中途停下 · 没看完)'));
+  log('');
+  if (nGood + nBad >= 3) {
+    log(sepia('  下一步: ') + vermilion('tinker voice analyze') + sepia(' 重新生成 fingerprint'));
+  }
+}
+
 async function cmdVoiceTeach(opts) {
   const cfg = mustHaveConfig();
 
-  if (!opts.fromClaude && !opts.file) {
+  if (!opts.fromClaude && !opts.file && !opts.review) {
     log(sepia('  用法:'));
     log(sepia('    ') + vermilion('tinker voice teach --from-claude'));
-    log(sepia('      从 Claude Code 对话历史抽你说过的话当 sample (默认 100 条最近的)'));
-    log(sepia('    ') + vermilion('tinker voice teach --from-claude --limit 50'));
-    log(sepia('      自定义条数'));
+    log(sepia('      从 Claude Code 对话历史抽你说过的话当 sample (默认 100 条最近 · 自动加进 good 池)'));
+    log(sepia('    ') + vermilion('tinker voice teach --from-claude --review'));
+    log(sepia('      逐条让你标 y/n/skip · 分别进 good / bad / 跳过 (v0.11 新加)'));
+    log(sepia('    ') + vermilion('tinker voice teach --review'));
+    log(sepia('      从你最近 Tinker 推过的 update 里抽来 review (高信号样本 · v0.11 新加)'));
     log(sepia('    ') + vermilion('tinker voice teach --file <path>'));
     log(sepia('      从单个文件读 sample (整个文件当一篇)'));
     return;
+  }
+
+  // v0.11: review 模式 + 从 Tinker 自己 push 历史拉
+  if (opts.review && !opts.fromClaude && !opts.file) {
+    log(sepia('  从你最近的 Tinker update 抽样本...'));
+    let candidates = [];
+    try {
+      const state = await apiState(cfg);
+      for (const p of state.projects) {
+        if (p.owner !== cfg.handle) continue;
+        for (const u of (p.updates || [])) {
+          if (u.text && u.text.length >= 30) candidates.push({ text: u.text, ts: u.at });
+        }
+      }
+    } catch (e) { err('拉 Tinker 数据失败: ' + e.message); process.exit(1); }
+    candidates.sort((a, b) => b.ts - a.ts);
+    const N = opts.limit && opts.limit > 0 ? opts.limit : 10;
+    candidates = candidates.slice(0, N);
+    if (candidates.length === 0) { log(sepia('  没有 update 可 review · 先发几条再来')); return; }
+    return reviewCandidatesInteractively(candidates, cfg, 'tinker-self');
   }
 
   // 模式 1 · 从 Claude Code 对话历史抽
@@ -3471,6 +3713,11 @@ async function cmdVoiceTeach(opts) {
     filtered.sort((a, b) => b.ts - a.ts);
     const N = opts.limit && opts.limit > 0 ? opts.limit : 100;
     const picked = filtered.slice(0, N);
+
+    // v0.11 --review · 逐条标 y/n/skip 而不是 bulk add
+    if (opts.review) {
+      return reviewCandidatesInteractively(picked, cfg, 'claude');
+    }
 
     log('');
     log(vermilion(`  预览前 5 条 (将从这 ${picked.length} 条里全部加进 pool):`));
@@ -3651,6 +3898,195 @@ ${joined}`;
   log('');
 }
 
+// v0.12 方法库 · 搜 (借) 用法 · tinker borrow "supabase auth"
+async function cmdBorrow(query, opts) {
+  const cfg = loadConfig();
+  if (!cfg.serverUrl) {
+    if (opts.json) return errJson('未配置 serverUrl', 'NO_CONFIG');
+    err('未配置 serverUrl · 先 tinker config'); process.exit(1);
+  }
+  const q = (query || '').trim();
+  if (!q) {
+    if (opts.json) return errJson('用法: tinker borrow "<关键词>"', 'NO_QUERY');
+    log(sepia('  用法: ') + vermilion('tinker borrow "<关键词>"'));
+    log(sepia('  例:   ') + vermilion('tinker borrow "supabase 邮箱登录"'));
+    log(sepia('  加 --methods-only 只看作者标记为方法的 (更高信号)'));
+    return;
+  }
+  const url = new URL('/api/method/search', cfg.serverUrl);
+  url.searchParams.set('q', q);
+  url.searchParams.set('limit', String(opts.limit || 10));
+  if (opts.methodsOnly || opts['methods-only']) url.searchParams.set('methodsOnly', '1');
+  // 带 handle 让作者收到反馈 (反馈闭环 v0.12) · 没登录就匿名
+  if (cfg.handle) url.searchParams.set('borrower', cfg.handle);
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const errMsg = '搜失败 · HTTP ' + res.status;
+    if (opts.json) return errJson(errMsg, 'HTTP_' + res.status);
+    err(errMsg); process.exit(1);
+  }
+  const data = await res.json();
+  if (opts.json) return outputJson({ query: q, hits: data.hits || [] });
+  const hits = data.hits || [];
+  if (hits.length === 0) {
+    log(sepia('  没搜到 "') + q + sepia('" · 试试别的词或者去掉 --methods-only'));
+    return;
+  }
+  log('');
+  log(sepia(`  搜到 ${hits.length} 条 · 关键词: `) + bold(q));
+  log('');
+  hits.forEach((h, i) => {
+    const flag = h.isMethod ? vermilion(' [方法]') : '';
+    const when = new Date(h.at).toISOString().slice(0, 10);
+    log(bold(`  ${i + 1}. `) + h.projectName + sepia(' · @') + h.ownerHandle + sepia(' · ') + when + flag);
+    const lines = h.text.split('\n').filter(Boolean).slice(0, 3);
+    lines.forEach(line => log('     ' + line.slice(0, 120) + (line.length > 120 ? sepia('...') : '')));
+    log(sepia(`     id: ${h.updateId}`));
+    log('');
+  });
+  log(sepia('  借了哪条记得回头 ') + vermilion('tinker contribute') + sepia(' 把自己的总结也放进去'));
+}
+
+// tinker contribute <updateId> — 标自己一条 update 为方法
+// 不带参数时 · 默认拿最近一条 push 的 id
+async function cmdContribute(updateIdArg, opts) {
+  const cfg = loadConfig();
+  if (!cfg.serverUrl || !cfg.token) {
+    if (opts.json) return errJson('未登录', 'NO_AUTH');
+    err('未登录 · 先 tinker login'); process.exit(1);
+  }
+  // --unmark <id> · 取消方法标
+  if (opts.unmark) {
+    const id = typeof opts.unmark === 'string' ? opts.unmark : updateIdArg;
+    if (!id) {
+      if (opts.json) return errJson('--unmark 需要 updateId', 'NO_ID');
+      err('--unmark 需要 updateId · 例: tinker contribute --unmark u-xxx'); process.exit(1);
+    }
+    await apiAction(cfg, 'unmarkMethod', { updateId: id });
+    if (opts.json) return outputJson({ ok: true, updateId: id, marked: false });
+    log(sepia('  已取消方法标: ') + id);
+    return;
+  }
+  let updateId = updateIdArg;
+  if (!updateId) {
+    // 找最近一条自己的 update
+    const state = await apiState(cfg);
+    let latest = null;
+    for (const p of state.projects || []) {
+      for (const u of p.updates || []) {
+        if (!latest || u.at > latest.at) latest = { ...u, project: p.name };
+      }
+    }
+    if (!latest) {
+      if (opts.json) return errJson('还没记过进展 · 没东西可标', 'NO_UPDATES');
+      err('还没记过进展 · 没东西可标'); process.exit(1);
+    }
+    updateId = latest.id;
+    log(sepia('  默认拿最近一条: ') + bold(latest.project) + sepia(' · ') + latest.text.slice(0, 60) + sepia('...'));
+  }
+  const result = await apiAction(cfg, 'markAsMethod', { updateId });
+  if (opts.json) return outputJson({ ok: true, updateId, marked: true });
+  log('');
+  log(moss('  已标为方法 · 别人 tinker borrow 时能搜到这条'));
+  log(sepia('  id: ') + updateId);
+  log(sepia('  反悔: ') + vermilion(`tinker contribute --unmark ${updateId}`));
+  log('');
+}
+
+// v0.12 自己最近的 update · 给 CLI / MCP / AI agent 用
+// tinker recent [--limit N] [--kind experience|method|ship|stuck|prototype] [--json]
+async function cmdRecent(opts) {
+  const cfg = loadConfig();
+  if (!cfg || !cfg.serverUrl || !cfg.token) {
+    if (opts.json) return errJson('未登录 · 先 tinker login', 'NO_AUTH');
+    err('未登录 · 先 ' + vermilion('tinker login')); process.exit(1);
+  }
+  const limit = parseInt(opts.limit, 10) || 5;
+  const kind = opts.kind || (opts.experience ? 'experience' : 'all');
+  const qs = new URLSearchParams({ limit: String(limit), kind }).toString();
+  let data;
+  try {
+    const res = await safeFetch(cfg, '/api/me/updates?' + qs, {
+      headers: { 'Authorization': 'Bearer ' + cfg.token },
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      if (opts.json) return errJson(body || ('HTTP ' + res.status), 'HTTP_' + res.status);
+      err('拉失败: HTTP ' + res.status); process.exit(1);
+    }
+    data = await res.json();
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'FETCH_FAIL');
+    err(e.message); process.exit(1);
+  }
+  const list = (data && data.updates) || [];
+  if (opts.json) return outputJson({ updates: list });
+  if (list.length === 0) {
+    log(sepia('  没有 update' + (kind !== 'all' ? ' (kind=' + kind + ')' : '')));
+    return;
+  }
+  log('');
+  log(bold(`  最近 ${list.length} 条` + (kind !== 'all' ? ` · 限定 ${kind}` : '')));
+  log('');
+  list.forEach((u, i) => {
+    const when = new Date(u.at).toISOString().slice(0, 10);
+    const tags = [];
+    if (u.isExperience) tags.push(vermilion('[经验]'));
+    if (u.isMethod) tags.push(vermilion('[方法]'));
+    if (u.kind) tags.push(sepia('[' + u.kind + ']'));
+    log(bold(`  ${i + 1}. `) + u.projectName + sepia(' · ') + when + ' ' + tags.join(' '));
+    const lines = u.text.split('\n').filter(Boolean).slice(0, 3);
+    lines.forEach(line => log('     ' + line.slice(0, 120) + (line.length > 120 ? sepia('...') : '')));
+    log(sepia(`     id: ${u.id}  · ${cfg.serverUrl}/#/p/${u.ownerHandle}/${u.projectSlug}`));
+    log('');
+  });
+}
+
+// v0.12 标某条 update 为"踩坑经验" · 给 AI 检索池
+// tinker mark-experience <updateId>  /  --unmark <id>
+// 不带参数时 · 拿最近一条 push 的 update
+async function cmdMarkExperience(updateIdArg, opts) {
+  const cfg = loadConfig();
+  if (!cfg.serverUrl || !cfg.token) {
+    if (opts.json) return errJson('未登录', 'NO_AUTH');
+    err('未登录 · 先 ' + vermilion('tinker login')); process.exit(1);
+  }
+  if (opts.unmark) {
+    const id = typeof opts.unmark === 'string' ? opts.unmark : updateIdArg;
+    if (!id) {
+      if (opts.json) return errJson('--unmark 需要 updateId', 'NO_ID');
+      err('--unmark 需要 updateId · 例: tinker mark-experience --unmark u-xxx'); process.exit(1);
+    }
+    await apiAction(cfg, 'unmarkExperience', { updateId: id });
+    if (opts.json) return outputJson({ ok: true, updateId: id, marked: false });
+    log(sepia('  已取消经验标: ') + id);
+    return;
+  }
+  let updateId = updateIdArg;
+  if (!updateId) {
+    const state = await apiState(cfg);
+    let latest = null;
+    for (const p of state.projects || []) {
+      for (const u of p.updates || []) {
+        if (!latest || u.at > latest.at) latest = { ...u, project: p.name };
+      }
+    }
+    if (!latest) {
+      if (opts.json) return errJson('还没记过进展 · 没东西可标', 'NO_UPDATES');
+      err('还没记过进展 · 没东西可标'); process.exit(1);
+    }
+    updateId = latest.id;
+    log(sepia('  默认拿最近一条: ') + bold(latest.project) + sepia(' · ') + latest.text.slice(0, 60) + sepia('...'));
+  }
+  await apiAction(cfg, 'markAsExperience', { updateId });
+  if (opts.json) return outputJson({ ok: true, updateId, marked: true });
+  log('');
+  log(moss('  已标为经验 · 给 AI 检索时优先取这类 · 帮其他人少踩坑'));
+  log(sepia('  id: ') + updateId);
+  log(sepia('  反悔: ') + vermilion(`tinker mark-experience --unmark ${updateId}`));
+  log('');
+}
+
 function cmdMute(args) {
   const arg = (args || '').trim();
   const state = loadPromptState();
@@ -3754,6 +4190,12 @@ function parseArgs(args) {
     else if (a === '--json') opts.json = true;
     else if (a === '--from-hook') opts.fromHook = true;
     else if (a === '--from-claude') opts.fromClaude = true;
+    else if (a === '--week') opts.week = true;
+    else if (a === '--month') opts.month = true;
+    else if (a === '--days') opts.daysBack = parseInt(args[++i], 10);
+    else if (a.startsWith('--days=')) opts.daysBack = parseInt(a.slice('--days='.length), 10);
+    else if (a === '--narrate') opts.narrate = true;
+    else if (a === '--review') opts.review = true;
     else if (a === '--idempotency-key' || a === '--idem-key') opts.idemKey = args[++i];
     else if (a.startsWith('--idempotency-key=')) opts.idemKey = a.slice('--idempotency-key='.length);
     else if (a.startsWith('--idem-key=')) opts.idemKey = a.slice('--idem-key='.length);
@@ -3761,6 +4203,14 @@ function parseArgs(args) {
     else if (a.startsWith('--file=')) opts.file = a.slice('--file='.length);
     else if (a === '--limit') opts.limit = parseInt(args[++i], 10);
     else if (a.startsWith('--limit=')) opts.limit = parseInt(a.slice('--limit='.length), 10);
+    else if (a === '--methods-only' || a === '--methodsOnly') opts.methodsOnly = true;
+    else if (a === '--unmark') {
+      // 既支持 --unmark <id> 也支持 --unmark=<id> · 单独 --unmark 走 positional id
+      const next = args[i + 1];
+      if (next && !next.startsWith('-')) { opts.unmark = next; i++; }
+      else opts.unmark = true;
+    }
+    else if (a.startsWith('--unmark=')) opts.unmark = a.slice('--unmark='.length);
     // 不以 - 开头的第一个 positional 当成草稿文件路径
     else if (!a.startsWith('-') && !opts.draftFile) {
       // 必须是已存在的文件 / 以 .md 结尾
@@ -3870,6 +4320,18 @@ function cmdSchema(opts = {}) {
         { flag: '--check-only', purpose: '只刷新 cache 不真升级' },
       ], jsonOutput: false, example: 'tinker update' },
       { name: 'login', purpose: '配置 server / handle / token / LLM (交互)', args: [], jsonOutput: false, example: 'tinker login' },
+      { name: 'borrow', purpose: '搜方法库 (任意人的 update · is_method 优先)', args: [
+        { arg: '<关键词>', purpose: '查询词 · 可中英混杂 · 1-200 字' },
+        { flag: '--methods-only', purpose: '只看作者标方法的' },
+        { flag: '--limit N', purpose: '返回条数 · 默认 10 · 上限 50' },
+        { flag: '--json', purpose: 'machine-readable 输出' },
+      ], jsonOutput: true, example: 'tinker borrow "supabase 邮箱登录" --json' },
+      { name: 'contribute', purpose: '标自己一条 update 为方法 · 让别人 borrow 能看到', args: [
+        { arg: '<updateId>', purpose: '不传默认拿最近一条 push' },
+        { flag: '--unmark <updateId>', purpose: '取消方法标' },
+        { flag: '--json', purpose: 'machine-readable 输出' },
+      ], jsonOutput: true, example: 'tinker contribute u-xxx' },
+      { name: 'mcp', purpose: '启动 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool', args: [], jsonOutput: false, example: 'tinker mcp' },
     ],
     pendingFile: path.join(CONFIG_DIR, 'pending.json'),
     promptStateFile: path.join(CONFIG_DIR, 'prompt-state.json'),
@@ -3925,9 +4387,35 @@ async function main() {
         }
         break;
       case 'mute': cmdMute(args[1]); break;
+      case 'borrow': {
+        // borrow 接所有 positional 参数当查询词 · 跳过 --xxx flag
+        // tinker borrow "supabase 邮箱" --methods-only
+        const qParts = [];
+        for (let i = 1; i < args.length; i++) {
+          const a = args[i];
+          if (a.startsWith('--')) {
+            // 跳过 flag · 如果是 --limit / --unmark 这种带参 flag 再跳一个
+            if (a === '--limit' || a === '--unmark') i++;
+            continue;
+          }
+          qParts.push(a);
+        }
+        await cmdBorrow(qParts.join(' '), opts);
+        break;
+      }
+      case 'contribute': await cmdContribute(args[1], opts); break;
+      case 'recent': await cmdRecent(opts); break;
+      case 'mark-experience': case 'mark-exp':
+        await cmdMarkExperience(args[1], opts); break;
       case 'session': await cmdSession(args[1], opts); break;
       case 'goodnight': case 'recap':
-        await cmdGoodnight({ narrate: args.includes('--narrate'), json: opts.json });
+        await cmdGoodnight({
+          narrate: opts.narrate || args.includes('--narrate'),
+          json: opts.json,
+          week: opts.week,
+          month: opts.month,
+          daysBack: opts.daysBack,
+        });
         break;
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
