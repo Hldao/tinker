@@ -1992,6 +1992,37 @@ function triggerRestart() {
   } catch { return { fired: false }; }
 }
 
+// v0.13 触发器: 这次 commit 改了 docs/*.md 类的文档
+// vibe coder 的文档基本都是 AI 写给 AI 看的 · 直接建议 contribute --auto
+// 让 LLM 挑段 · 用户一句 "好" 就发了 · 不用打开文件
+//
+// 不触发的情况:
+// - 改的是 README / CHANGELOG / LICENSE 这种太通用的
+// - md 总改动行数 <30 (typo 修复不值得整段 contribute)
+function triggerDocsEdit() {
+  try {
+    // git show 列文件 · 对 initial commit 也工作 (diff-tree 在 root commit 返空)
+    const files = execSync('git show --name-only --format= HEAD', { encoding: 'utf-8' }).trim().split('\n').filter(Boolean);
+    const COMMON_DOCS = /^(README|CHANGELOG|LICENSE|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY|AUTHORS)\.md$/i;
+    const mdFiles = files.filter(f => /\.md$/i.test(f) && !COMMON_DOCS.test(path.basename(f)));
+    if (mdFiles.length === 0) return { fired: false };
+    // 看改动 size · typo 不值得 contribute
+    const stat = execSync('git show --stat=200 HEAD -- ' + mdFiles.map(f => '"' + f + '"').join(' '), { encoding: 'utf-8' }).trim();
+    const totalChanged = (stat.match(/(\d+) (?:insertions?|deletions?)/g) || [])
+      .reduce((s, m) => s + parseInt(m.match(/(\d+)/)[1], 10), 0);
+    if (totalChanged < 30) return { fired: false };
+    const target = mdFiles[0];
+    return {
+      fired: true,
+      priority: 78,
+      reason: 'docs-edit',
+      kind: 'docs-contribute',
+      msg: `改了 ${dim(target)}${mdFiles.length > 1 ? ' (+' + (mdFiles.length - 1) + ' 个 md)' : ''} · +/- ${totalChanged} 行`,
+      suggestion: '让 AI 帮挑一段分享出去 · ' + vermilion('tinker contribute --from-file ' + target + ' --auto'),
+    };
+  } catch { return { fired: false }; }
+}
+
 // 工具组合发现 · commit msg 含 2+ AI 工具名 + 创作词
 // 手艺组合是 vibe coder 最珍贵的事 · 单工具好用大家都会 · 组合才是手艺
 function triggerToolCombo() {
@@ -2504,6 +2535,7 @@ function evaluateAllTriggersDetailed(state, repoCfg, cfg) {
   const results = [
     triggerKeywordMatch(),
     triggerAiDebugBreakthrough(),
+    triggerDocsEdit(),
     triggerCleverFix(),
     triggerSubtraction(),
     triggerAiLimit(),
@@ -4482,6 +4514,109 @@ function cmdMute(args) {
   ok('静音 ' + label + ' · 用 ' + vermilion('tinker mute off') + ' 解除');
 }
 
+// v0.13 tinker stream <resource> · 长跑 NDJSON 输出
+// CLI 对偶 MCP 资源订阅 · 不依赖任何 AI agent · 任何能读 stdout 的 AI / 脚本都能用
+//
+// 资源:
+//   triggers · prompt-state 快照 · 内容变化时推一行
+//   today    · 今日 git commit + Tinker push 计数 · 5s 轮询
+//
+// 用法:
+//   tinker stream triggers              一直跑 · 内容变化时打一行 NDJSON
+//   tinker stream triggers --once       打完当前 snapshot 就退 (调试 / poll)
+//
+// 输出格式:
+//   {"event":"snapshot","resource":"...","at":1234,"data":{...}}   起始快照
+//   {"event":"updated","resource":"...","at":1234,"data":{...}}    变化推送
+async function cmdStream(resource, opts = {}) {
+  if (!resource) {
+    err('用法: tinker stream <resource> · 可选: triggers / today');
+    process.exit(1);
+  }
+  const emit = (event, data) => {
+    process.stdout.write(JSON.stringify({ event, resource, at: Date.now(), data }) + '\n');
+  };
+
+  const reads = {
+    triggers: () => {
+      const s = loadPromptState();
+      const now = Date.now();
+      return {
+        muted: !!(s.mutedUntil && s.mutedUntil > now),
+        mutedUntil: s.mutedUntil || null,
+        dismissedToday: s.dismissedTodayKey === todayKey(),
+        lastPromptedAt: s.lastPromptedAt || null,
+        uiSession: s.uiSession || null,
+        lastPushAtByProject: s.lastPushAtByProject || {},
+        pending: loadPending() || null,
+      };
+    },
+    today: async () => {
+      const cfg = loadConfig();
+      let gitCommits = 0;
+      if (inGitRepo()) {
+        try {
+          const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
+          const out = execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' });
+          gitCommits = out.trim().split('\n').filter(Boolean).length;
+        } catch {}
+      }
+      let tinkerPushed = 0;
+      if (cfg && cfg.serverUrl && cfg.token) {
+        try {
+          const state = await apiState(cfg);
+          const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+          for (const p of state.projects || []) {
+            for (const u of p.updates || []) {
+              if (u.at >= todayStart.getTime()) tinkerPushed++;
+            }
+          }
+        } catch {}
+      }
+      return { gitCommits, tinkerPushed };
+    },
+  };
+
+  const read = reads[resource];
+  if (!read) {
+    err('未知资源: ' + resource + ' · 可选: ' + Object.keys(reads).join(' / '));
+    process.exit(1);
+  }
+
+  const initial = await read();
+  emit('snapshot', initial);
+  if (opts.once) return;
+
+  let lastKey = JSON.stringify(initial);
+  let polling = false;
+  const checkAndPush = async () => {
+    if (polling) return;
+    polling = true;
+    try {
+      const next = await read();
+      const k = JSON.stringify(next);
+      if (k !== lastKey) { lastKey = k; emit('updated', next); }
+    } catch {}
+    polling = false;
+  };
+
+  const interval = setInterval(checkAndPush, 5000);
+  interval.unref();
+
+  // triggers: prompt-state.json 文件 watch (1s · 更灵敏)
+  if (resource === 'triggers') {
+    const stateFile = path.join(CONFIG_DIR, 'prompt-state.json');
+    if (fs.existsSync(stateFile)) {
+      fs.watchFile(stateFile, { interval: 1000 }, () => checkAndPush());
+    }
+  }
+
+  process.on('SIGINT', () => process.exit(0));
+  process.on('SIGTERM', () => process.exit(0));
+  process.stdin.on('end', () => process.exit(0));
+  await new Promise(() => {});
+}
+
 function help() {
   log('');
   log(bold('  tinker') + sepia(' — 在 coding 时把进展发到捣鼓 / Tinker'));
@@ -4564,6 +4699,7 @@ function parseArgs(args) {
     else if (a === '--from-file') opts.fromFile = args[++i];
     else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
     else if (a === '--auto') opts.auto = true;
+    else if (a === '--once') opts.once = true;
     else if (a === '--section') {
       // 支持多次 · 收集成数组 (匹配多段一起 contribute)
       const v = args[++i];
@@ -4655,7 +4791,7 @@ function cmdTriggers(opts = {}) {
     wouldPrompt: false,
     blockReason: null,
     todayHits: null,
-    triggerCount: 24,
+    triggerCount: 25,
   };
 
   if (data.inGitRepo) {
@@ -4866,6 +5002,10 @@ function cmdSchema(opts = {}) {
         { flag: '--json', purpose: 'machine-readable 输出' },
       ], jsonOutput: true, example: 'tinker contribute --from-file docs/08.md --section "能力地图"' },
       { name: 'mcp', purpose: '启动 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool', args: [], jsonOutput: false, example: 'tinker mcp' },
+      { name: 'stream', purpose: 'NDJSON 事件流 · CLI 对偶 MCP 订阅 · 任何 AI 通过 stdout 都能拿', args: [
+        { arg: '<resource>', purpose: 'triggers / today' },
+        { flag: '--once', purpose: '打完当前 snapshot 就退 · 不长跑' },
+      ], jsonOutput: true, example: 'tinker stream triggers' },
     ],
     pendingFile: path.join(CONFIG_DIR, 'pending.json'),
     promptStateFile: path.join(CONFIG_DIR, 'prompt-state.json'),
@@ -4962,6 +5102,7 @@ async function main() {
         await startMcpServer();
         return; // 这里不退出 · server 跑到 stdin EOF
 
+      case 'stream': await cmdStream(args[1], opts); return; // 长跑 NDJSON 输出 · 不退出
       case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default:
