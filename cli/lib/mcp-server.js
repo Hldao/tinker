@@ -159,12 +159,13 @@ const TOOLS = [
   // === 动作类 ===
   {
     name: 'tinker_push',
-    description: '发一笔普通进展到指定项目。message 必填 · project_id 可选 (不填用 repo 绑定的项目)。',
+    description: '发一笔普通进展到指定项目。message 必填 · project_id 可选 (不填用 repo 绑定的项目)。idempotency_key 强烈推荐:AI 重试时同 key 24h 内不重复 push。',
     inputSchema: {
       type: 'object',
       properties: {
         message: { type: 'string', description: '进展正文 (200-280 字 Tinker voice · 工艺人日志气质)' },
         project_id: { type: 'string', description: '项目 id (p-xxx)。不填时用当前 cwd 绑定的 .tinker/repo.json' },
+        idempotency_key: { type: 'string', description: '幂等键 · 同 key 24h 内重复调直接返之前的结果' },
       },
       required: ['message'],
       additionalProperties: false,
@@ -174,12 +175,16 @@ const TOOLS = [
       const projectId = args.project_id || (tinker.loadRepoConfig() || {}).projectId;
       if (!projectId) return toolErr('需要 project_id (没传 + 当前 repo 没绑定)', 'NO_PROJECT');
       try {
-        const result = await tinker.apiAction(cfg, 'addUpdate', { projectId, text: args.message });
-        tinker.recordPushAt(projectId);
+        const result = await tinker.withIdempotency(args.idempotency_key, async () => {
+          const r = await tinker.apiAction(cfg, 'addUpdate', { projectId, text: args.message });
+          tinker.recordPushAt(projectId);
+          return r;
+        });
         return toolResult({
           ok: true,
           updateId: result && (result.result?.id || result.id),
           url: cfg.serverUrl + '/#/p/' + cfg.handle + '/',
+          idempotent: !!(result && result.cacheHit),
         });
       } catch (e) { return toolErr(e.message, 'API_ERROR'); }
     },
@@ -192,6 +197,7 @@ const TOOLS = [
       properties: {
         reflection: { type: 'string', description: '完工感想 200-400 字 Tinker voice' },
         project_id: { type: 'string', description: '项目 id · 不填用 repo 绑定的' },
+        idempotency_key: { type: 'string', description: '幂等键 · 防重复 ship' },
       },
       required: ['reflection'],
       additionalProperties: false,
@@ -201,11 +207,14 @@ const TOOLS = [
       const projectId = args.project_id || (tinker.loadRepoConfig() || {}).projectId;
       if (!projectId) return toolErr('需要 project_id', 'NO_PROJECT');
       try {
-        await tinker.apiAction(cfg, 'exhibitProject', {
-          projectId, kind: 'ship', statement: args.reflection, seekingFeedback: true,
+        const result = await tinker.withIdempotency(args.idempotency_key, async () => {
+          await tinker.apiAction(cfg, 'exhibitProject', {
+            projectId, kind: 'ship', statement: args.reflection, seekingFeedback: true,
+          });
+          tinker.recordPushAt(projectId);
+          return { kind: 'ship', projectId };
         });
-        tinker.recordPushAt(projectId);
-        return toolResult({ ok: true, kind: 'ship', projectId });
+        return toolResult({ ok: true, kind: 'ship', projectId, idempotent: !!(result && result.cacheHit) });
       } catch (e) { return toolErr(e.message, 'API_ERROR'); }
     },
   },
@@ -217,6 +226,7 @@ const TOOLS = [
       properties: {
         statement: { type: 'string', description: '原型说明 200-400 字' },
         project_id: { type: 'string', description: '项目 id · 不填用 repo 绑定' },
+        idempotency_key: { type: 'string', description: '幂等键' },
       },
       required: ['statement'],
       additionalProperties: false,
@@ -226,11 +236,14 @@ const TOOLS = [
       const projectId = args.project_id || (tinker.loadRepoConfig() || {}).projectId;
       if (!projectId) return toolErr('需要 project_id', 'NO_PROJECT');
       try {
-        await tinker.apiAction(cfg, 'exhibitProject', {
-          projectId, kind: 'prototype', statement: args.statement, seekingFeedback: true,
+        const result = await tinker.withIdempotency(args.idempotency_key, async () => {
+          await tinker.apiAction(cfg, 'exhibitProject', {
+            projectId, kind: 'prototype', statement: args.statement, seekingFeedback: true,
+          });
+          tinker.recordPushAt(projectId);
+          return { kind: 'prototype', projectId };
         });
-        tinker.recordPushAt(projectId);
-        return toolResult({ ok: true, kind: 'prototype', projectId });
+        return toolResult({ ok: true, kind: 'prototype', projectId, idempotent: !!(result && result.cacheHit) });
       } catch (e) { return toolErr(e.message, 'API_ERROR'); }
     },
   },
@@ -242,6 +255,7 @@ const TOOLS = [
       properties: {
         message: { type: 'string', description: '卡在哪 · 简短描述' },
         project_id: { type: 'string', description: '项目 id · 不填用 repo 绑定' },
+        idempotency_key: { type: 'string', description: '幂等键' },
       },
       required: ['message'],
       additionalProperties: false,
@@ -251,10 +265,13 @@ const TOOLS = [
       const projectId = args.project_id || (tinker.loadRepoConfig() || {}).projectId;
       if (!projectId) return toolErr('需要 project_id', 'NO_PROJECT');
       try {
-        await tinker.apiAction(cfg, 'changeProjectStatus', { projectId, newStatus: 'stuck' });
-        await tinker.apiAction(cfg, 'addUpdate', { projectId, text: args.message });
-        tinker.recordPushAt(projectId);
-        return toolResult({ ok: true, marked: 'stuck', projectId });
+        const result = await tinker.withIdempotency(args.idempotency_key, async () => {
+          await tinker.apiAction(cfg, 'changeProjectStatus', { projectId, newStatus: 'stuck' });
+          await tinker.apiAction(cfg, 'addUpdate', { projectId, text: args.message });
+          tinker.recordPushAt(projectId);
+          return { marked: 'stuck', projectId };
+        });
+        return toolResult({ ok: true, marked: 'stuck', projectId, idempotent: !!(result && result.cacheHit) });
       } catch (e) { return toolErr(e.message, 'API_ERROR'); }
     },
   },

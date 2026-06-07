@@ -1014,12 +1014,20 @@ async function cmdPush(opts) {
   if (!pushText) { err('内容不能空'); process.exit(1); }
 
   // 推 · server 从 token 拿身份 · 不需要 currentUser
+  // v0.11 idempotency: --idem-key X 时 · 同 key 24h 内重复调直接返缓存
   try {
-    await apiAction(cfg, 'addUpdate', { projectId, text: pushText });
-    recordPushAt(projectId);
+    const result = await withIdempotency(opts.idemKey, async () => {
+      const r = await apiAction(cfg, 'addUpdate', { projectId, text: pushText });
+      recordPushAt(projectId);
+      return r;
+    });
     const p = mine.find(x => x.id === projectId);
     log('');
-    ok('记上了 — ' + bold(p.name));
+    if (result && result.cacheHit) {
+      ok('已 push (幂等命中 · 同 key 之前发过)');
+    } else {
+      ok('记上了 — ' + bold(p.name));
+    }
     log(sepia('  内容: ') + pushText);
     log(sepia('  去看: ') + cfg.serverUrl + '/');
     log('');
@@ -1539,6 +1547,9 @@ async function cmdHookInstall() {
     ok('记下了 · 这个 repo = ' + bold(picked.name));
   }
 
+  // 记到 ~/.tinker/repos.json · 给 drift 检测用 (扫所有注册的 repo 算今日活动分布)
+  registerRepoForDrift(process.cwd(), repoCfg);
+
   // 装 hook · 不暴力覆盖 · 用 marker 块附加 · 兼容用户已有 hook
   const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
   const hookFile = path.join(gitDir, 'hooks', 'post-commit');
@@ -1715,6 +1726,116 @@ function triggerKeywordMatch() {
 }
 
 // C · 长时间没发 update + 累了 commit · 需要 state 里有 lastPushAt 才能判断
+// === 幂等性 · 给 AI agent 重试不重复 push ===
+// 客户端缓存 · 24h TTL · 同 key 直接返之前的响应
+const IDEM_CACHE_FILE = path.join(CONFIG_DIR, 'idem-cache.json');
+const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
+function loadIdemCache() {
+  try { return JSON.parse(fs.readFileSync(IDEM_CACHE_FILE, 'utf-8')) || {}; } catch { return {}; }
+}
+function saveIdemCache(cache) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(IDEM_CACHE_FILE, JSON.stringify(cache, null, 2));
+  } catch {}
+}
+function idemGet(key) {
+  if (!key) return null;
+  const cache = loadIdemCache();
+  const entry = cache[key];
+  if (!entry) return null;
+  if (Date.now() - entry.at > IDEM_TTL_MS) {
+    delete cache[key];
+    saveIdemCache(cache);
+    return null;
+  }
+  return entry.response;
+}
+function idemSet(key, response) {
+  if (!key) return;
+  const cache = loadIdemCache();
+  // 清掉过期的 (顺手)
+  const now = Date.now();
+  for (const k of Object.keys(cache)) {
+    if (now - cache[k].at > IDEM_TTL_MS) delete cache[k];
+  }
+  cache[key] = { at: now, response };
+  saveIdemCache(cache);
+}
+// 包装 API 动作 · key 重复直接返缓存
+async function withIdempotency(key, fn) {
+  if (!key) return fn();
+  const cached = idemGet(key);
+  if (cached) return { ...cached, idempotent: true, cacheHit: true };
+  const result = await fn();
+  idemSet(key, result);
+  return result;
+}
+
+// === drift 检测 · 跨 repo · 用户说在做 A 但实际在折腾 B ===
+// 数据来源: ~/.tinker/repos.json · 所有 tinker hook install 过的 repo
+// 算法: 拉所有注册 repo 今天 commit 数 · 如果当前 repo 占比 < 30% 且有别的 > 50% · 触发
+const REPOS_REGISTRY_FILE = path.join(CONFIG_DIR, 'repos.json');
+function loadReposRegistry() {
+  try { return JSON.parse(fs.readFileSync(REPOS_REGISTRY_FILE, 'utf-8')) || {}; }
+  catch { return {}; }
+}
+function saveReposRegistry(reg) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(REPOS_REGISTRY_FILE, JSON.stringify(reg, null, 2));
+  } catch {}
+}
+function registerRepoForDrift(repoPath, repoCfg) {
+  const reg = loadReposRegistry();
+  reg[repoPath] = {
+    projectId: repoCfg.projectId,
+    projectName: repoCfg.projectName,
+    registeredAt: Date.now(),
+  };
+  saveReposRegistry(reg);
+}
+function triggerCrossRepoDrift(state, currentRepoCfg) {
+  if (state && state.lowFiredTodayKey === todayKey()) return { fired: false };
+  if (!currentRepoCfg) return { fired: false };
+  const reg = loadReposRegistry();
+  const regPaths = Object.keys(reg);
+  if (regPaths.length < 2) return { fired: false };  // 只有 1 个 repo 没法 drift
+  const cwd = process.cwd();
+  const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
+  // 算每个 registered repo 今日 commit 数
+  const counts = {};
+  let total = 0;
+  for (const p of regPaths) {
+    try {
+      if (!fs.existsSync(path.join(p, '.git'))) continue;
+      const out = execSync(`git log --since="${since}" --no-merges --pretty=format:"%h"`, { cwd: p, encoding: 'utf-8' }).trim();
+      const c = out ? out.split('\n').length : 0;
+      counts[p] = c;
+      total += c;
+    } catch { counts[p] = 0; }
+  }
+  if (total < 3) return { fired: false };  // 总量太小不算
+  const currentCount = counts[cwd] || 0;
+  const currentRatio = currentCount / total;
+  if (currentRatio >= 0.30) return { fired: false };  // 当前 repo 占比够 · 没 drift
+  // 找占比最高的别的 repo
+  let other = null, otherCount = 0;
+  for (const [p, c] of Object.entries(counts)) {
+    if (p !== cwd && c > otherCount) { other = p; otherCount = c; }
+  }
+  if (!other || otherCount / total < 0.50) return { fired: false };
+  const otherInfo = reg[other];
+  return {
+    fired: true,
+    priority: 65,
+    reason: 'cross-repo-drift',
+    kind: 'progress',
+    msg: `今天主要在 ${dim('"' + (otherInfo.projectName || path.basename(other)) + '"')} 干活 (${otherCount}/${total} commits) · 这边 ${currentRepoCfg.projectName} 只占 ${currentCount}/${total}`,
+    suggestion: `要不切到那边发一笔 · 还是这边其实没动 (那这一笔可能不发就好)`,
+  };
+}
+
 function triggerLongSilence(state, repoCfg) {
   if (!repoCfg) return { fired: false };
   // v0.2 #6: 一天只触发一次低优先级
@@ -2269,6 +2390,7 @@ function evaluateAllTriggers(state, repoCfg, cfg) {
     triggerFirstCommitOfDay(state),
     triggerLongSilence(state, repoCfg),
     triggerCumulativeCommits({}, state),
+    triggerCrossRepoDrift(state, repoCfg),
   ].filter(r => r.fired);
   if (uiResult.fired) results.push(uiResult);
   if (results.length === 0) return null;
@@ -2312,6 +2434,8 @@ async function cmdCheck(opts) {
     if (!fromHook) log(sepia('  这个 repo 还没绑定 Tinker 项目 · 先跑 ') + vermilion('tinker hook install'));
     return;
   }
+  // 顺手登记到 drift registry · 即使老用户没重装 hook 也能用 drift 检测
+  registerRepoForDrift(process.cwd(), repoCfg);
 
   // 评估所有触发器 · 选最高 priority
   const cfgForUi = (() => { try { return mustHaveConfig(); } catch { return null; } })();
@@ -3630,6 +3754,9 @@ function parseArgs(args) {
     else if (a === '--json') opts.json = true;
     else if (a === '--from-hook') opts.fromHook = true;
     else if (a === '--from-claude') opts.fromClaude = true;
+    else if (a === '--idempotency-key' || a === '--idem-key') opts.idemKey = args[++i];
+    else if (a.startsWith('--idempotency-key=')) opts.idemKey = a.slice('--idempotency-key='.length);
+    else if (a.startsWith('--idem-key=')) opts.idemKey = a.slice('--idem-key='.length);
     else if (a === '--file') opts.file = args[++i];
     else if (a.startsWith('--file=')) opts.file = a.slice('--file='.length);
     else if (a === '--limit') opts.limit = parseInt(args[++i], 10);
@@ -3854,6 +3981,10 @@ module.exports = {
   loadPending, savePending, clearPending,
   // sample pool
   savePoolSample,
+  // 幂等性 (给 MCP / AI agent 防重放)
+  withIdempotency, idemGet, idemSet,
+  // drift 检测的注册表 (MCP 也可暴露)
+  loadReposRegistry, registerRepoForDrift,
 };
 
 // 直接 ./tinker 跑才走 main · require 拿模块时不跑
