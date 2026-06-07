@@ -7746,16 +7746,20 @@ function renderProject(owner, slug) {
       </div>`}
     </div>
 
-    <div class="mb-12">
-      <div class="section-label flex items-center justify-between">
-        <span>时间线 (${p.updates.length})</span>
-        ${isMine ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openUpdate()">+ 记一笔</span>' : ''}
-      </div>
-      ${p.updates.map((u, uIdx) => {
+    ${(() => {
+      // v0.78 沉淀方法独立成区 · 时间线主轨不再混入"私人书签"方法卡片
+      // 痛点: contribute --from-file 跨 doc 提炼的方法 跟 "今天做了什么" 是两件事
+      // 解法: isMethod=true 移到独立 "沉淀方法" 区 · 默认折叠 · 点头部展开
+      // proven (usedBy ≥3) 留在时间线 · 因为它原本就是真实进展 · 只是被认证为方法
+      const indexOf = new Map(p.updates.map((u, i) => [u.id, i]));
+      const methodUpdates = p.updates.filter(u => u.isMethod);
+      const timelineUpdates = p.updates.filter(u => !u.isMethod);
+
+      const renderUpdateEntry = (u) => {
+        const uIdx = indexOf.get(u.id);
         const imagesHtml = (u.images && u.images.length > 0) ? u.images.map((img) => {
           figureIdx++;
           const safeSrc = img.src.replace(/'/g, "\\'");
-          const safeCap = (img.caption || '').replace(/'/g, "\\'");
           return `
             <figure class="tl-figure">
               <div class="tl-figure-frame" onclick="zoomImage('${safeSrc}', '${escapeHtml(img.caption||'')}')">
@@ -7768,10 +7772,9 @@ function renderProject(owner, slug) {
         const usedByList = u.usedBy || [];
         const meUsed = usedByList.find(x => x.user === currentUser.handle);
         const notesAboutThis = (p.notes || []).filter(n => n.updateId === u.id);
-        // v0.76 方法库双轨制 · proven (公共认证) 优先覆盖 method (私人书签)
-        // 3 人独立"用了·跑通了"反馈 = 达成 spec §5.1 #2 真实复用门槛 · social engineering 难门槛
         const isProven = usedByList.length >= 3;
         const isMethodOrProven = u.isMethod || isProven;
+        const isLongMethod = isMethodOrProven && (u.text || '').length >= 400;
         return `
           <div class="tl-entry ${u.kind === 'ship' ? 'tl-entry-ship' : ''}" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
@@ -7784,14 +7787,8 @@ function renderProject(owner, slug) {
                   ${u.feedbackAsk ? `<div class="tl-feedback-ask-text"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
                 </div>
               ` : ''}
-              ${(() => {
-                // v0.76: 长内容默认折叠 · 私人书签 OR 公共认证都触发 (≥400 字才折)
-                const isLongMethod = isMethodOrProven && (u.text || '').length >= 400;
-                return `
-                  <div class="tl-text ${isLongMethod ? 'tl-text-foldable' : ''}" id="tl-text-${u.id}">${renderRichText(u.text)}</div>
-                  ${isLongMethod ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整 ↓</span>` : ''}
-                `;
-              })()}
+              <div class="tl-text ${isLongMethod ? 'tl-text-foldable' : ''}" id="tl-text-${u.id}">${renderRichText(u.text)}</div>
+              ${isLongMethod ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整 ↓</span>` : ''}
               ${u.prompt ? `
                 <div class="tl-prompt-box">
                   <div class="tl-prompt-label">开场</div>
@@ -7834,8 +7831,31 @@ function renderProject(owner, slug) {
             </div>
           </div>
         `;
-      }).join('')}
-    </div>
+      };
+
+      return `
+        <div class="mb-12">
+          <div class="section-label flex items-center justify-between">
+            <span>时间线 (${timelineUpdates.length})</span>
+            ${isMine ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openUpdate()">+ 记一笔</span>' : ''}
+          </div>
+          ${timelineUpdates.map(renderUpdateEntry).join('')}
+        </div>
+
+        ${methodUpdates.length > 0 ? `
+          <div class="mb-12">
+            <div class="section-label flex items-center justify-between method-library-toggle" style="cursor: pointer; user-select: none;" onclick="toggleMethodLibrary()">
+              <span>沉淀方法 (${methodUpdates.length})</span>
+              <span id="method-library-arrow" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: none; letter-spacing: 0.05em;">展开 ↓</span>
+            </div>
+            <div id="method-library-content" style="display: none;">
+              <p style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-bottom: 16px; letter-spacing: 0.03em;">作者自己沉淀的方法 / 经验 · 不混进主时间线 · 别人 <span style="color: var(--vermilion);">tinker borrow</span> 时能搜到</p>
+              ${methodUpdates.map(renderUpdateEntry).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+    })()}
 
     ${(() => {
       const hasReactions = p.reactions.tinkered.length > 0 || p.reactions.wantToTry.length > 0;
@@ -9521,6 +9541,16 @@ function toggleFold(id) {
   if (toggle && toggle.classList.contains('tl-text-fold-toggle')) {
     toggle.textContent = el.classList.contains('expanded') ? '收起 ↑' : '展开看完整方法 ↓';
   }
+}
+
+// v0.78 沉淀方法 section 折叠 · 默认收起 · 点击展开
+function toggleMethodLibrary() {
+  const content = document.getElementById('method-library-content');
+  const arrow = document.getElementById('method-library-arrow');
+  if (!content) return;
+  const isOpen = content.style.display !== 'none';
+  content.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '展开 ↓' : '收起 ↑';
 }
 
 // v0.76 双轨制 · 作者自标 = 私人书签 ("存一笔" · 不承诺公共价值)
