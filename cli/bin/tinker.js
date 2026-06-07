@@ -3924,6 +3924,22 @@ const MAYBE_KINDS = {
   },
 };
 
+// v0.14 maybe-X 命中观测 · 追加 jsonl 到 ~/.tinker/trigger-log.jsonl
+// 只记 kind / event / cwd / 冷却剩余 · 不持久 prompt 内容 · 失败静默
+function logTriggerEvent(kind, event, extra) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      kind,
+      event,
+      cwd: process.cwd(),
+      ...extra,
+    }) + '\n';
+    fs.appendFileSync(path.join(CONFIG_DIR, 'trigger-log.jsonl'), line);
+  } catch { /* 容错 · 日志失败不影响触发器 */ }
+}
+
 function cmdMaybe(kind) {
   const cfg = MAYBE_KINDS[kind];
   if (!cfg) return;
@@ -3931,9 +3947,13 @@ function cmdMaybe(kind) {
   ps.lastMaybeAtByKind = ps.lastMaybeAtByKind || {};
   const last = ps.lastMaybeAtByKind[kind];
   const now = Date.now();
-  if (last && (now - last) < cfg.cooldownMin * 60 * 1000) return;
+  if (last && (now - last) < cfg.cooldownMin * 60 * 1000) {
+    logTriggerEvent(kind, 'cooled_down', { remaining_ms: cfg.cooldownMin * 60 * 1000 - (now - last) });
+    return;
+  }
   ps.lastMaybeAtByKind[kind] = now;
   savePromptState(ps);
+  logTriggerEvent(kind, 'fired', { cooldown_min: cfg.cooldownMin });
   process.stdout.write(cfg.reminder + '\n');
 }
 
