@@ -6518,6 +6518,13 @@
     <h3 class="modal-title">因 ta 启发 · 挂上你做的版本</h3>
     <p class="modal-sub">ta 会看到 ta 的进展真启动了别人 · 不只是点了赞</p>
     <div class="mb-4">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">具体哪条进展启发了你</label>
+      <select id="tinkered-inspired-by" class="input-bare" style="font-family: 'Newsreader', serif; font-size: 14px; padding: 6px 0; cursor: pointer; width: 100%;">
+        <option value="">— 挑一条 —</option>
+      </select>
+      <div class="upload-hint" style="margin-top: 4px;">原作者会被通知"你那条 X 真启动了别人" · 比项目整体更具体</div>
+    </div>
+    <div class="mb-4">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">你做的项目</label>
       <input id="tinkered-name" class="input-bare" placeholder="中文版求职信生成器">
     </div>
@@ -7857,15 +7864,24 @@ function renderProject(owner, slug) {
           <div class="section-label">反馈区</div>
           ${p.reactions.tinkered.length > 0 ? `
             <div class="sub-label">因这个启发动手 · ${p.reactions.tinkered.length} 人</div>
-            ${p.reactions.tinkered.map(t=>`
+            ${p.reactions.tinkered.map(t=>{
+              // v0.12 显示具体哪条 update 启发了 · 老数据 (没 inspiredByUpdateId) 自动 fallback
+              const insp = t.inspiredByUpdateId
+                ? (p.updates || []).find(u => u.id === t.inspiredByUpdateId)
+                : null;
+              const inspSnippet = insp
+                ? (insp.text || '').replace(/\s+/g, ' ').slice(0, 50) + ((insp.text || '').length > 50 ? '…' : '')
+                : null;
+              return `
               <div class="ref-entry" id="tinkered-${t.user}">
                 <span class="arrow">→</span>
                 <span class="ref-user" onclick="showScreen('workshop','${t.user}')" style="cursor: pointer;">@${t.user}</span>
                 <span style="color: var(--sepia);"> 做了 </span>
                 ${t.link ? `<a href="${t.link}" target="_blank" class="ref-name">「${escapeHtml(t.name)}」</a>` : `<span class="ref-name">「${escapeHtml(t.name)}」</span>`}
                 ${t.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteTinkered('${p.id}')">${ICONS.undo}撤回</span>` : ''}
+                ${inspSnippet ? `<div style="margin-left: 24px; margin-top: 4px; font-size: 13px; color: var(--sepia);">因 <a href="#update-${insp.id}" onclick="event.preventDefault(); flashAnchor('update-${insp.id}');" style="color: var(--sepia); text-decoration: underline; text-decoration-style: dotted;">「${escapeHtml(inspSnippet)}」</a> 启发</div>` : ''}
               </div>
-            `).join('')}
+            `}).join('')}
           ` : ''}
           ${p.reactions.wantToTry.length > 0 ? `
             <div class="sub-label">想试试 · ${p.reactions.wantToTry.length} 人</div>
@@ -8779,15 +8795,31 @@ function openTinkered() {
   currentTinkeredCtx = currentProjectCtx;
   document.getElementById('tinkered-name').value = '';
   document.getElementById('tinkered-link').value = '';
+  // v0.12 填充 "哪条进展启发了你" select · 倒序展示项目的所有 updates
+  const p = projectById(currentTinkeredCtx);
+  const sel = document.getElementById('tinkered-inspired-by');
+  sel.innerHTML = '<option value="">— 挑一条 —</option>';
+  if (p && Array.isArray(p.updates)) {
+    p.updates.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      const when = new Date(u.at).toISOString().slice(0, 10);
+      const snippet = (u.text || '').replace(/\s+/g, ' ').slice(0, 60);
+      opt.textContent = `${when} · ${snippet}${u.text && u.text.length > 60 ? '…' : ''}`;
+      sel.appendChild(opt);
+    });
+  }
   document.getElementById('modal-tinkered').classList.remove('hidden');
 }
 async function submitTinkered() {
   const name = document.getElementById('tinkered-name').value.trim();
   const link = document.getElementById('tinkered-link').value.trim();
+  const inspiredByUpdateId = document.getElementById('tinkered-inspired-by').value;
+  if (!inspiredByUpdateId) { showToast('挑一条具体启发了你的进展 — 颗粒度精确到那一笔'); return; }
   if (!name || !link) { showToast('名字和链接都要填 — 得真做出来才挂上'); return; }
   const p = projectById(currentTinkeredCtx);
   try {
-    await apiAction('submitTinkered', { projectId: p.id, name, link });
+    await apiAction('submitTinkered', { projectId: p.id, name, link, inspiredByUpdateId });
     closeModal('modal-tinkered');
     renderProject(p.owner, p.slug);
     showToast('挂上了 — 原作者会收到通知');

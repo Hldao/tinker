@@ -126,6 +126,7 @@ function buildState({ targetUserId } = {}) {
       name: t.name,
       link: t.link,
       at: t.at,
+      inspiredByUpdateId: t.inspired_by_update_id || null,
     }));
     return {
       id: p.id,
