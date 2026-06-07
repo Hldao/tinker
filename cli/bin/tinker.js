@@ -1818,6 +1818,60 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
 }
 
+// v0.14 把 Tinker MCP server 装进 Claude Code · LLM 启动后能看到 14 个 tinker_* 工具
+// 让 LLM 主动调 tinker_borrow / tinker_recent_updates / tinker_today_summary 等
+// 之前 MCP server 写好了但用户没装 · LLM 看不到 · 等于浪费
+async function cmdHookInstallMcp() {
+  const cfgPath = path.join(os.homedir(), '.claude.json');
+  if (!fs.existsSync(cfgPath)) {
+    err('找不到 ~/.claude.json · 先打开过 Claude Code 一次再装');
+    process.exit(1);
+  }
+  let cfg;
+  try { cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')); }
+  catch (e) { err('~/.claude.json 解析失败: ' + e.message); process.exit(1); }
+
+  cfg.mcpServers = cfg.mcpServers || {};
+  const wasInstalled = !!cfg.mcpServers.tinker;
+  cfg.mcpServers.tinker = {
+    command: 'tinker',
+    args: ['mcp'],
+    type: 'stdio',
+  };
+  fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+
+  log('');
+  ok(wasInstalled ? 'Tinker MCP server 配置已更新' : 'Tinker MCP server 装好了');
+  log(sepia('  位置: ') + sepia('~/.claude.json → mcpServers.tinker'));
+  log(sepia('  command: ') + vermilion('tinker mcp') + sepia(' (stdio · 长连接)'));
+  log('');
+  log(sepia('  装好后 LLM 能看到的 14 个工具:'));
+  log(sepia('    · tinker_borrow          搜方法 / 踩坑 / 上手指南 / 决策'));
+  log(sepia('    · tinker_recent_updates  拉作者最近 update'));
+  log(sepia('    · tinker_today_summary   今日 commit / push / token 用量'));
+  log(sepia('    · tinker_check_triggers  评估当前触发器'));
+  log(sepia('    · tinker_push / ship / stuck / prototype / mute · etc'));
+  log('');
+  log(vermilion('  ⚠ 需要重启 Claude Code 才生效'));
+  log(sepia('  关:    ') + vermilion('tinker hook uninstall-mcp'));
+  log('');
+}
+
+async function cmdHookUninstallMcp() {
+  const cfgPath = path.join(os.homedir(), '.claude.json');
+  if (!fs.existsSync(cfgPath)) { log(sepia('  ~/.claude.json 不存在 · 没装')); return; }
+  let cfg;
+  try { cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')); }
+  catch (e) { err('~/.claude.json 解析失败: ' + e.message); return; }
+  if (cfg.mcpServers && cfg.mcpServers.tinker) {
+    delete cfg.mcpServers.tinker;
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+    ok('Tinker MCP 移除了 · 重启 Claude Code 生效');
+  } else {
+    log(sepia('  没找到 Tinker MCP 配置 · 没动'));
+  }
+}
+
 // helper · 装一个 Claude Code hook entry (匹配 matcher 或没 matcher 的全局 hook)
 // 已存在我们装的 · 更新;别人的 · 附加;否则新建
 function installClaudeHookEntry(arr, matcher, cmd, kind) {
@@ -6408,7 +6462,9 @@ async function main() {
         else if (args[1] === 'uninstall') cmdHookUninstall();
         else if (args[1] === 'install-claude') await cmdClaudeHookInstall(opts);
         else if (args[1] === 'uninstall-claude') cmdClaudeHookUninstall();
-        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude'); process.exit(1); }
+        else if (args[1] === 'install-mcp') await cmdHookInstallMcp();
+        else if (args[1] === 'uninstall-mcp') await cmdHookUninstallMcp();
+        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude | install-mcp | uninstall-mcp'); process.exit(1); }
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook, json: opts.json }); break;
       case 'resolve': await cmdResolve(args[1], opts); break;
