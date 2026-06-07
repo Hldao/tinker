@@ -6024,6 +6024,25 @@ function help() {
   log('  ' + vermilion('tinker mcp') + sepia('                          启 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool'));
   log(sepia('  ') + dim('几乎所有命令支持 --json · 错误统一 { ok: false, error, code } 形态'));
   log('');
+  // v0.14 AI agent 反向映射:关键场景 → 调什么命令 · 让 LLM 看 help 就能直接用
+  // CLI 路线对偶 MCP · LLM 通过 Bash 跑 tinker + --json 拿结构化结果 · 不锁单一客户端
+  log(sepia('  ') + vermilion('AI agent 指南 (LLM 看下方关键场景决定调什么)'));
+  log(sepia('  ─────────────────────────────────────────────────────────────'));
+  log(sepia('  用户聊到某技术/报错/想入门 X        → ') + vermilion('tinker borrow "<关键词>" --json --limit 5'));
+  log(sepia('  用户说"卡住/不行/跑不起来"          → ') + vermilion('tinker stuck -m "..." ') + dim('(看上下文真卡才调)'));
+  log(sepia('  用户说"懂了/顿悟/终于通了"          → ') + vermilion('tinker push -m "..." ') + dim('(顿悟时刻难复现)'));
+  log(sepia('  用户做工具/方案决策                  → ') + vermilion('tinker resolve push-decision -m "..."'));
+  log(sepia('  用户说"砍了/不做了"                 → ') + vermilion('tinker push -m "..." ') + dim('(说为什么砍)'));
+  log(sepia('  用户说"完工/上线了/deploy 了"        → ') + vermilion('tinker ship -m "..." ') + dim('(进陈列馆)'));
+  log(sepia('  用户问"今天都做了啥"                → ') + vermilion('tinker goodnight --json'));
+  log(sepia('  用户问"上次怎么解决的"              → ') + vermilion('tinker recent --json --limit 10'));
+  log(sepia('  起草前避免重复 / 引用作者过往        → ') + vermilion('tinker recent --json'));
+  log(sepia('  作者要"标方法/经验/上手指南/决策"     → ') + vermilion('tinker contribute / mark-experience / mark-learning / mark-decision'));
+  log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
+  log(sepia('  ') + dim('调前看 ') + vermilion('tinker state --json') + dim(' · 静音/冷却中别打扰'));
+  log(sepia('  ') + dim('幂等保险 · 给 --idempotency-key (同 key 24h 内不重复)'));
+  log(sepia('  ') + dim('关键词命中只是候选 · 看上下文判断是否真的提醒 · 不每次都建议'));
+  log('');
   log(sepia('  ') + vermilion('辅助'));
   log('  ' + vermilion('tinker projects | ls') + sepia('               列我的活跃项目'));
   log('  ' + vermilion('tinker config') + sepia('                      看当前配置'));
