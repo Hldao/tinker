@@ -2726,13 +2726,12 @@ async function cmdCheck(opts) {
   // 调用频率高 (每次 hook) · cleanOldDossiers 内部判 mtime 不重读不必要文件 · 几乎零成本
   try { getStruggleModule().cleanOldDossiers({ keepDays: 30 }); } catch {}
 
-  // 静音 / 延后 / 已 dismiss 今日 · 全部直接退
+  // v0.13: 静默逻辑分层 (用户语义对齐)
+  //   mutedUntil / dismissedTodayKey = 全局静音 (用户明确表达"不要打扰我") · 早 return
+  //   laterUntilByReason = per-reason 延后 (用户语义是"这一类我懒得写") · 移到 evaluate 后
+  // 这样: 用户对 ai-limit 选"1 小时后再问" · subtraction (不同 reason) 仍能触发
   if (state.mutedUntil && state.mutedUntil > now) {
     if (!fromHook) log(sepia('  现在静音中 · 到 ' + new Date(state.mutedUntil).toLocaleString()));
-    return;
-  }
-  if (state.laterUntil && state.laterUntil > now) {
-    if (!fromHook) log(sepia('  延后到 ' + new Date(state.laterUntil).toLocaleString()));
     return;
   }
   if (state.dismissedTodayKey === todayKey()) {
@@ -2764,6 +2763,13 @@ async function cmdCheck(opts) {
   savePromptState(state);
   if (!result) {
     if (!fromHook) log(sepia('  当前没有触发器命中 · 安静'));
+    return;
+  }
+
+  // v0.13: per-reason 延后 · 用户对这一类已说"稍后" · 但不同 reason 仍能突破
+  const laterByReason = state.laterUntilByReason || {};
+  if (laterByReason[result.reason] && laterByReason[result.reason] > now) {
+    if (!fromHook) log(sepia('  这类 (' + result.reason + ') 延后到 ' + new Date(laterByReason[result.reason]).toLocaleString()));
     return;
   }
 
@@ -2909,6 +2915,7 @@ async function cmdCheck(opts) {
     const pending = {
       at: now,
       kind: result.kind,
+      reason: result.reason,  // v0.13: 给 --ai mode 的 later 选项做 per-reason 静默
       priority: result.priority,
       msg: stripAnsi(result.msg),
       suggestion: result.suggestion || '',
@@ -3066,9 +3073,11 @@ async function cmdCheck(opts) {
     savePromptState(state);
     log(sepia('  好 · 接着搞'));
   } else if (choice === 'later') {
-    state.laterUntil = now + 60 * 60 * 1000;
+    // v0.13: per-reason 延后 · 不同 reason 仍能突破
+    state.laterUntilByReason = state.laterUntilByReason || {};
+    state.laterUntilByReason[result.reason] = now + 60 * 60 * 1000;
     savePromptState(state);
-    log(sepia('  1 小时后再问'));
+    log(sepia('  这一类 (' + result.reason + ') 1 小时后再问 · 别的 commit 仍会提醒'));
   } else if (choice === 'skip-today') {
     state.dismissedTodayKey = todayKey();
     savePromptState(state);
@@ -4066,8 +4075,10 @@ async function cmdResolve(choice, opts) {
       saveRejectDiffIfChanged(pending, choice, text);
       ok('⚠ 卡住了 · 已通知关心你的人');
     } else if (choice === 'later') {
-      state.laterUntil = now + 60 * 60 * 1000;
-      ok('1 小时后再问');
+      // v0.13: per-reason 延后 · 用 pending.reason · 兜底 '_default' (老 pending 没 reason 字段)
+      state.laterUntilByReason = state.laterUntilByReason || {};
+      state.laterUntilByReason[pending.reason || '_default'] = now + 60 * 60 * 1000;
+      ok('这一类 (' + (pending.reason || '_default') + ') 1 小时后再问');
     } else if (choice === 'skip-today') {
       state.dismissedTodayKey = todayKey();
       ok('今天不再问 · 明天见');
@@ -4957,7 +4968,8 @@ function cmdMute(args) {
   const now = Date.now();
   if (arg === 'off' || arg === 'unmute') {
     state.mutedUntil = null;
-    state.laterUntil = null;
+    state.laterUntil = null;            // 老字段 · 向后兼容清理
+    state.laterUntilByReason = {};      // v0.13 per-reason 延后清空
     state.dismissedTodayKey = null;
     savePromptState(state);
     ok('解除静音 · 触发器开启');
@@ -5250,15 +5262,18 @@ function parseArgs(args) {
 function cmdState(opts = {}) {
   const state = loadPromptState();
   const now = Date.now();
+  // v0.13: laterUntilByReason 替代老 laterUntil · per-reason 延后状态
+  const laterByReason = state.laterUntilByReason || {};
+  const activeLaterByReason = Object.fromEntries(
+    Object.entries(laterByReason).filter(([_, until]) => until > now)
+  );
   const summary = {
     ok: true,
     now,
     muted: state.mutedUntil && state.mutedUntil > now
       ? { until: state.mutedUntil, remainingMs: state.mutedUntil - now }
       : null,
-    later: state.laterUntil && state.laterUntil > now
-      ? { until: state.laterUntil, remainingMs: state.laterUntil - now }
-      : null,
+    laterByReason: Object.keys(activeLaterByReason).length > 0 ? activeLaterByReason : null,
     dismissedToday: state.dismissedTodayKey === todayKey(),
     lastPromptedAt: state.lastPromptedAt || null,
     cooldownActive: state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000,
@@ -5270,7 +5285,14 @@ function cmdState(opts = {}) {
   log('');
   log(sepia('  prompt 状态:'));
   log(sepia('    mute       ') + (summary.muted ? bold('到 ' + new Date(summary.muted.until).toLocaleString()) : sepia('(无)')));
-  log(sepia('    later      ') + (summary.later ? bold('到 ' + new Date(summary.later.until).toLocaleString()) : sepia('(无)')));
+  if (summary.laterByReason) {
+    log(sepia('    later      ') + bold(Object.keys(summary.laterByReason).length + ' 类延后中:'));
+    for (const [reason, until] of Object.entries(summary.laterByReason)) {
+      log(sepia('      · ') + reason + sepia(' 到 ') + new Date(until).toLocaleString());
+    }
+  } else {
+    log(sepia('    later      ') + sepia('(无)'));
+  }
   log(sepia('    今日 skip  ') + (summary.dismissedToday ? bold('是') : sepia('否')));
   log(sepia('    冷却中     ') + (summary.cooldownActive ? bold('是 · 30min 内 prompt 过') : sepia('否')));
   log(sepia('    UI session ') + (summary.uiSession ? bold('进行中 · ' + summary.uiSession.commitCount + ' commits') : sepia('(无)')));
@@ -5291,8 +5313,11 @@ function cmdTriggers(opts = {}) {
     state: {
       muted: state.mutedUntil && state.mutedUntil > now
         ? { until: state.mutedUntil, remainingMs: state.mutedUntil - now } : null,
-      later: state.laterUntil && state.laterUntil > now
-        ? { until: state.laterUntil, remainingMs: state.laterUntil - now } : null,
+      laterByReason: (() => {
+        const m = state.laterUntilByReason || {};
+        const active = Object.fromEntries(Object.entries(m).filter(([_, u]) => u > now));
+        return Object.keys(active).length > 0 ? active : null;
+      })(),
       dismissedToday: state.dismissedTodayKey === todayKey(),
       cooldownActive: !!(state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000),
       cooldownRemainingMin: state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000
