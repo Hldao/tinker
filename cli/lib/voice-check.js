@@ -52,14 +52,22 @@ function detectAIVoice(text) {
   while ((match = enWordRe.exec(t)) !== null) {
     const word = match[0];
     if (COMMON_ABBR.test(word)) continue;
-    const before = t[match.index - 1];
-    const after = t[match.index + word.length];
-    if ((before && cnOrPunctRe.test(before)) || (after && cnOrPunctRe.test(after))) {
+    // v0.20 升级:看前 3 字符 + 后 3 字符 · 越过空格判断 "汉字 studio 汉字" 这种
+    // 之前只看紧邻 1 个字符 · " studio " (空格隔开) 漏报
+    const ctxBefore = t.slice(Math.max(0, match.index - 3), match.index);
+    const ctxAfter = t.slice(match.index + word.length, match.index + word.length + 3);
+    if (cnOrPunctRe.test(ctxBefore) || cnOrPunctRe.test(ctxAfter)) {
       mixedTerms.push(word);
     }
   }
   if (mixedTerms.length >= 2) {
     issues.push('中英混杂(' + [...new Set(mixedTerms)].slice(0, 3).join(', ') + ')');
+  }
+
+  // v0.20 "选 X 不选 Y" / "方案 A vs 方案 B" / "三条线索" 等内部代号 · 没上下文外人看不懂
+  // 抓住 daodao 那条 "studio 一等公民" 漏报的根本
+  if (/选\s*[A-Za-z](?:[\s 不]|$)|不选\s*[A-Za-z](?:[\s 因]|$)|方案\s*[A-Za-z]\b/.test(t)) {
+    issues.push('内部代号(选 X / 不选 Y / 方案 X)');
   }
 
   return { score: issues.length, list: issues };

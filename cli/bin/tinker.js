@@ -1019,6 +1019,10 @@ async function cmdPush(opts) {
   pushText = (pushText || '').trim();
   if (!pushText) { err('内容不能空'); process.exit(1); }
 
+  // v0.20 voice 守门 · 防裸奔 AI 直出 (尤其 -m 直接 push 没经 draft 的)
+  const gate = await gateVoiceCheck(pushText, opts);
+  if (!gate.ok) process.exit(1);
+
   // 推 · server 从 token 拿身份 · 不需要 currentUser
   // v0.11 idempotency: --idem-key X 时 · 同 key 24h 内重复调直接返缓存
   try {
@@ -1127,6 +1131,9 @@ async function cmdPushFromDraft(cfg, opts) {
   let posted = 0;
   for (const i of selected) {
     try {
+      // v0.20 voice 守门 · 草稿也要过 · 因为 LLM 起草后用户可能没改就发
+      const gate = await gateVoiceCheck(candidates[i].text, opts);
+      if (!gate.ok) { log(C.red + '  ✗ ' + C.reset + sepia('候选 ' + (i+1) + ' 被 voice 守门拦了 · 加 --force 强发')); continue; }
       await apiAction(cfg, 'addUpdate', { projectId, text: candidates[i].text });
       recordPushAt(projectId);
       posted++;
@@ -1187,6 +1194,10 @@ async function cmdPushExperienceDraft(cfg, opts, text, productTag = 'experience'
     });
     if (!yes) { log(sepia('  取消了')); return; }
   }
+
+  // v0.20 voice 守门 · --as-experience / --as-learning / --as-decision 也要过
+  const gate = await gateVoiceCheck(text, opts);
+  if (!gate.ok) process.exit(1);
 
   // 发 + 自动 mark · v0.13 phase 2 完整版
   try {
@@ -3381,6 +3392,9 @@ async function cmdCheck(opts) {
     const sinceMin = Math.max(60, Math.round((Date.now() - session.startedAt) / 60000) + 10);
     const text = await promptForText('一句话总结这波 UI 改动', sinceMin);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
+    // v0.20 voice 守门
+    const gate1 = await gateVoiceCheck(text, opts);
+    if (!gate1.ok) { log(sepia('  voice 守门拦了 · 没发')); return; }
     const pushResult = await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
     const updateId = pushResult && (pushResult.result?.id || pushResult.id);
     state.lastPushAtByProject = state.lastPushAtByProject || {};
@@ -3417,6 +3431,9 @@ async function cmdCheck(opts) {
     }
     const text = await promptForText(msg, 60);
     if (!text) { log(sepia('  没写内容 · 跳过')); return; }
+    // v0.20 voice 守门
+    const gate2 = await gateVoiceCheck(text, opts);
+    if (!gate2.ok) { log(sepia('  voice 守门拦了 · 没发')); return; }
     await apiAction(cfg, 'addUpdate', { projectId: repoCfg.projectId, text });
     state.lastPushAtByProject = state.lastPushAtByProject || {};
     state.lastPushAtByProject[repoCfg.projectId] = Date.now();
@@ -4933,8 +4950,217 @@ function cmdBridgeAutoPing(opts) {
   log('');
 }
 
+// ============================================
+// studios · 工作室 (v0.20)
+//
+// 概念:
+//   一个 user 可以挂靠到 studio · 工作室聚合所有成员的 projects/updates
+//   secretHash = sha256(暗号) 给 server 验成员关系 · 真暗号本地存 · 也是桥的 e2e key
+//
+// 邀请第一版用 copy-paste cmd · 不搞复杂的桥邀请协议:
+//   owner 跑 create → 输出 `tinker studio join <slug> <secret>` 一行
+//   把这行发给队友 (微信/桥/面对面) · 队友跑一下就加入
+// ============================================
+function sha256Hex(s) { return require('crypto').createHash('sha256').update(s).digest('hex'); }
+
+async function cmdStudio(subcmd, args, opts) {
+  const cfg = mustHaveConfig(opts);
+  const bridgeLib = require('../lib/bridge');
+
+  if (!subcmd || subcmd === 'help') {
+    log('');
+    log(bold('  tinker studio · 工作室 (你 + 队友 = 一个工作室)'));
+    log('');
+    log('  ' + vermilion('tinker studio create <slug> --name "..." [--tagline "..."]'));
+    log(sepia('     建工作室 · 自动当 owner · 输出邀请命令'));
+    log('  ' + vermilion('tinker studio join <slug> <secret>'));
+    log(sepia('     加入 · slug+secret 从 owner 那里拿'));
+    log('  ' + vermilion('tinker studio list'));
+    log(sepia('     看我所属的工作室'));
+    log('  ' + vermilion('tinker studio info <slug>'));
+    log(sepia('     看某工作室聚合页 (成员 + 项目)'));
+    log('  ' + vermilion('tinker studio leave <slug>'));
+    log(sepia('     退出'));
+    log('');
+    return;
+  }
+
+  switch (subcmd) {
+    case 'create': {
+      const slug = args[2];
+      if (!slug) { err('slug 必填 · 比如 `tinker studio create daogu-studio --name "捣鼓工作室"`'); process.exit(1); }
+      const name = opts.name || slug;
+      const tagline = opts.tagline || null;
+      const secret = require('crypto').randomBytes(16).toString('hex');
+      const secretHash = sha256Hex(secret);
+
+      const res = await safeFetch(cfg.serverUrl + '/api/studios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ slug, name, tagline, secretHash }),
+      });
+      if (!res.ok) { err(res.error || '建工作室失败'); process.exit(1); }
+
+      // 本地存暗号 · 后续 bridge / studio 通信都用这个
+      bridgeLib.saveSecret(secret);
+
+      log('');
+      ok(`工作室建好了 — ${bold(name)}`);
+      log(sepia('  slug:    ') + vermilion(slug));
+      if (tagline) log(sepia('  一句话:  ') + tagline);
+      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.SECRET_FILE));
+      log('');
+      log(bold('  邀请队友 · 把下面这行发给 ta (微信/桥/面对面都行):'));
+      log('');
+      log('  ' + vermilion(`tinker studio join ${slug} ${secret}`));
+      log('');
+      log(sepia('  暗号只在这条命令里 · server 只存 hash · 别截图发公开渠道'));
+      log('');
+      return;
+    }
+
+    case 'join': {
+      const slug = args[2];
+      const secret = args[3];
+      if (!slug || !secret) { err('用法: tinker studio join <slug> <secret>'); process.exit(1); }
+
+      const secretHash = sha256Hex(secret);
+      const res = await safeFetch(cfg.serverUrl + '/api/studios/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ slug, secretHash }),
+      });
+      if (!res.ok) { err(res.error || '加入失败'); process.exit(1); }
+
+      bridgeLib.saveSecret(secret);
+
+      log('');
+      if (res.alreadyMember) {
+        ok(`你已经在 ${bold(res.name)} 里了 · 本地暗号已刷新`);
+      } else {
+        ok(`加入了 — ${bold(res.name)}`);
+      }
+      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.SECRET_FILE));
+      log(sepia('  现在桥消息能跟工作室所有成员通了'));
+      log('');
+      return;
+    }
+
+    case 'list': {
+      const res = await safeFetch(cfg.serverUrl + '/api/me/studios', {
+        headers: { Authorization: 'Bearer ' + cfg.token },
+      });
+      if (!res.ok) { err(res.error || '拉取失败'); process.exit(1); }
+      if (opts.json) { outputJson(res); return; }
+      log('');
+      if (!res.studios || res.studios.length === 0) {
+        log(sepia('  你还没加入任何工作室'));
+        log(sepia('  建一个: ') + vermilion('tinker studio create <slug> --name "..."'));
+        log('');
+        return;
+      }
+      log(bold('  我的工作室:'));
+      for (const s of res.studios) {
+        log('  · ' + bold(s.name) + sepia('  /s/' + s.slug) + sepia('  [' + s.role + ']'));
+        if (s.tagline) log(sepia('      ') + s.tagline);
+      }
+      log('');
+      return;
+    }
+
+    case 'info': {
+      const slug = args[2];
+      if (!slug) { err('用法: tinker studio info <slug>'); process.exit(1); }
+      const res = await safeFetch(cfg.serverUrl + '/api/studios/' + encodeURIComponent(slug));
+      if (!res.ok) { err(res.error || '拉取失败'); process.exit(1); }
+      if (opts.json) { outputJson(res); return; }
+      const s = res.studio;
+      log('');
+      log(bold('  ' + s.name) + sepia('  /s/' + s.slug));
+      if (s.tagline) log(sepia('  ') + s.tagline);
+      log('');
+      log(sepia('  成员 (' + s.members.length + '):'));
+      for (const m of s.members) {
+        log('  · @' + bold(m.handle) + sepia('  [' + m.role + ']') + (m.tagline ? sepia(' — ') + m.tagline : ''));
+      }
+      log('');
+      log(sepia('  项目 (' + s.projects.length + '):'));
+      for (const p of s.projects) {
+        log('  · ' + bold(p.name) + sepia('  by @' + p.ownerHandle) + sepia('  [' + p.status + ']'));
+      }
+      log('');
+      return;
+    }
+
+    case 'leave': {
+      const slug = args[2];
+      if (!slug) { err('用法: tinker studio leave <slug>'); process.exit(1); }
+      const getRes = await safeFetch(cfg.serverUrl + '/api/studios/' + encodeURIComponent(slug));
+      if (!getRes.ok) { err(getRes.error || '工作室不存在'); process.exit(1); }
+      const studioId = getRes.studio.id;
+      const res = await safeFetch(cfg.serverUrl + '/api/studios/' + studioId + '/leave', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + cfg.token },
+      });
+      if (!res.ok) { err(res.error || '退出失败'); process.exit(1); }
+      log('');
+      ok(`退出了 — ${getRes.studio.name}`);
+      log(sepia('  本地暗号文件还在 · 想清掉: rm ') + bridgeLib.SECRET_FILE);
+      log('');
+      return;
+    }
+
+    default:
+      err('未知子命令: ' + subcmd + ' · 跑 `tinker studio help` 看用法');
+      process.exit(1);
+  }
+}
+
 // strip ANSI 颜色码 · JSON 里不该带终端控制符
 function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, ''); }
+
+// v0.20 voice 守门 · 在所有 push 路径 addUpdate 前调
+// 防 "tinker push -m '<没经 LLM 起草的 AI 直出文本>'" 的裸奔
+//   score >= 3 → 拒绝 (要 --force 才发)
+//   score == 2 → TTY 时 confirm · 非 TTY 默认放过 (不阻塞 hook / AI agent 调用)
+//   score <= 1 → 通过
+// 返回 { ok: true } 通过 · { ok: false, reason } 拒绝
+// 注意 helper 是 async (因为 TTY confirm 走 inquirer)
+async function gateVoiceCheck(text, opts = {}) {
+  if (opts.force) return { ok: true, forced: true };
+  let vc;
+  try { vc = require('../lib/voice-check').detectAIVoice(text); }
+  catch { return { ok: true }; }  // 模块缺失就静默通过 · 别因为守门挂掉主流程
+  if (!vc || vc.score <= 1) return { ok: true };
+  const hits = (vc.list || []).join(' / ');
+  // score >= 3 强拒
+  if (vc.score >= 3) {
+    if (opts.json) return { ok: false, reason: 'voice 守门拒绝 · 命中 ' + vc.score + ' 条 AI 直出模式 (' + hits + ') · 加 --force 强发', code: 'VOICE_GATE_BLOCK' };
+    log('');
+    err('voice 守门拒绝 · 这段读着像 AI 直出 (命中 ' + vc.score + ' 条: ' + hits + ')');
+    log(sepia('  建议:跑 ') + vermilion('tinker draft') + sepia(' 让 LLM 按你的 voice fingerprint 重写 · 再 ') + vermilion('tinker push <草稿>'));
+    log(sepia('  或者:确认想这样发 · 加 ') + vermilion('--force') + sepia(' 跳过守门'));
+    log('');
+    return { ok: false, reason: 'blocked', code: 'VOICE_GATE_BLOCK' };
+  }
+  // score == 2 软警告
+  if (opts.json) return { ok: true, warn: true, hits: vc.list, score: vc.score };
+  log('');
+  log(vermilion('  ⚠ voice 自检') + sepia(' · 这段读着有点像 AI 直出 (命中 ' + vc.score + ' 条: ' + hits + ')'));
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    try {
+      const { confirm } = require('@inquirer/prompts');
+      const go = await confirm({ message: '还是要发吗?', default: true });
+      if (!go) {
+        log(sepia('  没发 · 跑 ') + vermilion('tinker draft') + sepia(' 让 LLM 按你 voice 重写一下'));
+        return { ok: false, reason: 'user-cancelled', code: 'USER_CANCELLED' };
+      }
+    } catch { /* 没装 inquirer 走默认 · 通过 */ }
+  } else {
+    log(sepia('  非 TTY · 默认放过 · 想拦加 --force 反义'));  // 非 TTY 仅警告 · 不拦
+  }
+  return { ok: true, warned: true };
+}
 
 // v0.4 Phase 4 · 检测作者改稿 · 保存 reject-diff 给未来 LLM 学习
 // LLM 草稿放在 ~/.tinker/last-llm-draft.json (cmdDraft 生成时写)
@@ -5045,6 +5271,12 @@ async function cmdResolve(choice, opts) {
   try {
     if (choice === 'push' || choice === 'push-brand-self' || choice === 'push-brand-meta' || choice === 'push-decision') {
       const cfg = mustHaveConfig();
+      // v0.20 voice 守门 · AI agent 走 tinker resolve push -m "..." 路径 · 同样要过
+      const gate = await gateVoiceCheck(text, opts);
+      if (!gate.ok) {
+        if (opts.json) return errJson(gate.reason || 'voice 守门拦了', gate.code || 'VOICE_GATE_BLOCK');
+        process.exit(1);
+      }
       await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
@@ -6714,6 +6946,12 @@ function help() {
   log('  ' + vermilion('tinker bridge auto-ping --status') + sepia('   看当前配置'));
   log('  ' + vermilion('tinker bridge auto-ping --disable') + sepia('  停用'));
   log('');
+  log(sepia('  ') + vermilion('工作室 · 你跟队友 = 一个工作室'));
+  log('  ' + vermilion('tinker studio create <slug> --name "..."') + sepia('  建工作室 · 自动当 owner · 输出邀请命令'));
+  log('  ' + vermilion('tinker studio join <slug> <secret>') + sepia('        加入 · slug+secret 从 owner 那里拿'));
+  log('  ' + vermilion('tinker studio list') + sepia('                        看我所属的工作室'));
+  log('  ' + vermilion('tinker studio info <slug>') + sepia('                  看工作室聚合页 (成员 + 项目)'));
+  log('');
   log(sepia('  ') + vermilion('voice · 写作风格学习'));
   log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
   log('  ' + vermilion('tinker voice teach --from-claude') + sepia('    从 Claude Code 对话历史抽样本'));
@@ -6793,6 +7031,8 @@ function parseArgs(args) {
     else if (a === '--from-tinker') opts.fromTinker = true;
     else if (a === '--name') opts.name = args[++i];
     else if (a.startsWith('--name=')) opts.name = a.slice('--name='.length);
+    else if (a === '--tagline') opts.tagline = args[++i];
+    else if (a.startsWith('--tagline=')) opts.tagline = a.slice('--tagline='.length);
     else if (a === '--link') opts.link = args[++i];
     else if (a.startsWith('--link=')) opts.link = a.slice('--link='.length);
     else if (a === '--inspired-by') opts.inspiredBy = args[++i];
@@ -6844,6 +7084,7 @@ function parseArgs(args) {
     else if (a === '--as-decision' || a === '--asDecision') opts.asDecision = true;
     else if (a === '--quiet' || a === '-q') opts.quiet = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
+    else if (a === '--force' || a === '-f') opts.force = true;
     else if (a === '--tag') {
       // v0.84 支持多次 · 收集 · contribute 时一并发上
       const v = (args[++i] || '').trim();
@@ -7321,6 +7562,10 @@ async function main() {
         if (args[1] === 'auto-ping') { cmdBridgeAutoPing(opts); return; }
         err('用法: tinker bridge auto-ping [--enable|--disable|--status] [--kinds X,Y] [--to @who]');
         process.exit(1);
+
+      case 'studio':
+        await cmdStudio(args[1], args, opts);
+        break;
 
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;
