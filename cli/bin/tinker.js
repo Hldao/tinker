@@ -1171,13 +1171,14 @@ async function cmdPushExperienceDraft(cfg, opts, text) {
   if (!opts.yes) {
     const { confirm } = require('@inquirer/prompts');
     const yes = await confirm({
-      message: `发到「${p.name}」并标为踩坑经验?`,
+      message: `发到「${p.name}」并标为${productLabel}?`,
       default: true,
     });
     if (!yes) { log(sepia('  取消了')); return; }
   }
 
-  // 发 + 自动 mark
+  // 发 + 自动 mark · phase 1: experience 跟 learning 都先走 markAsExperience
+  // phase 2 计划: server 加 is_learning 字段后区分
   try {
     const res = await apiAction(cfg, 'addUpdate', { projectId, text });
     recordPushAt(projectId);
@@ -1186,11 +1187,11 @@ async function cmdPushExperienceDraft(cfg, opts, text) {
       try {
         await apiAction(cfg, 'markAsExperience', { updateId });
       } catch (e) {
-        log(sepia('  ⚠ mark experience 失败: ' + e.message + ' · 手动跑 ') + vermilion(`tinker mark-experience ${updateId}`));
+        log(sepia('  ⚠ mark ' + productTag + ' 失败: ' + e.message + ' · 手动跑 ') + vermilion(`tinker mark-experience ${updateId}`));
       }
     }
     log('');
-    ok('发了 + 标为踩坑经验 — ' + bold(p.name));
+    ok('发了 + 标为' + productLabel + ' — ' + bold(p.name));
     if (updateId) log(sepia('  update id: ') + updateId);
     const slug = (res && res.projectSlug) || p.slug;
     const handle = (res && res.ownerHandle) || cfg.handle;
@@ -2253,49 +2254,59 @@ function triggerReversal() {
   } catch { return { fired: false }; }
 }
 
-// v0.12 跨上下文触发器 · 状态机驱动版
-// 早期版本独立扫 ~/.claude/projects/ jsonl · v0.12 改成 struggle 状态机驱动
-// 命中条件:state.currentStruggle 刚 resolved (5min 内) + 当前 commit 是 fix + diff 小
-// 对社区价值 ★★★★ · vibe coder 时代最稀缺的"踩坑经验"
+// v0.12 跨上下文触发器 · v0.13 升级成 lifecycle 通用 (struggle + learning)
+// 命中条件:state.currentStruggle 刚 resolved (5min 内) + 当前 commit 形态匹配 lifecycle 收尾词
+// 对社区价值 ★★★★ · vibe coder 时代最稀缺的"踩坑经验" / "上手指南"
 function triggerAiDebugBreakthrough() {
   try {
     const state = loadPromptState();
     const cur = state.currentStruggle;
-    // 必须有 resolved struggle + justResolvedAt 在 5 分钟内
     if (!cur || !cur.resolved || !cur.justResolvedAt) return { fired: false };
     if (Date.now() - cur.justResolvedAt > 5 * 60 * 1000) return { fired: false };
 
-    // 当前 commit 是 fix 类
+    const lifecycleType = cur.lifecycleType || 'struggle';
+    const isLearning = lifecycleType === 'learning';
+    const struggleMod = (() => { try { return require('../lib/struggle'); } catch { return null; } })();
+    const config = struggleMod && struggleMod.LIFECYCLE_CONFIGS[lifecycleType];
+
+    // 当前 commit 必须匹配收尾形态
+    // struggle: fix 类 + diff < 50 行 (长 debug 最终小修复的特征)
+    // learning: done / setup / wired up / 跑通了 类 + diff 不限大小 (新东西从 0 开始就是大改)
     const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
     const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
     const scanText = title + '\n' + body;
-    const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|\bworkaround\b|修好|修了|搞定|搞通|跑通|通了|解决了|绕过|绕开)/i;
-    if (!FIX_WORDS.test(scanText)) return { fired: false };
 
-    // diff 小 (< 50 行 · 长 debug 最终小修复的特征)
-    let ins = 0, del = 0;
-    try {
-      const statOut = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
-      const insMatch = statOut.match(/(\d+) insertion/);
-      const delMatch = statOut.match(/(\d+) deletion/);
-      ins = insMatch ? parseInt(insMatch[1], 10) : 0;
-      del = delMatch ? parseInt(delMatch[1], 10) : 0;
-    } catch {}
-    const netChange = ins + del;
-    if (netChange === 0 || netChange > 50) return { fired: false };
+    if (isLearning) {
+      // learning 出口词:跑通 / 配通 / hello world / 接通 / 初次 / 第一个 / 入门完成
+      const LEARNING_DONE = /(跑通|配通|接通|hello\s*world|跑起来|跑出来|搞通|搞懂|入门完成|第一个.*跑|setup.*done|wired up|integrated|got it working|first.*working)/i;
+      if (!LEARNING_DONE.test(scanText)) return { fired: false };
+    } else {
+      const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|\bworkaround\b|修好|修了|搞定|搞通|跑通|通了|解决了|绕过|绕开)/i;
+      if (!FIX_WORDS.test(scanText)) return { fired: false };
 
-    // 命中 · 检查 autopsy 草稿是否就绪
+      let ins = 0, del = 0;
+      try {
+        const statOut = execSync('git diff HEAD~1 HEAD --shortstat 2>/dev/null', { encoding: 'utf-8' }).trim();
+        const insMatch = statOut.match(/(\d+) insertion/);
+        const delMatch = statOut.match(/(\d+) deletion/);
+        ins = insMatch ? parseInt(insMatch[1], 10) : 0;
+        del = delMatch ? parseInt(delMatch[1], 10) : 0;
+      } catch {}
+      const netChange = ins + del;
+      if (netChange === 0 || netChange > 50) return { fired: false };
+    }
+
+    // 检查 autopsy 草稿是否就绪 · prefix 跟 lifecycle 一致
     const draftDir = path.join(process.cwd(), '.tinker', 'drafts');
+    const draftPrefix = config ? config.draftPrefix : 'experience';
     let draftReady = null;
     if (fs.existsSync(draftDir)) {
       const drafts = fs.readdirSync(draftDir)
-        .filter(f => f.startsWith('experience-') && f.endsWith('.md'));
+        .filter(f => f.startsWith(draftPrefix + '-') && f.endsWith('.md'));
       if (drafts.length > 0) {
-        // 按 mtime 找最新的一篇
         const newest = drafts
           .map(f => ({ f, mtime: fs.statSync(path.join(draftDir, f)).mtimeMs }))
           .sort((a, b) => b.mtime - a.mtime)[0];
-        // 必须是 struggle.endedAt 之后写的 · 防止串草稿
         if (newest.mtime >= (cur.endedAt || cur.justResolvedAt)) {
           draftReady = newest.f;
         }
@@ -2305,20 +2316,30 @@ function triggerAiDebugBreakthrough() {
     const spanHours = cur.endedAt && cur.startedAt
       ? Math.max(0.1, Math.round((cur.endedAt - cur.startedAt) / 360000) / 10)
       : '?';
-    const topic = cur.topic || '这次折腾';
+    const topic = cur.topic || (isLearning ? '这次学的东西' : '这次折腾');
     const titleSnippet = '"' + title.slice(0, 50) + '"';
     const sigCount = (cur.signals || []).length;
+    const triggerKind = config ? config.triggerKind : 'ai-debug-breakthrough';
+    const productTag = config ? config.productTag : 'experience';
+    const msg = isLearning
+      ? `「${topic}」上手了 · 跨 ${spanHours}h · ${sigCount} 条信号 · 完成: ${dim(titleSnippet)}`
+      : `「${topic}」破局了 · 跨 ${spanHours}h · ${sigCount} 条信号 · 修复: ${dim(titleSnippet)}`;
+
     return {
       fired: true,
       priority: 92,
-      reason: 'ai-debug-breakthrough',
-      kind: 'ai-debug-breakthrough',
-      msg: `「${topic}」破局了 · 跨 ${spanHours}h · ${sigCount} 条信号 · ${netChange} 行修复: ${dim(titleSnippet)}`,
+      reason: triggerKind,
+      kind: triggerKind,
+      msg,
       suggestion: draftReady
-        ? `草稿已自动整理: .tinker/drafts/${draftReady} · 改改一键发`
-        : '这种坑写出来能帮到下一个人 · 包括其他 AI (草稿后台整理中)',
+        ? `草稿已自动整理: .tinker/drafts/${draftReady} · tinker push <file> --as-${productTag} 一键发`
+        : (isLearning
+            ? '这次上手过程写出来能帮到下一个人 · 草稿后台整理中'
+            : '这种坑写出来能帮到下一个人 · 包括其他 AI · 草稿后台整理中'),
       autopsyDraft: draftReady ? path.join(draftDir, draftReady) : null,
       struggleId: cur.id,
+      lifecycleType,
+      productTag,
     };
   } catch { return { fired: false }; }
 }
@@ -2606,11 +2627,11 @@ function evaluateAllTriggers(state, repoCfg, cfg) {
 function updateStruggleState(state, { fromHook } = {}) {
   try {
     const struggle = getStruggleModule();
-    const evalResult = struggle.evaluateStruggleState(state, { cwd: process.cwd() });
+    const evalResult = struggle.evaluateLifecycleState(state, { cwd: process.cwd() });
 
     if (evalResult.transition === 'enter') {
-      // 入坑 · 静默标记 (alpha 期默认 consent=true · 用 tinker struggle off 可关)
-      const s = evalResult.pendingStruggle;
+      // 进入 active · 静默标记 (alpha 期默认 consent=true · tinker struggle off 可关)
+      const s = evalResult.pendingSituation;
       s.consented = true;
       s.topic = struggle.inferTopic(s.signals);
       state.currentStruggle = s;
@@ -2619,7 +2640,9 @@ function updateStruggleState(state, { fromHook } = {}) {
     }
 
     if (evalResult.transition === 'continue') {
-      // 在 struggling 中 · 顺手 append 当前 commit 信号
+      // 在 active 中 · 顺手 append 当前 commit 信号
+      const lifecycleType = state.currentStruggle.lifecycleType || 'struggle';
+      const config = struggle.LIFECYCLE_CONFIGS[lifecycleType] || struggle.LIFECYCLE_CONFIGS.struggle;
       try {
         const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
         struggle.appendSignal(state.currentStruggle, {
@@ -2628,20 +2651,21 @@ function updateStruggleState(state, { fromHook } = {}) {
           text: title.slice(0, 200),
         });
       } catch {}
-      // 同时记录最近的失败信号 (顺手刷 dossier · 让 autopsy 有料)
+      // 同时记录最近的 Claude 信号 (顺手刷 dossier · 让 autopsy 有料)
       if (evalResult.recent && evalResult.recent.userMessages.length > 0) {
+        const signalType = lifecycleType === 'struggle' ? 'claude_fail' : 'claude_explore';
         const seen = new Set((state.currentStruggle.signals || [])
-          .filter(s => s.type === 'claude_fail')
+          .filter(s => s.type === signalType)
           .map(s => s.at));
         evalResult.recent.userMessages.slice(-3).forEach(m => {
-          if (!seen.has(m.ts)) {
+          if (!seen.has(m.ts) && config.matchSignal(m.text)) {
             struggle.appendSignal(state.currentStruggle, {
-              at: m.ts, type: 'claude_fail', text: m.text.slice(0, 200),
+              at: m.ts, type: signalType, text: m.text.slice(0, 200),
             });
           }
         });
       }
-      // 推断 topic (如果之前 topic 不准 · 信号更多了重推一次)
+      // 推断 topic (信号更多了重推一次)
       if (!state.currentStruggle.topic || state.currentStruggle.signals.length % 5 === 0) {
         state.currentStruggle.topic = struggle.inferTopic(state.currentStruggle.signals);
         struggle.saveDossier(state.currentStruggle);
@@ -2650,40 +2674,37 @@ function updateStruggleState(state, { fromHook } = {}) {
     }
 
     if (evalResult.transition === 'resolve') {
-      // 出坑 · 标 resolved + 记 justResolvedAt (给 ai-debug-breakthrough 触发器用)
+      // 出坑 / 学会 · 标 resolved + 记 justResolvedAt (给 breakthrough 触发器用)
       state.currentStruggle.resolved = true;
       state.currentStruggle.endedAt = Date.now();
       state.currentStruggle.justResolvedAt = Date.now();
-      // 最后补一次 topic 推断
       if (!state.currentStruggle.topic) {
         state.currentStruggle.topic = struggle.inferTopic(state.currentStruggle.signals) || '未命名';
       }
       struggle.saveDossier(state.currentStruggle);
-      // 后台 spawn autopsy · 不阻塞 hook
-      spawnAutopsyAsync(state.currentStruggle.id);
+      // 后台 spawn autopsy · 不阻塞 hook · 传 lifecycle type
+      spawnAutopsyAsync(state.currentStruggle.id, state.currentStruggle.lifecycleType || 'struggle');
       return;
     }
 
     if (evalResult.transition === 'abandon') {
-      // 8h 无新信号 · 放弃这次 struggle
       state.currentStruggle = null;
       return;
     }
-
     // transition === 'none' · 什么都不做
   } catch (e) {
-    // 容错 · struggle 状态机出问题不影响主流程
     if (!fromHook) {
-      console.error('[struggle] ' + e.message);
+      console.error('[lifecycle] ' + e.message);
     }
   }
 }
 
 // 后台 detached child 跑 autopsy · 不阻塞 hook
 // 用 process.execPath + __filename + 隐藏 args · 子进程跑 cmdAutopsy
-function spawnAutopsyAsync(struggleId) {
+// lifecycleType 默认 'struggle' (兼容老 dossier)
+function spawnAutopsyAsync(situationId, lifecycleType = 'struggle') {
   try {
-    const child = spawn(process.execPath, [__filename, '__autopsy', struggleId], {
+    const child = spawn(process.execPath, [__filename, '__autopsy', situationId, lifecycleType], {
       detached: true,
       stdio: 'ignore',
       cwd: process.cwd(),
@@ -3638,22 +3659,26 @@ async function cmdStruggle(sub, opts = {}) {
 // 后台 detached child 调用 · tinker __autopsy <struggleId>
 // 把 dossier 整理成四段 markdown · 写到 <repo>/.tinker/drafts/experience-<topic>.md
 // 不阻塞主 hook · 失败容错 (fallback 到 template-based)
-async function cmdAutopsy(struggleId) {
+async function cmdAutopsy(situationId, lifecycleTypeArg) {
   const struggle = getStruggleModule();
-  const dossier = struggle.loadDossier(struggleId);
+  const dossier = struggle.loadDossier(situationId);
   if (!dossier) return;  // 静默退出 · detached 不让用户看到错误
+
+  // v0.13 lifecycle 框架 · type 来源优先: 显式参数 > dossier 字段 > 'struggle' (兼容老 dossier)
+  const lifecycleType = lifecycleTypeArg || dossier.lifecycleType || 'struggle';
+  const config = struggle.LIFECYCLE_CONFIGS[lifecycleType] || struggle.LIFECYCLE_CONFIGS.struggle;
 
   const draftDir = path.join(process.cwd(), '.tinker', 'drafts');
   fs.mkdirSync(draftDir, { recursive: true });
 
-  // 文件名:experience-<safe-topic>-<short-id>.md
+  // 文件名:experience-<safe-topic>-<short-id>.md / learning-<safe-topic>-<short-id>.md
   const safeTopic = (dossier.topic || 'unknown')
     .replace(/[\s\\/:*?"<>|]+/g, '-')
     .slice(0, 30);
   const shortId = dossier.id.slice(-6);
-  const draftFile = path.join(draftDir, `experience-${safeTopic}-${shortId}.md`);
+  const draftFile = path.join(draftDir, `${config.draftPrefix}-${safeTopic}-${shortId}.md`);
 
-  // 收集 git 上下文 (突破那一刻的 fix commit)
+  // 收集 git 上下文 (突破那一刻的 fix / done commit)
   let fixTitle = '', fixBody = '', fixDiff = '';
   try {
     fixTitle = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
@@ -3667,10 +3692,11 @@ async function cmdAutopsy(struggleId) {
     const when = new Date(s.at).toISOString().slice(11, 16);
     if (s.type === 'wip_commit') return `[${when}] commit · ${s.text || s.sha || ''}`;
     if (s.type === 'claude_fail') return `[${when}] 对话 · ${(s.text || '').slice(0, 100)}`;
+    if (s.type === 'claude_explore') return `[${when}] 问 AI · ${(s.text || '').slice(0, 100)}`;
     return `[${when}] ${s.type} · ${(s.text || s.snippet || '').slice(0, 100)}`;
   }).join('\n');
 
-  // 拉 voice 上下文 · loadConfig 而不是 mustHaveConfig (后者会 process.exit)
+  // 拉 voice 上下文
   const cfg = loadConfig();
   const hasLLM = cfg && cfg.llm && cfg.llm.apiKey;
   let voiceContext = '';
@@ -3679,36 +3705,36 @@ async function cmdAutopsy(struggleId) {
     if (fp) voiceContext = fp.slice(0, 1000);
   } catch {}
 
+  const ctx = {
+    topic: dossier.topic || '未命名',
+    lifecycleType,
+    spanHours: dossier.endedAt
+      ? Math.max(0.1, Math.round((dossier.endedAt - dossier.startedAt) / 360000) / 10)
+      : '?',
+    signalLines, fixTitle, fixBody, fixDiff, voiceContext,
+  };
+
   let markdown;
   if (hasLLM) {
     try {
-      markdown = await llmAutopsy(cfg, {
-        topic: dossier.topic || '未命名',
-        spanHours: dossier.endedAt
-          ? Math.max(0.1, Math.round((dossier.endedAt - dossier.startedAt) / 360000) / 10)
-          : '?',
-        signalLines,
-        fixTitle, fixBody, fixDiff,
-        voiceContext,
-      });
+      markdown = await llmAutopsy(cfg, ctx);
     } catch (e) {
-      // LLM 失败 · fallback 到 template
-      markdown = templateAutopsy({ dossier, signalLines, fixTitle, fixBody });
+      markdown = templateAutopsy({ dossier, lifecycleType, signalLines, fixTitle, fixBody });
     }
   } else {
-    // 没配 LLM · 直接 template
-    markdown = templateAutopsy({ dossier, signalLines, fixTitle, fixBody });
+    markdown = templateAutopsy({ dossier, lifecycleType, signalLines, fixTitle, fixBody });
   }
 
-  // 写文件 · 顶部加 frontmatter (给 tinker push --as-experience 用)
+  // frontmatter · 标记 lifecycle type + product tag (给 push --as-X 用)
   const frontmatter = [
     '---',
-    `struggle_id: ${dossier.id}`,
+    `situation_id: ${dossier.id}`,
+    `lifecycle_type: ${lifecycleType}`,
     `topic: ${dossier.topic || ''}`,
     `started_at: ${new Date(dossier.startedAt).toISOString()}`,
     `ended_at: ${dossier.endedAt ? new Date(dossier.endedAt).toISOString() : ''}`,
     `signals: ${(dossier.signals || []).length}`,
-    `as_experience: true`,
+    `as_${config.productTag}: true`,
     `generated_by: ${hasLLM ? 'llm' : 'template'}`,
     '---',
     '',
@@ -3718,36 +3744,35 @@ async function cmdAutopsy(struggleId) {
 }
 
 // LLM 调用 · 直接返 markdown · 不解析 JSON
+// v0.13 按 lifecycleType 切 prompt 模板:struggle 写"踩坑经验" · learning 写"上手指南"
 async function llmAutopsy(cfg, ctx) {
   const provider = cfg.llm.provider || 'anthropic';
   const apiKey = cfg.llm.apiKey;
-  const prompt = `你的任务: 把这次踩坑过程整理成一篇能帮其他 vibe coder 少踩坑的经验贴。
 
-==================
-作者 voice 上下文 (照这个气质写)
-==================
-${ctx.voiceContext || '(暂无 voice fingerprint · 用工艺人日志气质 · 中文 · 不堆中圆点 / em-dash / italic / ALL_CAPS)'}
+  const lifecycleType = ctx.lifecycleType || 'struggle';
+  const isLearning = lifecycleType === 'learning';
 
-==================
-这次踩坑信息
-==================
-话题: ${ctx.topic}
-跨度: ${ctx.spanHours} 小时
+  const taskLine = isLearning
+    ? '你的任务: 把这次学新东西的过程整理成一篇能帮其他 vibe coder 快速上手的指南。'
+    : '你的任务: 把这次踩坑过程整理成一篇能帮其他 vibe coder 少踩坑的经验贴。';
 
-时序信号 (按时间排序 · 节选):
-${ctx.signalLines || '(无)'}
+  const infoLabel = isLearning ? '这次学习信息' : '这次踩坑信息';
+  const commitLabel = isLearning ? '关键完成那一笔 commit' : '突破那一笔 commit';
 
-突破那一笔 commit:
-title: ${ctx.fixTitle}
-body: ${ctx.fixBody || '(无 body)'}
-diff: ${ctx.fixDiff || '(无 diff)'}
+  const outputTemplate = isLearning ? `## 想做什么 · 想学什么
+[1-2 句 · 具体到工具 / SDK / 框架 / API]
 
-==================
-输出
-==================
-严格按这四段 markdown 输出 · 每段标题用 ##:
+## 几个核心概念
+[bullet 列表 · 这个东西的关键概念有哪几个 · 每条 1-2 行]
+[不超过 5 条 · 别人能从这一段就建立心智模型]
 
-## 撞到的问题
+## 关键陷阱
+[bullet 列表 · 入门时容易踩的几个坑 · 每条 1 行]
+[2-4 条 · 这是 vibe coder 真实学习过程留下的 · 教程不会告诉的事]
+
+## 最小可用代码 / 配置
+[一段可被直接 copy 跑通的代码或配置]
+[要可被其他 AI 直接注入 prompt · 别人 5 分钟内能跑出 hello world]` : `## 撞到的问题
 [1-2 句 · 具体到平台 / 错误码 / 表现]
 
 ## 试过的
@@ -3759,14 +3784,50 @@ diff: ${ctx.fixDiff || '(无 diff)'}
 
 ## 解法
 [1 段 · 含可被直接 copy 的配置 / 代码片段]
-[要可被其他 AI 直接注入 prompt]
+[要可被其他 AI 直接注入 prompt]`;
+
+  const sceneSpecificConstraints = isLearning ? [
+    '- 写给"完全没用过这个东西" 的读者 · 不要假设知识',
+    '- 核心概念部分要真"概念" · 不是 API list',
+    '- 关键陷阱要具体 (跟教程的差异 · 自己撞到的事) · 不是"小心配置" 这种空话',
+  ] : [
+    '- 不替作者编情绪 · "终于" 这种词只在 commit msg 真说过时用',
+    '- 不下产品定论',
+    '- 保留具体平台名 / 错误码 / 配置 (这些是检索的钩子)',
+  ];
+
+  const prompt = `${taskLine}
+
+==================
+作者 voice 上下文 (照这个气质写)
+==================
+${ctx.voiceContext || '(暂无 voice fingerprint · 用工艺人日志气质 · 中文 · 不堆中圆点 / em-dash / italic / ALL_CAPS)'}
+
+==================
+${infoLabel}
+==================
+话题: ${ctx.topic}
+跨度: ${ctx.spanHours} 小时
+
+时序信号 (按时间排序 · 节选):
+${ctx.signalLines || '(无)'}
+
+${commitLabel}:
+title: ${ctx.fixTitle}
+body: ${ctx.fixBody || '(无 body)'}
+diff: ${ctx.fixDiff || '(无 diff)'}
+
+==================
+输出
+==================
+严格按这四段 markdown 输出 · 每段标题用 ##:
+
+${outputTemplate}
 
 约束:
 - 用作者真实 voice
-- 不替作者编情绪 · "终于" 这种词只在 commit msg 真说过时用
-- 不下产品定论
 - 不堆中圆点 (·) · 不堆 em-dash · 不堆 italic · 不 ALL_CAPS
-- 保留具体平台名 / 错误码 / 配置 (这些是检索的钩子)
+${sceneSpecificConstraints.join('\n')}
 - 不要写"总结" 或 "结论" 段 · 四段就是全部
 - 不要任何 LLM 自我介绍 · 直接出正文`;
 
@@ -3826,8 +3887,38 @@ diff: ${ctx.fixDiff || '(无 diff)'}
 }
 
 // LLM 失败时的 fallback · 不调任何 API · 直接拼时序
-function templateAutopsy({ dossier, signalLines, fixTitle, fixBody }) {
-  const topic = dossier.topic || '这次折腾';
+// v0.13 按 lifecycleType 切段落
+function templateAutopsy({ dossier, lifecycleType = 'struggle', signalLines, fixTitle, fixBody }) {
+  const isLearning = lifecycleType === 'learning';
+  const productTag = isLearning ? 'learning' : 'experience';
+
+  if (isLearning) {
+    return `## 想做什么 · 想学什么
+
+(待补 · 看下面时序自己写一句具体到工具 / SDK / 框架)
+
+## 几个核心概念
+
+(待补 · 这个东西的关键概念有哪几个 · 列 3-5 条)
+
+## 关键陷阱
+
+(待补 · 入门时撞到的几个坑 · 教程不会告诉的事)
+
+${signalLines || '(信号不足 · 自己回忆补一下)'}
+
+## 最小可用代码 / 配置
+
+${fixTitle}
+
+${fixBody || '(commit body 是空的 · 自己补一段可 copy 跑通的代码)'}
+
+---
+
+(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-${productTag}\`)
+`;
+  }
+
   return `## 撞到的问题
 
 (待补 · 看下面时序自己写一句)
@@ -3848,7 +3939,7 @@ ${fixBody || '(commit body 是空的 · 自己补一句配置 / 代码片段)'}
 
 ---
 
-(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-experience\`)
+(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-${productTag}\`)
 `;
 }
 
@@ -5226,6 +5317,7 @@ function parseArgs(args) {
     else if (a === '--kind') opts.kind = args[++i];
     else if (a.startsWith('--kind=')) opts.kind = a.slice('--kind='.length);
     else if (a === '--as-experience' || a === '--asExperience') opts.asExperience = true;
+    else if (a === '--as-learning' || a === '--asLearning') opts.asLearning = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (a === '--from-file') opts.fromFile = args[++i];
     else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
