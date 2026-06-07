@@ -4852,7 +4852,12 @@ async function cmdContributeFromFile(cfg, opts) {
       if (!go) { skipped.push({ heading: sec.heading, reason: 'USER_NO' }); log(sepia('    跳过')); continue; }
     }
     try {
-      const r = await apiAction(cfg, 'addUpdate', { projectId, text: sec.fullText, isMethod: true });
+      // v0.78: LLM 推荐时 sec.llmReason 是"为什么值得分享"短语 · 直接当 scenario 写入
+      // 让 webapp 卡片头部能显示"这文档帮你跟 AI 合作时解决什么问题"
+      const r = await apiAction(cfg, 'addUpdate', {
+        projectId, text: sec.fullText, isMethod: true,
+        scenario: sec.llmReason || null,
+      });
       successes.push({ heading: sec.heading, updateId: r.result && r.result.id, charCount: sec.charCount });
       log(moss('    ✓ 发了 · 自动标方法 · id ' + (r.result && r.result.id || '?')));
     } catch (e) {

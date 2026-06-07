@@ -375,7 +375,7 @@ function getProjectFlat(projectId) {
 
 // notifyTinkered: 作者主动通知"接走我 + 想试试"的人 (默认 false · 避免轰炸)
 // alsoStuck: 同时把项目改为 stuck (spec §5.3 "卡了" 进展 → 召回过往关心者)
-function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at, isMethod }, { currentUserId }) {
+function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at, isMethod, scenario }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('记一笔不能空');
   const p = db.prepare('SELECT owner_id, name, status FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
@@ -393,10 +393,12 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
   // v0.13 contribute --from-file: 创建时就标方法 · 省一次 API 调用
   const methodFlag = isMethod ? 1 : 0;
+  // v0.78 方法卡片 "使用场景" · 10-30 字人话描述 "这文档帮你跟 AI 合作时解决什么问题"
+  const scenarioVal = scenario && scenario.trim() ? scenario.trim().slice(0, 100) : null;
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask, is_method) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal, methodFlag);
+      INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask, is_method, scenario) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal, methodFlag, scenarioVal);
 
     if (Array.isArray(images)) {
       const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
@@ -467,7 +469,7 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
   };
 }
 
-function editUpdate({ projectId, updateIdx, text, images, seekingFeedback, feedbackAsk }, { currentUserId }) {
+function editUpdate({ projectId, updateIdx, text, images, seekingFeedback, feedbackAsk, scenario }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('进展内容不能空');
   // 找到对应 update (updateIdx 是显示顺序 · 即 ORDER BY at DESC)
   const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
@@ -479,8 +481,17 @@ function editUpdate({ projectId, updateIdx, text, images, seekingFeedback, feedb
 
   // 求反馈勾选(可在编辑里改变)
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
+  // v0.78 scenario 可选编辑 · undefined 表示不变 · null/空串表示清空 · 非空表示更新
+  const scenarioProvided = scenario !== undefined;
+  const scenarioVal = scenarioProvided && scenario && scenario.trim()
+    ? scenario.trim().slice(0, 100)
+    : null;
   const txn = db.transaction(() => {
-    db.prepare('UPDATE updates SET text = ?, feedback_ask = ? WHERE id = ?').run(text.trim(), feedbackVal, u.id);
+    if (scenarioProvided) {
+      db.prepare('UPDATE updates SET text = ?, feedback_ask = ?, scenario = ? WHERE id = ?').run(text.trim(), feedbackVal, scenarioVal, u.id);
+    } else {
+      db.prepare('UPDATE updates SET text = ?, feedback_ask = ? WHERE id = ?').run(text.trim(), feedbackVal, u.id);
+    }
     // 图片 · 全删重建 link · resolveImageId 区分新上传跟引用已有
     db.prepare('DELETE FROM update_images WHERE update_id = ?').run(u.id);
     if (Array.isArray(images) && images.length > 0) {

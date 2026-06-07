@@ -368,6 +368,13 @@
   .tl-text-foldable:not(.expanded)::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 50px; background: linear-gradient(transparent, var(--paper) 80%); pointer-events: none; }
   .tl-text-fold-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--moss); cursor: pointer; user-select: none; margin-top: 6px; display: inline-block; }
   .tl-text-fold-toggle:hover { text-decoration: underline; }
+  /* v0.78 沉淀方法卡片 · 强折叠版 · 默认完全隐藏 markdown 正文 · 只显示 scenario + badge + 展开按钮 */
+  /* 配合 .tl-text-collapsed-strong: 适合给 AI 看的长文档 · 人类看 scenario 一句话就够 */
+  .tl-text-collapsed-strong { max-height: 0; overflow: hidden; transition: max-height 0.2s; }
+  .tl-text-collapsed-strong.expanded { max-height: none; }
+  /* v0.78 scenario 块 · 衬线字 · 比卡片 markdown 显眼 · 让用户判断要不要展开 */
+  .tl-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.55; color: var(--ink-soft); margin-bottom: 12px; padding: 10px 14px; background: rgba(120, 113, 108, 0.06); border-left: 3px solid var(--moss); border-radius: 2px; }
+  .tl-scenario-label { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; text-transform: uppercase; margin-right: 8px; }
   .tl-method-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; color: var(--ink-soft); }
   .tl-method-toggle:hover { color: var(--moss); }
   .tl-method-toggle.active { color: var(--moss); }
@@ -7774,7 +7781,13 @@ function renderProject(owner, slug) {
         const notesAboutThis = (p.notes || []).filter(n => n.updateId === u.id);
         const isProven = usedByList.length >= 3;
         const isMethodOrProven = u.isMethod || isProven;
-        const isLongMethod = isMethodOrProven && (u.text || '').length >= 400;
+        // v0.78 三档折叠:
+        //   isMethod 卡片 = 强折叠 (默认完全收起 markdown · 只显示 scenario + 展开按钮 · 因为 markdown 给 AI 看的)
+        //   proven (usedBy ≥3) 长卡片 = 弱折叠 (默认显示 150px · 保留 inline 浏览)
+        //   普通短内容 = 不折叠
+        const isLongText = (u.text || '').length >= 400;
+        const useStrongFold = u.isMethod;
+        const useWeakFold = !u.isMethod && isProven && isLongText;
         return `
           <div class="tl-entry ${u.kind === 'ship' ? 'tl-entry-ship' : ''}" id="update-${u.id}">
             <div class="tl-time">${shortAgo(u.at)}</div>
@@ -7787,8 +7800,13 @@ function renderProject(owner, slug) {
                   ${u.feedbackAsk ? `<div class="tl-feedback-ask-text"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
                 </div>
               ` : ''}
-              <div class="tl-text ${isLongMethod ? 'tl-text-foldable' : ''}" id="tl-text-${u.id}">${renderRichText(u.text)}</div>
-              ${isLongMethod ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整 ↓</span>` : ''}
+              ${u.scenario ? `
+                <div class="tl-scenario">
+                  <span class="tl-scenario-label">用于</span>${escapeHtml(u.scenario)}
+                </div>
+              ` : ''}
+              <div class="tl-text ${useWeakFold ? 'tl-text-foldable' : (useStrongFold ? 'tl-text-collapsed-strong' : '')}" id="tl-text-${u.id}">${renderRichText(u.text)}</div>
+              ${useStrongFold ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整 markdown (给你的 AI 用) ↓</span>` : (useWeakFold ? `<span class="tl-text-fold-toggle" onclick="toggleFold('${u.id}')">展开看完整 ↓</span>` : '')}
               ${u.prompt ? `
                 <div class="tl-prompt-box">
                   <div class="tl-prompt-label">开场</div>
@@ -9539,7 +9557,13 @@ function toggleFold(id) {
   const toggle = el.nextElementSibling;
   el.classList.toggle('expanded');
   if (toggle && toggle.classList.contains('tl-text-fold-toggle')) {
-    toggle.textContent = el.classList.contains('expanded') ? '收起 ↑' : '展开看完整方法 ↓';
+    const wasStrongFold = el.classList.contains('tl-text-collapsed-strong');
+    const isExpanded = el.classList.contains('expanded');
+    if (isExpanded) {
+      toggle.textContent = '收起 ↑';
+    } else {
+      toggle.textContent = wasStrongFold ? '展开看完整 markdown (给你的 AI 用) ↓' : '展开看完整 ↓';
+    }
   }
 }
 
