@@ -1775,31 +1775,19 @@ async function cmdClaudeHookInstall(opts = {}) {
   // SessionEnd · 用户 Cmd+Q 或 session 终止时触发
   installClaudeHookEntry(settings.hooks.SessionEnd, null, backfillCmd, 'session-end');
 
-  // UserPromptSubmit matcher=收工词 · 用户说"晚安/收工/累了" 等时触发
-  // tinker maybe-goodnight 自己判断今天值不值得收尾 + 后台 spawn backfill 起草
-  const goodnightWords = '晚安|收工|今天就到|明天继续|睡了|累了|下班|收摊|休息|不弄了|做到这|歇了';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, goodnightWords, 'tinker maybe-goodnight 2>/dev/null || true', 'goodnight');
+  // v0.16 词典统一:matcher 词从 MAYBE_KINDS 拿 · 改词只动 MAYBE_KINDS 一处 · DRY
+  // 跨 AI 通用入口 `tinker maybe-check --text "..."` 跟这里共用同一份词典
+  // tinker maybe-goodnight 走单独的 GOODNIGHT_MATCHER · 自己判断今天值不值得收尾
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, GOODNIGHT_MATCHER, 'tinker maybe-goodnight 2>/dev/null || true', 'goodnight');
 
-  // v0.14 把 keyword 触发从 commit message 搬到对话 · 6 组 matcher 配 6 个 maybe-X 命令
-  // 每个 maybe-X 静默检查 per-kind 冷却 (默认 60min) · 命中输出 reminder 给 hook 注入 Claude context
-  // matcher 命中只是"候选" · LLM 看上下文判断是否真的提醒用户 · 不每次都打扰
-  const stuckWords = '卡住了|卡了|不行|怎么都|还是错|搞不定|不知道哪|找不到|为什么不|跑不起来';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, stuckWords, 'tinker maybe-stuck 2>/dev/null || true', 'stuck');
-
-  const breakthroughWords = '懂了|明白了|哦哦|原来如此|终于通了|噢|啊我懂|找到原因|找到问题|搞清楚了';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, breakthroughWords, 'tinker maybe-breakthrough 2>/dev/null || true', 'breakthrough');
-
-  const decisionWords = '决定用|还是用|改用|选 |不用 |换成|放弃|敲定|决定不|敲定下来';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, decisionWords, 'tinker maybe-decision 2>/dev/null || true', 'decision');
-
-  const subtractionWords = '砍了|砍掉|删了|算了|不做了|不要这个|去掉|移除|撤了|拿掉|不做这';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, subtractionWords, 'tinker maybe-subtraction 2>/dev/null || true', 'subtraction');
-
-  const cleverFixWords = '跑通了|搞通了|搞定了|搞定|跑起来了|修好了|改好了|通了|终于跑|终于成|成功了';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, cleverFixWords, 'tinker maybe-clever-fix 2>/dev/null || true', 'clever-fix');
-
-  const shipWords = '完工|发出去|上线了|发布了|做完了|部署了|deploy 了|push 了|release 了|线上了|搞完了';
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, shipWords, 'tinker maybe-ship 2>/dev/null || true', 'ship');
+  // 6 组 maybe-X · 每组 matcher 词从 MAYBE_KINDS 取
+  // kind camelCase → shell command kebab-case (cleverFix → clever-fix)
+  const KIND_TO_CMD = { stuck: 'stuck', breakthrough: 'breakthrough', decision: 'decision', subtraction: 'subtraction', cleverFix: 'clever-fix', ship: 'ship' };
+  for (const [kind, cfg] of Object.entries(MAYBE_KINDS)) {
+    if (!cfg.matcher) continue;
+    const cmdName = KIND_TO_CMD[kind];
+    installClaudeHookEntry(settings.hooks.UserPromptSubmit, cfg.matcher, `tinker maybe-${cmdName} 2>/dev/null || true`, cmdName);
+  }
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   log('');
@@ -3960,32 +3948,45 @@ function cmdMaybeGoodnight() {
 // 思路:commit message 是事后总结 · 真正的卡住/顿悟/决策/砍/修通/完工 都发生在跟 AI 对话里
 // 每个命令静默检查 per-kind 冷却 (默认 60 min) · 命中 → stdout reminder 给 hook 注入我的 context
 // 我看到 reminder 才主动跟用户说 · 不命中静默退出
+// v0.16 maybe-X 词典升格:install-claude (Claude Code hook) 跟 maybe-check (跨 AI 通用) 共用同一份
+// matcher 字段 = 正则 · | 分隔多个关键词 · 命中任意一个就算 kind hit
+// 改关键词只动这里一处 · install-claude 跟 cmdMaybeCheck 都拿到新词
+// goodnight 是特殊 kind · 不在这里 (有自己的 lastGoodnightDate / commit 数判断)
 const MAYBE_KINDS = {
   stuck: {
     cooldownMin: 60,
-    reminder: '用户跟 Claude Code 对话里出现卡住相关的话 · 如果是真的困住没思路 (不是一句普通描述) · 可以建议跑 `tinker stuck "一句话说卡哪"` 让在意 ta 的人看到 · 看上下文判断 · 不是每次都建议',
+    matcher: '卡住了|卡了|不行|怎么都|还是错|搞不定|不知道哪|找不到|为什么不|跑不起来',
+    reminder: '用户跟 AI 对话里出现卡住相关的话 · 如果是真的困住没思路 (不是一句普通描述) · 可以建议跑 `tinker stuck "一句话说卡哪"` 让在意 ta 的人看到 · 看上下文判断 · 不是每次都建议',
   },
   breakthrough: {
     cooldownMin: 30,
+    matcher: '懂了|明白了|哦哦|原来如此|终于通了|噢|啊我懂|找到原因|找到问题|搞清楚了',
     reminder: '用户刚说了顿悟类的话 (懂了 / 明白了 / 哦哦 等) · 顿悟时刻的十秒钟难复现 · 如果是真的有发现 · 可以建议跑 `tinker push -m "..."` 留一笔 · 上下文判断',
   },
   decision: {
     cooldownMin: 60,
+    matcher: '决定用|还是用|改用|选 |不用 |换成|放弃|敲定|决定不|敲定下来',
     reminder: '用户在对话里做了工具链 / 方案选择 · 几个月后自己都想不起为什么选这个 · 如果是有思考的决策 · 可以建议跑 `tinker push -m "..."` 记下来 (或者 push-decision) · 不是每次都建议',
   },
   subtraction: {
     cooldownMin: 60,
+    matcher: '砍了|砍掉|删了|算了|不做了|不要这个|去掉|移除|撤了|拿掉|不做这',
     reminder: '用户刚说了砍 / 删除 / 不做了类的话 · 减法决策是工程师圈最难学的事 · 如果是有理由的取舍 (不是临时改主意) · 可以建议记一笔说为什么砍',
   },
   cleverFix: {
     cooldownMin: 30,
+    matcher: '跑通了|搞通了|搞定了|搞定|跑起来了|修好了|改好了|通了|终于跑|终于成|成功了',
     reminder: '用户刚说了跑通 / 搞通 / 搞定类的话 · 如果是修复了别人能学的真坑 · 可以建议跑 `tinker push -m "..."` 把这个修法留下来 · 上下文判断不是每次都建议',
   },
   ship: {
     cooldownMin: 60,
+    matcher: '完工|发出去|上线了|发布了|做完了|部署了|deploy 了|push 了|release 了|线上了|搞完了',
     reminder: '用户刚说了完工 / 发出去 / 上线类的话 · 如果是真的发布了 (不只是计划) · 可以建议跑 `tinker ship -m "一句话感想"` 进陈列馆',
   },
 };
+
+// goodnight matcher · 单独存 (cmdMaybeGoodnight 有自己的判断逻辑 · 不走 MAYBE_KINDS)
+const GOODNIGHT_MATCHER = '晚安|收工|今天就到|明天继续|睡了|累了|下班|收摊|休息|不弄了|做到这|歇了';
 
 // v0.14 maybe-X 命中观测 · 追加 jsonl 到 ~/.tinker/trigger-log.jsonl
 // 只记 kind / event / cwd / 冷却剩余 · 不持久 prompt 内容 · 失败静默
@@ -4018,6 +4019,58 @@ function cmdMaybe(kind) {
   savePromptState(ps);
   logTriggerEvent(kind, 'fired', { cooldown_min: cfg.cooldownMin });
   process.stdout.write(cfg.reminder + '\n');
+}
+
+// v0.16 跨 AI 通用入口 · 任何 AI 工具的 LLM 看用户消息 · 主动 Bash 跑这个
+// 把所有 MAYBE_KINDS 的 matcher 跑一遍 · 命中且未冷却的输出 reminder
+// 设计原则:
+// - 共用 lastMaybeAtByKind 冷却 · 跟 hook 触发的 maybe-X 不会重复
+// - 多个 kind 可能同时命中 · 全部输出 (LLM 自己看上下文挑)
+// - --json 输出结构化数组 · 默认人可读
+// 用法: tinker maybe-check --text "用户的最近一条消息"
+function cmdMaybeCheck(opts) {
+  const text = (opts.text || '').trim();
+  if (!text) {
+    if (opts.json) return errJson('用法: tinker maybe-check --text "<用户消息>"', 'NO_TEXT');
+    err('用法: ' + vermilion('tinker maybe-check --text "<用户消息>"'));
+    log(sepia('  把用户的最近一条 prompt 喂给我 · 我跑全部 matcher · 输出命中且没冷却的 reminder'));
+    log(sepia('  Claude Code 用户:hook 会自动跑 · 不用手动调'));
+    log(sepia('  其他 AI 用户 (Cursor / Aider 等):LLM 看到用户消息时主动 Bash 调'));
+    process.exit(1);
+  }
+  const ps = loadPromptState();
+  ps.lastMaybeAtByKind = ps.lastMaybeAtByKind || {};
+  const now = Date.now();
+  const fired = [];
+  const cooled = [];
+  for (const [kind, cfg] of Object.entries(MAYBE_KINDS)) {
+    if (!cfg.matcher) continue;
+    const re = new RegExp(cfg.matcher);
+    if (!re.test(text)) continue;
+    const last = ps.lastMaybeAtByKind[kind];
+    if (last && (now - last) < cfg.cooldownMin * 60 * 1000) {
+      cooled.push({ kind, remainingMs: cfg.cooldownMin * 60 * 1000 - (now - last) });
+      logTriggerEvent(kind, 'cooled_down_check', { remaining_ms: cfg.cooldownMin * 60 * 1000 - (now - last) });
+      continue;
+    }
+    fired.push({ kind, reminder: cfg.reminder, cooldownMin: cfg.cooldownMin });
+    ps.lastMaybeAtByKind[kind] = now;
+    logTriggerEvent(kind, 'fired_check', { cooldown_min: cfg.cooldownMin });
+  }
+  savePromptState(ps);
+  if (opts.json) {
+    return outputJson({ ok: true, fired, cooled });
+  }
+  if (fired.length === 0) {
+    if (cooled.length === 0) log(sepia('  没命中任何 maybe-X'));
+    else log(sepia('  命中 ' + cooled.length + ' 个 kind 但都在冷却中: ' + cooled.map(c => c.kind).join(' / ')));
+    return;
+  }
+  for (const f of fired) {
+    log(vermilion('[' + f.kind + ']'));
+    log(sepia('  ') + f.reminder);
+    log('');
+  }
 }
 
 // v0.12 `tinker struggle` · 看 / 关 / 重新激活 当前 struggle 状态
@@ -6342,6 +6395,7 @@ function help() {
   log('  ' + vermilion('tinker schema --json') + sepia('               CLI 自身能力 schema · AI 读这个知道怎么用'));
   log('  ' + vermilion('tinker state --json') + sepia('                读 prompt-state 当前快照'));
   log('  ' + vermilion('tinker stream <resource>') + sepia('            长跑 NDJSON 事件流 (triggers / today)'));
+  log('  ' + vermilion('tinker maybe-check --text "..."') + sepia('     跨 AI 通用入口 · 非 Claude Code 的 LLM 主动调拿 matcher 命中 reminder'));
   log('  ' + vermilion('tinker mcp') + sepia('                          启 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool'));
   log(sepia('  ') + dim('几乎所有命令支持 --json · 错误统一 { ok: false, error, code } 形态'));
   log('');
@@ -6366,6 +6420,8 @@ function help() {
   log(sepia('  用户要删测试条 / 误发条              → ') + vermilion('tinker delete <updateId> --yes ') + dim('(非 TTY 必须 --yes)'));
   log(sepia('  用户开新项目                       → ') + vermilion('tinker project new --name "..." --desc "..."'));
   log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
+  log(sepia('  非 Claude Code (Cursor/Aider 等) · 没有 hook → ') + vermilion('tinker maybe-check --text "<用户消息>" --json'));
+  log(sepia('  ') + dim('  上面这个跟 Claude Code hook 共用词典 + 冷却 · LLM 主动调拿命中 reminder'));
   log(sepia('  ') + dim('调前看 ') + vermilion('tinker state --json') + dim(' · 静音/冷却中别打扰'));
   log(sepia('  ') + dim('幂等保险 · 给 --idempotency-key (同 key 24h 内不重复)'));
   log(sepia('  ') + dim('关键词命中只是候选 · 看上下文判断是否真的提醒 · 不每次都建议'));
@@ -6387,7 +6443,8 @@ function parseArgs(args) {
   const opts = {};
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === '-m' || a === '--message') opts.text = args[++i];
+    if (a === '-m' || a === '--message' || a === '--text') opts.text = args[++i];
+    else if (a.startsWith('--text=')) opts.text = a.slice('--text='.length);
     else if (a === '--since') opts.since = args[++i];
     else if (a === '-p' || a === '--project') opts.projectId = args[++i];
     else if (a.startsWith('--only=')) opts.only = a.slice('--only='.length);
@@ -6913,6 +6970,7 @@ async function main() {
       case 'maybe-subtraction':   cmdMaybe('subtraction'); return;
       case 'maybe-clever-fix':    cmdMaybe('cleverFix'); return;
       case 'maybe-ship':          cmdMaybe('ship'); return;
+      case 'maybe-check':         cmdMaybeCheck(opts); return;
 
       case 'llm': await cmdLlm(args[1], opts); break;
       case 'state': cmdState(opts); break;

@@ -82,3 +82,25 @@ CLI 装了 Claude Code hook (`tinker hook install-claude`) · 用户说收工 / 
 - 不是每次命中都按 reminder 建议用户 · 看上下文判断
 - 如果用户在做产品讨论 / 命令测试 / 文档撰写 · 大概率不是真事件 · 别打扰
 - reminder 里写的"上下文判断"就是给你的提示 · 不要无脑跟着说"要不要记一笔"
+
+## 跨 AI 触发器入口 (Claude Code 以外的 AI 工具看这段)
+
+Tinker 的对话内触发器有两条路径:
+
+**Claude Code 用户**:hook 自动跑 (`tinker hook install-claude` 装好后) · LLM 不用做任何事 · reminder 会自动 inject。
+
+**其他 AI 用户 (Cursor / Aider / Continue / Cline 等)**:Claude Code 那套 UserPromptSubmit hook 不通用 · LLM 需要主动调:
+
+```bash
+tinker maybe-check --text "<用户最近一条消息>" --json
+```
+
+输出形如:`{ ok: true, fired: [{ kind: "stuck", reminder: "..." }], cooled: [...] }`
+
+LLM 工作流:
+1. 看到用户消息 · 觉得**可能**是顿悟 / 卡住 / 决策 / 砍 / 完工等
+2. Bash 跑 `tinker maybe-check --text "<消息>" --json`
+3. 看 `fired` 数组 · 每个 hit 是一组 (kind, reminder)
+4. 按 reminder 里的建议跟用户对话 (但仍然看上下文判断 · 不强弹)
+
+两条路径**共享同一份 matcher 词典 + 同一份冷却**(写 `~/.tinker/prompt-state.json` 的 `lastMaybeAtByKind`) · 30/60 分钟内同 kind 不会重复触发。不论谁调一次 · 另一条路径都会被节流。
