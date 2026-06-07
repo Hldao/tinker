@@ -2905,8 +2905,12 @@ async function cmdCheck(opts) {
     return;
   }
 
-  // 冷却:30 分钟内已经 prompt 过 + 不是 keyword 级 (priority < 100) 不再 prompt
-  const suppressedByCooldown = state.lastPromptedAt && (now - state.lastPromptedAt) < 30 * 60 * 1000 && result.priority < 100;
+  // v0.13 冷却:30 分钟内同 reason 已经 prompt 过 + 不是 keyword 级 (priority < 100) 不再 prompt
+  // 之前用全局 lastPromptedAt · clever-fix 跟 tool-combo 互压 · 一天命中 10+ 但用户只听到 1 次
+  // 改成 per-reason · 不同信号源不再互相吃掉 · keyword 级 (priority >= 100) 仍豁免冷却
+  const byReason = state.lastPromptedAtByReason || {};
+  const lastForThisReason = byReason[result.reason];
+  const suppressedByCooldown = lastForThisReason && (now - lastForThisReason) < 30 * 60 * 1000 && result.priority < 100;
   // v0.12 不管最后是否 prompt · 都记 winner 到今日 hits (给 goodnight + tinker triggers 看)
   recordTriggerWinner(state, result, suppressedByCooldown);
   savePromptState(state);
@@ -3059,6 +3063,8 @@ async function cmdCheck(opts) {
     savePending(pending);
     // 写 state · 标记已 prompt · 防重复触发
     state.lastPromptedAt = now;
+    state.lastPromptedAtByReason = state.lastPromptedAtByReason || {};
+    state.lastPromptedAtByReason[result.reason] = now;
     if (result.priority < 70) state.lowFiredTodayKey = todayKey();
     savePromptState(state);
     // 输出结构化 JSON 给调用方解析
@@ -3082,6 +3088,8 @@ async function cmdCheck(opts) {
   } catch { choice = 'later'; }
 
   state.lastPromptedAt = now;
+  state.lastPromptedAtByReason = state.lastPromptedAtByReason || {};
+  state.lastPromptedAtByReason[result.reason] = now;
   // v0.2 #6: 低优先级触发器 (first-commit/silence/cumulative) 命中后 · 当天不再问
   // priority < 70: first-commit 60 / silence 50 / cumulative 30
   if (result.priority < 70) {
@@ -4442,6 +4450,12 @@ async function cmdResolve(choice, opts) {
   const state = loadPromptState();
   const now = Date.now();
   state.lastPromptedAt = now;
+  // v0.13 per-reason 冷却:pending.reason 在 cmdCheck --json 时存进了 pending
+  // 老 pending 可能没 reason 字段 · 兜底 '_default'
+  if (pending.reason) {
+    state.lastPromptedAtByReason = state.lastPromptedAtByReason || {};
+    state.lastPromptedAtByReason[pending.reason] = now;
+  }
 
   // 文本类动作:需要 -m "..."
   const needsText = ['push', 'push-brand-self', 'push-brand-meta', 'push-decision', 'ship', 'prototype', 'stuck', 'stuck-quiet'];
