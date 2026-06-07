@@ -738,6 +738,36 @@ function unmarkLearning({ updateId }, { currentUserId }) {
   return { ok: true };
 }
 
+// v0.13 decision tag · Design Loop 第三个 lifecycle 产物
+// decision = "决策推演" · 给其他人学 product sense 用
+// 跟 method / experience / learning 平行 · 但 method 已升 first-class · decision 仍是 update flag
+function markAsDecision({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, u.text, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能把自己写的标成决策推演');
+  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 决策池希望有点干货 (至少 20 字)');
+  db.prepare('UPDATE updates SET is_decision = 1 WHERE id = ?').run(updateId);
+  return { ok: true, updateId };
+}
+
+function unmarkDecision({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能改自己的标记');
+  db.prepare('UPDATE updates SET is_decision = 0 WHERE id = ?').run(updateId);
+  return { ok: true };
+}
+
 // v0.12 给 CLI / MCP 拉自己最近的 update · 不走 action 路径 · 直接 GET 暴露
 // 限定 currentUserId 自己的 · 不暴露别人的
 // kindFilter: 'all' (默认) / 'experience' / 'method' / 'ship' / 'stuck' / 'prototype'
@@ -748,13 +778,14 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
   if (kindFilter === 'experience') where += ' AND u.is_experience = 1';
   else if (kindFilter === 'method') where += ' AND u.is_method = 1';
   else if (kindFilter === 'learning') where += ' AND u.is_learning = 1';
+  else if (kindFilter === 'decision') where += ' AND u.is_decision = 1';
   else if (kindFilter && ['ship', 'stuck', 'prototype'].includes(kindFilter)) {
     where += ' AND u.kind = ?';
     params.push(kindFilter);
   }
   params.push(cap);
   const rows = db.prepare(`
-    SELECT u.id, u.text, u.at, u.kind, u.is_method, u.is_experience, u.is_learning,
+    SELECT u.id, u.text, u.at, u.kind, u.is_method, u.is_experience, u.is_learning, u.is_decision,
            p.id AS project_id, p.slug AS project_slug, p.name AS project_name,
            usr.handle AS owner_handle
     FROM updates u
@@ -773,6 +804,7 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
       isMethod: !!r.is_method,
       isExperience: !!r.is_experience,
       isLearning: !!r.is_learning,
+      isDecision: !!r.is_decision,
       projectId: r.project_id,
       projectSlug: r.project_slug,
       projectName: r.project_name,
@@ -795,6 +827,7 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
   const wantMethods = !kindFilter || kindFilter === 'method' || methodsOnly;
   const wantExperience = !kindFilter || kindFilter === 'experience';
   const wantLearning = !kindFilter || kindFilter === 'learning';
+  const wantDecision = !kindFilter || kindFilter === 'decision';
 
   let allRows = [];
 
@@ -830,15 +863,16 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
     allRows.push(...methodRows);
   }
 
-  // 2. updates 上仍是 flag 的 experience / learning
-  if (wantExperience || wantLearning) {
+  // 2. updates 上仍是 flag 的 experience / learning / decision
+  if (wantExperience || wantLearning || wantDecision) {
     const flagWhere = [];
     if (wantExperience) flagWhere.push('u.is_experience = 1');
     if (wantLearning) flagWhere.push('u.is_learning = 1');
+    if (wantDecision) flagWhere.push('u.is_decision = 1');
     const whereSql = flagWhere.length > 0 ? 'AND (' + flagWhere.join(' OR ') + ')' : '';
     let flagRows = db.prepare(`
       SELECT u.id, u.text, u.scenario, NULL AS title, u.at,
-             u.is_experience, u.is_learning,
+             u.is_experience, u.is_learning, u.is_decision,
              p.name AS project_name, usr.handle AS owner_handle,
              bm25(updates_fts) AS score
       FROM updates_fts
@@ -852,7 +886,7 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
     if (flagRows.length === 0) {
       flagRows = db.prepare(`
         SELECT u.id, u.text, u.scenario, NULL AS title, u.at,
-               u.is_experience, u.is_learning,
+               u.is_experience, u.is_learning, u.is_decision,
                p.name AS project_name, usr.handle AS owner_handle,
                0 AS score
         FROM updates u
@@ -864,7 +898,11 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
       `).all('%' + q.trim() + '%', limit);
     }
     flagRows.forEach(r => {
-      r.kind = r.is_experience ? 'experience' : (r.is_learning ? 'learning' : 'method');
+      // 一条 update 可能同时多 flag · 这里取最稀缺优先 (decision > experience > learning > method)
+      r.kind = r.is_decision ? 'decision'
+            : r.is_experience ? 'experience'
+            : r.is_learning ? 'learning'
+            : 'method';
       allRows.push(r);
     });
   }
@@ -1173,6 +1211,8 @@ module.exports = {
   markAsExperience, unmarkExperience,
   // learning tag (v0.13) · 上手指南 · 给 AI 检索新技术入门
   markAsLearning, unmarkLearning,
+  // decision tag (v0.13) · 决策推演 · 给 AI 检索 product sense
+  markAsDecision, unmarkDecision,
   // reactions
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes

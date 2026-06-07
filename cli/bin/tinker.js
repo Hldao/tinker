@@ -2267,6 +2267,7 @@ function triggerAiDebugBreakthrough() {
 
     const lifecycleType = cur.lifecycleType || 'struggle';
     const isLearning = lifecycleType === 'learning';
+    const isDesignLoop = lifecycleType === 'design-loop';
     const struggleMod = (() => { try { return require('../lib/struggle'); } catch { return null; } })();
     const config = struggleMod && struggleMod.LIFECYCLE_CONFIGS[lifecycleType];
 
@@ -2281,6 +2282,9 @@ function triggerAiDebugBreakthrough() {
       // learning 出口词:跑通 / 配通 / hello world / 接通 / 初次 / 第一个 / 入门完成
       const LEARNING_DONE = /(跑通|配通|接通|hello\s*world|跑起来|跑出来|搞通|搞懂|入门完成|第一个.*跑|setup.*done|wired up|integrated|got it working|first.*working)/i;
       if (!LEARNING_DONE.test(scanText)) return { fired: false };
+    } else if (isDesignLoop) {
+      // design-loop 没有特定 commit 形态约束 · 推演不一定 commit code
+      // 状态机已经看 Claude 对话的"决策词" 判断 resolved · 这里不再约束
     } else {
       const FIX_WORDS = /(\bfix(?:ed|es|ing)?\b|\bpatch(?:ed)?\b|\bworkaround\b|修好|修了|搞定|搞通|跑通|通了|解决了|绕过|绕开)/i;
       if (!FIX_WORDS.test(scanText)) return { fired: false };
@@ -2324,6 +2328,8 @@ function triggerAiDebugBreakthrough() {
     const productTag = config ? config.productTag : 'experience';
     const msg = isLearning
       ? `「${topic}」上手了 · 跨 ${spanHours}h · ${sigCount} 条信号 · 完成: ${dim(titleSnippet)}`
+      : isDesignLoop
+      ? `「${topic}」推演定下来了 · 跨 ${spanHours}h · ${sigCount} 条信号`
       : `「${topic}」破局了 · 跨 ${spanHours}h · ${sigCount} 条信号 · 修复: ${dim(titleSnippet)}`;
 
     return {
@@ -2336,6 +2342,8 @@ function triggerAiDebugBreakthrough() {
         ? `草稿已自动整理: .tinker/drafts/${draftReady} · tinker push <file> --as-${productTag} 一键发`
         : (isLearning
             ? '这次上手过程写出来能帮到下一个人 · 草稿后台整理中'
+            : isDesignLoop
+            ? '这次推演沉淀下来给后人学 product sense 用 · 草稿后台整理中'
             : '这种坑写出来能帮到下一个人 · 包括其他 AI · 草稿后台整理中'),
       autopsyDraft: draftReady ? path.join(draftDir, draftReady) : null,
       struggleId: cur.id,
@@ -3660,6 +3668,90 @@ async function cmdStruggle(sub, opts = {}) {
 // 后台 detached child 调用 · tinker __autopsy <struggleId>
 // 把 dossier 整理成四段 markdown · 写到 <repo>/.tinker/drafts/experience-<topic>.md
 // 不阻塞主 hook · 失败容错 (fallback 到 template-based)
+// v0.13 backfill 命令 · 用户主动回溯过往推演 / 学习 / 踩坑
+// tinker situation backfill --type design-loop --hours 6
+// 扫最近 N 小时 Claude 对话 · 构造 resolved dossier · 同步起草草稿
+async function cmdSituationBackfill(opts) {
+  const struggleMod = getStruggleModule();
+  const hours = parseInt(opts.hours, 10) || 4;
+  const type = opts.type || 'design-loop';
+  const config = struggleMod.LIFECYCLE_CONFIGS[type];
+  if (!config) {
+    err('不支持的 lifecycle 类型: ' + type + ' · 可用: ' + Object.keys(struggleMod.LIFECYCLE_CONFIGS).join(' / '));
+    process.exit(1);
+  }
+
+  log('');
+  log(bold('━━━ tinker situation backfill ━━━'));
+  log(sepia('  类型: ') + config.label + sepia(' · 时间窗: ') + hours + sepia(' 小时'));
+  log('');
+
+  // 扫整个 N 小时 · cwd 跟 parent 都试
+  const scan = struggleMod.scanClaudeRecent({ minutesBack: hours * 60, cwd: process.cwd() });
+  if (scan.userMessages.length < 5) {
+    err('扫到只 ' + scan.userMessages.length + ' 条 user message · 太少 · 调大 --hours 试试');
+    process.exit(1);
+  }
+
+  // 信号:匹配该 lifecycle 的 matchSignal
+  const signalType = type === 'struggle' ? 'claude_fail' :
+                     type === 'learning' ? 'claude_explore' :
+                     type === 'design-loop' ? 'claude_debate' : 'claude';
+  const signals = scan.userMessages
+    .filter(m => config.matchSignal(m.text))
+    .map(m => ({ at: m.ts, type: signalType, text: m.text.slice(0, 200) }));
+
+  if (signals.length < 3) {
+    err('信号数 ' + signals.length + ' 太少 · 这段时间可能不是 ' + config.label + ' · 试别的 --type');
+    process.exit(1);
+  }
+
+  const now = Date.now();
+  const dossier = {
+    id: type + '-backfill-' + new Date(now).toISOString().slice(0, 16).replace(/[-T:]/g, ''),
+    lifecycleType: type,
+    startedAt: scan.userMessages[0].ts,
+    endedAt: scan.userMessages[scan.userMessages.length - 1].ts,
+    justResolvedAt: now,
+    resolved: true,
+    consented: true,
+    backfilled: true,
+    signals,
+    topic: struggleMod.inferTopic(signals),
+  };
+  struggleMod.saveDossier(dossier);
+
+  log(sepia('  扫到: ') + bold(scan.userMessages.length + ' 条 user message'));
+  log(sepia('  信号: ') + bold(signals.length + ' 条匹配'));
+  log(sepia('  话题推断: ') + bold(dossier.topic || '(未推)'));
+  log(sepia('  dossier id: ') + dossier.id);
+  log('');
+  log(sepia('  起草中 (调 LLM · 可能需要 10-20 秒)...'));
+  log('');
+
+  // 同步跑 autopsy · 不 spawn 因为用户主动等结果
+  await cmdAutopsy(dossier.id, type);
+
+  // 找新写的草稿 (按 mtime 排序)
+  const draftDir = path.join(process.cwd(), '.tinker', 'drafts');
+  if (fs.existsSync(draftDir)) {
+    const drafts = fs.readdirSync(draftDir)
+      .filter(f => f.endsWith('.md') && f.startsWith(config.draftPrefix + '-'));
+    if (drafts.length > 0) {
+      const newest = drafts
+        .map(f => ({ f, mtime: fs.statSync(path.join(draftDir, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime)[0];
+      const draftPath = path.join('.tinker/drafts', newest.f);
+      log(moss('  ✓ 草稿就绪: ') + draftPath);
+      log('');
+      log(sepia('  改完一键发: ') + vermilion(`tinker push ${draftPath} --as-${config.productTag}`));
+      log(sepia('  或者打开看一眼:'));
+      log(sepia('    ') + vermilion('cat ' + draftPath));
+    }
+  }
+  log('');
+}
+
 async function cmdAutopsy(situationId, lifecycleTypeArg) {
   const struggle = getStruggleModule();
   const dossier = struggle.loadDossier(situationId);
@@ -3752,15 +3844,33 @@ async function llmAutopsy(cfg, ctx) {
 
   const lifecycleType = ctx.lifecycleType || 'struggle';
   const isLearning = lifecycleType === 'learning';
+  const isDesignLoop = lifecycleType === 'design-loop';
 
   const taskLine = isLearning
     ? '你的任务: 把这次学新东西的过程整理成一篇能帮其他 vibe coder 快速上手的指南。'
+    : isDesignLoop
+    ? '你的任务: 把这次产品决策推演整理成一篇能帮其他 vibe coder 学 product sense 的样本。'
     : '你的任务: 把这次踩坑过程整理成一篇能帮其他 vibe coder 少踩坑的经验贴。';
 
-  const infoLabel = isLearning ? '这次学习信息' : '这次踩坑信息';
-  const commitLabel = isLearning ? '关键完成那一笔 commit' : '突破那一笔 commit';
+  const infoLabel = isLearning ? '这次学习信息' : isDesignLoop ? '这次推演信息' : '这次踩坑信息';
+  const commitLabel = isLearning ? '关键完成那一笔 commit' : isDesignLoop ? '相关 commit (推演不一定 commit 代码)' : '突破那一笔 commit';
 
-  const outputTemplate = isLearning ? `## 想做什么 · 想学什么
+  const designLoopTemplate = `## 我在想什么
+[1-2 句 · 推演的核心问题是什么 · 比如"X 跟 Y 该不该分 / A 跟 B 哪个更合适"]
+
+## 考虑过哪几种方案
+[bullet 列表 · 列 2-4 种方案 · 每种 1 行描述]
+[关键: 把真实推演过的所有路径都列出来 · 不是事后修饰]
+
+## 各自权衡
+[每个方案的优缺点 / 适用边界]
+[这一段是最有 product sense 价值的 · 别人能从中学到怎么思考]
+
+## 选了哪种 · 为什么
+[1 段 · 最终决策 + 决定性理由]
+[要诚实写"alpha 期 YAGNI" / "用户场景不确定" 这种真实约束]`;
+
+  const outputTemplate = isDesignLoop ? designLoopTemplate : isLearning ? `## 想做什么 · 想学什么
 [1-2 句 · 具体到工具 / SDK / 框架 / API]
 
 ## 几个核心概念
@@ -3791,6 +3901,11 @@ async function llmAutopsy(cfg, ctx) {
     '- 写给"完全没用过这个东西" 的读者 · 不要假设知识',
     '- 核心概念部分要真"概念" · 不是 API list',
     '- 关键陷阱要具体 (跟教程的差异 · 自己撞到的事) · 不是"小心配置" 这种空话',
+  ] : isDesignLoop ? [
+    '- 写给"也在做类似决策" 的读者 · 不是事后修饰过的纪录片',
+    '- 真实保留考虑过但拒绝的方案 · 不要只写选了的那个',
+    '- 权衡部分要具体到约束 (alpha 期 / 用户量 / 团队能力 / 时间窗)',
+    '- 不替作者下"正确答案" 定论 · 决策有上下文 · 别人换上下文可能选别的',
   ] : [
     '- 不替作者编情绪 · "终于" 这种词只在 commit msg 真说过时用',
     '- 不下产品定论',
@@ -3891,7 +4006,34 @@ ${sceneSpecificConstraints.join('\n')}
 // v0.13 按 lifecycleType 切段落
 function templateAutopsy({ dossier, lifecycleType = 'struggle', signalLines, fixTitle, fixBody }) {
   const isLearning = lifecycleType === 'learning';
-  const productTag = isLearning ? 'learning' : 'experience';
+  const isDesignLoop = lifecycleType === 'design-loop';
+  const productTag = isDesignLoop ? 'decision' : isLearning ? 'learning' : 'experience';
+
+  if (isDesignLoop) {
+    return `## 我在想什么
+
+(待补 · 看下面时序自己写一句这次推演的核心问题)
+
+## 考虑过哪几种方案
+
+(待补 · 列你真实推演过的所有路径 · 不是事后修饰)
+
+${signalLines || '(信号不足 · 自己回忆补一下)'}
+
+## 各自权衡
+
+(待补 · 每个方案的优缺点 / 适用边界 · 这一段最有 product sense 价值)
+
+## 选了哪种 · 为什么
+
+(待补 · 最终决策 + 决定性理由)
+${fixTitle ? '\\n相关 commit:\\n' + fixTitle : ''}
+
+---
+
+(LLM 没起草 · 这是 template 兜底 · 自己改完就发 · \`tinker push <这个文件> --as-${productTag}\`)
+`;
+  }
 
   if (isLearning) {
     return `## 想做什么 · 想学什么
@@ -4595,8 +4737,9 @@ async function cmdBorrow(query, opts) {
   log(sepia(`  搜到 ${hits.length} 条 · 关键词: `) + bold(q));
   log('');
   hits.forEach((h, i) => {
-    // v0.13 三种标签 · 经验/上手指南 排在方法之前 (更稀缺 · 更值得看)
+    // v0.13 四种标签 · 决策推演/经验/上手指南 排在方法之前 (更稀缺 · 更值得看)
     const flags = [];
+    if (h.isDecision) flags.push(vermilion('[决策推演]'));
     if (h.isExperience) flags.push(vermilion('[踩坑经验]'));
     if (h.isLearning) flags.push(vermilion('[上手指南]'));
     if (h.isMethod) flags.push(vermilion('[方法]'));
@@ -5012,6 +5155,7 @@ async function cmdRecent(opts) {
   list.forEach((u, i) => {
     const when = new Date(u.at).toISOString().slice(0, 10);
     const tags = [];
+    if (u.isDecision) tags.push(vermilion('[决策]'));
     if (u.isExperience) tags.push(vermilion('[经验]'));
     if (u.isLearning) tags.push(vermilion('[上手指南]'));
     if (u.isMethod) tags.push(vermilion('[方法]'));
@@ -5790,6 +5934,13 @@ async function main() {
         await cmdMarkExperience(args[1], opts); break;
       case 'mark-learning': case 'mark-learn':
         await cmdMarkLearning(args[1], opts); break;
+      case 'mark-decision': case 'mark-dec':
+        await cmdMarkDecision(args[1], opts); break;
+      case 'situation':
+        // tinker situation backfill --type design-loop --hours 6
+        if (args[1] === 'backfill') await cmdSituationBackfill(opts);
+        else { err('用法: tinker situation backfill [--type design-loop] [--hours 4]'); process.exit(1); }
+        break;
       case 'session': await cmdSession(args[1], opts); break;
       case 'goodnight': case 'recap':
         await cmdGoodnight({

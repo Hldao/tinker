@@ -401,13 +401,13 @@ const TOOLS = [
   },
   {
     name: 'tinker_borrow',
-    description: '搜 Tinker 用户的方法 + 踩坑经验 + 上手指南。任何 vibe coding 任务卡住或入门新技术时主动调:遇到错误码搜踩坑 (阿里云邮件 / Supabase 认证 / Vercel 部署) · 新东西入门搜上手指南 (supabase realtime / cloudflare workers / pinecone vector db / vision API) · 找现成方法搜方法 (魔法链接登录 / 图片压缩流程) 都是高价值场景。query 用关键词 (中英混杂都行)。是 vibe coder 互相省时间的核心 tool。',
+    description: '搜 Tinker 用户的四类产出:方法 / 踩坑经验 / 上手指南 / 决策推演。卡住或入门新技术时主动调:遇到错误码搜踩坑 (阿里云邮件 / Supabase 认证 / Vercel 部署) · 新东西入门搜上手指南 (supabase realtime / cloudflare workers / pinecone vector db / vision API) · 找现成方法搜方法 (魔法链接登录 / 图片压缩流程) · 做产品决策时搜推演 (接走 vs 启发 / 框架抽象边界 / YAGNI 取舍) 学 product sense。query 用关键词 (中英混杂都行)。',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: '关键词 · 例: "阿里云 邮件" / "supabase realtime" / "vercel cron 限制"' },
         limit: { type: 'integer', description: '返回条数 · 默认 10', minimum: 1, maximum: 50 },
-        kind: { type: 'string', enum: ['method', 'experience', 'learning'], description: '过滤: method 只搜方法 · experience 只搜踩坑经验 · learning 只搜上手指南 · 不传搜全部' },
+        kind: { type: 'string', enum: ['method', 'experience', 'learning', 'decision'], description: '过滤: method 只搜方法 · experience 踩坑经验 · learning 上手指南 · decision 决策推演 · 不传搜全部' },
         methodsOnly: { type: 'boolean', description: '(老参数 · 推荐用 kind=method) 只看方法 · 默认 false' },
       },
       required: ['query'],
@@ -421,7 +421,7 @@ const TOOLS = [
       const url = new URL('/api/method/search', cfg.serverUrl);
       url.searchParams.set('q', q);
       url.searchParams.set('limit', String(args.limit || 10));
-      if (args.kind && ['method', 'experience', 'learning'].includes(args.kind)) url.searchParams.set('kind', args.kind);
+      if (args.kind && ['method', 'experience', 'learning', 'decision'].includes(args.kind)) url.searchParams.set('kind', args.kind);
       if (args.methodsOnly) url.searchParams.set('methodsOnly', '1');
       if (cfg.handle) url.searchParams.set('borrower', cfg.handle); // 反馈闭环
       const res = await fetch(url.toString());
@@ -557,6 +557,41 @@ const TOOLS = [
         updateId = latest.id;
       }
       await tinker.apiAction(cfg, 'markAsLearning', { updateId });
+      return toolResult({ ok: true, updateId, marked: true });
+    },
+  },
+  // v0.13: 标某条 update 为决策推演 · Design Loop 第三个 lifecycle 产物
+  {
+    name: 'tinker_mark_decision',
+    description: '把自己一条 update 标为决策推演 · 让 AI 检索 Tinker 时优先取这类 (帮其他人学 product sense / 真实权衡过程)。updateId 不传则取最近一条。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        updateId: { type: 'string', description: 'update id · 例 u-xxx · 留空则用最近一条' },
+        unmark: { type: 'boolean', description: '取消标记 (默认 false)' },
+      },
+      additionalProperties: false,
+    },
+    handler: async (args) => {
+      const cfg = tinker.mustHaveConfig();
+      if (args.unmark) {
+        if (!args.updateId) return toolErr('unmark 需要 updateId', 'NO_ID');
+        await tinker.apiAction(cfg, 'unmarkDecision', { updateId: args.updateId });
+        return toolResult({ ok: true, updateId: args.updateId, marked: false });
+      }
+      let updateId = args.updateId;
+      if (!updateId) {
+        const state = await tinker.apiState(cfg);
+        let latest = null;
+        for (const p of state.projects || []) {
+          for (const u of p.updates || []) {
+            if (!latest || u.at > latest.at) latest = u;
+          }
+        }
+        if (!latest) return toolErr('还没记过进展 · 没东西可标', 'NO_UPDATES');
+        updateId = latest.id;
+      }
+      await tinker.apiAction(cfg, 'markAsDecision', { updateId });
       return toolResult({ ok: true, updateId, marked: true });
     },
   },

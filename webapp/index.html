@@ -543,6 +543,8 @@
   .sri-tagline { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 2px; }
   .sri-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 1px 6px; margin-left: 8px; border-radius: 2px; letter-spacing: 0.04em; vertical-align: middle; }
   .sri-tag-experience { background: #fff1ec; color: var(--vermilion); }
+  .sri-tag-learning { background: #fef6e4; color: #ad6526; }
+  .sri-tag-decision { background: #ece8f7; color: #5a3a93; }
   .sri-tag-method { background: #f0ede4; color: var(--moss); }
   .sri-text { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink-soft); line-height: 1.5; margin-top: 4px; }
   .search-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); text-align: center; padding: 24px 0; }
@@ -8519,14 +8521,15 @@ function doSearch(q) {
     const shown = updates.slice(0, 8);
     // v0.13 三种标签排序 · 踩坑经验/上手指南 优先 · 方法次之
     shown.sort((a, b) => {
-      const aw = (a.u.isExperience ? 3 : 0) + (a.u.isLearning ? 2 : 0) + (a.u.isMethod ? 1 : 0);
-      const bw = (b.u.isExperience ? 3 : 0) + (b.u.isLearning ? 2 : 0) + (b.u.isMethod ? 1 : 0);
+      const aw = (a.u.isDecision ? 4 : 0) + (a.u.isExperience ? 3 : 0) + (a.u.isLearning ? 2 : 0) + (a.u.isMethod ? 1 : 0);
+      const bw = (b.u.isDecision ? 4 : 0) + (b.u.isExperience ? 3 : 0) + (b.u.isLearning ? 2 : 0) + (b.u.isMethod ? 1 : 0);
       return bw - aw;
     });
     html += `<div class="search-result-group">
       <div class="search-result-label">进展 (${updates.length}${updates.length > 8 ? ' · 显示前 8 条' : ''})</div>
       ${shown.map(({p, u}) => {
         const tags = [];
+        if (u.isDecision) tags.push('<span class="sri-tag sri-tag-decision">决策推演</span>');
         if (u.isExperience) tags.push('<span class="sri-tag sri-tag-experience">踩坑经验</span>');
         if (u.isLearning) tags.push('<span class="sri-tag sri-tag-learning">上手指南</span>');
         if (u.isMethod) tags.push('<span class="sri-tag sri-tag-method">方法</span>');
