@@ -408,6 +408,8 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
     } else {
       db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectId);
     }
+    // 同步进 FTS · 让方法库可以搜到 (v0.12)
+    syncUpdateToFts(updateId);
   });
   txn();
 
@@ -445,7 +447,22 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
     }
   }
 
-  return { id: updateId, text: text.trim(), at: now, prompt: prompt || undefined, statusChanged: willStuck };
+  // 给 CLI / MCP 拼直链用 · 一次 join 拿全 (避免客户端二次拉)
+  const linkInfo = db.prepare(`
+    SELECT p.slug AS project_slug, p.name AS project_name, usr.handle AS owner_handle
+    FROM projects p JOIN users usr ON usr.id = p.owner_id WHERE p.id = ?
+  `).get(projectId);
+
+  return {
+    id: updateId,
+    text: text.trim(),
+    at: now,
+    prompt: prompt || undefined,
+    statusChanged: willStuck,
+    projectSlug: linkInfo ? linkInfo.project_slug : null,
+    projectName: linkInfo ? linkInfo.project_name : null,
+    ownerHandle: linkInfo ? linkInfo.owner_handle : null,
+  };
 }
 
 function editUpdate({ projectId, updateIdx, text, images, seekingFeedback, feedbackAsk }, { currentUserId }) {
@@ -471,6 +488,7 @@ function editUpdate({ projectId, updateIdx, text, images, seekingFeedback, feedb
         if (imgId) insLink.run(u.id, imgId, idx);
       });
     }
+    syncUpdateToFts(u.id);
   });
   txn();
   return { ok: true };
@@ -483,8 +501,231 @@ function deleteUpdate({ projectId, updateIdx }, { currentUserId }) {
   const updates = db.prepare('SELECT id FROM updates WHERE project_id = ? ORDER BY at DESC').all(projectId);
   const u = updates[updateIdx];
   if (!u) throw new Error('找不到这条进展');
+  db.prepare('DELETE FROM updates_fts WHERE update_id = ?').run(u.id);
   db.prepare('DELETE FROM updates WHERE id = ?').run(u.id); // cascade 清 images/method_used
   return { ok: true };
+}
+
+// 把一条 update 写入 / 覆盖 FTS5 虚拟表
+// content-rowid 不能复用 (text id) · 用 update_id 列定位 · 旧记录先 DELETE 再 INSERT
+function syncUpdateToFts(updateId) {
+  const row = db.prepare(`
+    SELECT u.text, p.name AS project_name, usr.handle AS owner_handle
+    FROM updates u
+    JOIN projects p ON p.id = u.project_id
+    JOIN users usr ON usr.id = p.owner_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!row) return;
+  db.prepare('DELETE FROM updates_fts WHERE update_id = ?').run(updateId);
+  db.prepare(`
+    INSERT INTO updates_fts (text, project_name, owner_handle, update_id)
+    VALUES (?, ?, ?, ?)
+  `).run(row.text, row.project_name, row.owner_handle, updateId);
+}
+
+// 作者把自己一条 update 标为方法 · 让别人 borrow 时能拿到
+function markAsMethod({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, u.text, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能把自己写的标成方法');
+  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 方法库希望有点干货 (至少 20 字)');
+  db.prepare('UPDATE updates SET is_method = 1 WHERE id = ?').run(updateId);
+  return { ok: true, updateId };
+}
+
+function unmarkMethod({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能改自己的标记');
+  db.prepare('UPDATE updates SET is_method = 0 WHERE id = ?').run(updateId);
+  return { ok: true };
+}
+
+// v0.12 experience tag · 跟 markAsMethod 同构 · 但语义不同:
+// method = "可被借用的方法论" · 别人 borrow 时优先拿
+// experience = "踩坑经验" · 给 AI 检索时优先拿 (帮其他 AI 少走弯路)
+// 同一条 update 可同时是 method 和 experience · 互不冲突
+function markAsExperience({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, u.text, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能把自己写的标成经验');
+  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 经验池希望有点干货 (至少 20 字)');
+  db.prepare('UPDATE updates SET is_experience = 1 WHERE id = ?').run(updateId);
+  return { ok: true, updateId };
+}
+
+function unmarkExperience({ updateId }, { currentUserId }) {
+  if (!updateId) throw new Error('updateId 必填');
+  const u = db.prepare(`
+    SELECT u.id, p.owner_id
+    FROM updates u JOIN projects p ON p.id = u.project_id
+    WHERE u.id = ?
+  `).get(updateId);
+  if (!u) throw new Error('找不到这条进展');
+  if (u.owner_id !== currentUserId) throw new Error('只能改自己的标记');
+  db.prepare('UPDATE updates SET is_experience = 0 WHERE id = ?').run(updateId);
+  return { ok: true };
+}
+
+// v0.12 给 CLI / MCP 拉自己最近的 update · 不走 action 路径 · 直接 GET 暴露
+// 限定 currentUserId 自己的 · 不暴露别人的
+// kindFilter: 'all' (默认) / 'experience' / 'method' / 'ship' / 'stuck' / 'prototype'
+function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
+  const cap = Math.max(1, Math.min(parseInt(limit, 10) || 10, 50));
+  let where = 'p.owner_id = ?';
+  const params = [currentUserId];
+  if (kindFilter === 'experience') where += ' AND u.is_experience = 1';
+  else if (kindFilter === 'method') where += ' AND u.is_method = 1';
+  else if (kindFilter && ['ship', 'stuck', 'prototype'].includes(kindFilter)) {
+    where += ' AND u.kind = ?';
+    params.push(kindFilter);
+  }
+  params.push(cap);
+  const rows = db.prepare(`
+    SELECT u.id, u.text, u.at, u.kind, u.is_method, u.is_experience,
+           p.id AS project_id, p.slug AS project_slug, p.name AS project_name,
+           usr.handle AS owner_handle
+    FROM updates u
+    JOIN projects p ON p.id = u.project_id
+    JOIN users usr ON usr.id = p.owner_id
+    WHERE ${where}
+    ORDER BY u.at DESC
+    LIMIT ?
+  `).all(...params);
+  return {
+    updates: rows.map(r => ({
+      id: r.id,
+      text: r.text,
+      at: r.at,
+      kind: r.kind || null,
+      isMethod: !!r.is_method,
+      isExperience: !!r.is_experience,
+      projectId: r.project_id,
+      projectSlug: r.project_slug,
+      projectName: r.project_name,
+      ownerHandle: r.owner_handle,
+    })),
+  };
+}
+
+// 搜方法库 · q 是用户输入 (空格分词) · 优先 is_method=1 · 其次最近
+// 返回 { hits: [{ updateId, text, projectName, ownerHandle, at, isMethod, score }] }
+// borrowerHandle 可空 · 有就把命中的前 N 条记进 borrow_log (让作者 goodnight 看到)
+function searchMethods({ q, limit = 10, methodsOnly = false, borrowerHandle = null }) {
+  if (!q || !q.trim()) return { hits: [] };
+  const ftsQ = q.trim().split(/\s+/).filter(Boolean).map(t => t.replace(/["*]/g, '')).filter(Boolean).join(' ');
+  if (!ftsQ) return { hits: [] };
+  const where = methodsOnly ? 'AND u.is_method = 1' : '';
+  let rows = db.prepare(`
+    SELECT u.id, u.text, u.at, u.is_method, p.name AS project_name, usr.handle AS owner_handle,
+           bm25(updates_fts) AS score
+    FROM updates_fts
+    JOIN updates u ON u.id = updates_fts.update_id
+    JOIN projects p ON p.id = u.project_id
+    JOIN users usr ON usr.id = p.owner_id
+    WHERE updates_fts MATCH ? ${where}
+    ORDER BY u.is_method DESC, score ASC, u.at DESC
+    LIMIT ?
+  `).all(ftsQ, limit);
+
+  // trigram tokenizer 要 ≥3 字符才能命中 · 2 字 CJK ("邮箱") 走 LIKE 兜底
+  if (rows.length === 0) {
+    const likeWhere = methodsOnly ? 'AND u.is_method = 1' : '';
+    rows = db.prepare(`
+      SELECT u.id, u.text, u.at, u.is_method, p.name AS project_name, usr.handle AS owner_handle,
+             0 AS score
+      FROM updates u
+      JOIN projects p ON p.id = u.project_id
+      JOIN users usr ON usr.id = p.owner_id
+      WHERE u.text LIKE ? ${likeWhere}
+      ORDER BY u.is_method DESC, u.at DESC
+      LIMIT ?
+    `).all('%' + q.trim() + '%', limit);
+  }
+
+  // 借用反馈闭环: borrower 已登录 + 命中 ≥1 条 · 只记 TOP 3 条 (避免一次搜污染日志)
+  // 不记自己借自己 · 不记重复 (24h 同 borrower 同 update_id 已存在则跳过)
+  if (borrowerHandle && rows.length > 0) {
+    const excerpt = q.trim().slice(0, 80);
+    const at = Date.now();
+    const recent = at - 24 * 60 * 60 * 1000;
+    const dedupe = db.prepare(`
+      SELECT 1 FROM borrow_log WHERE update_id = ? AND borrower_handle = ? AND at > ?
+    `);
+    const ins = db.prepare(`
+      INSERT INTO borrow_log (update_id, owner_handle, borrower_handle, query_excerpt, at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    for (const r of rows.slice(0, 3)) {
+      if (r.owner_handle === borrowerHandle) continue;
+      if (dedupe.get(r.id, borrowerHandle, recent)) continue;
+      ins.run(r.id, r.owner_handle, borrowerHandle, excerpt, at);
+    }
+  }
+
+  return {
+    hits: rows.map(r => ({
+      updateId: r.id,
+      text: r.text,
+      projectName: r.project_name,
+      ownerHandle: r.owner_handle,
+      at: r.at,
+      isMethod: !!r.is_method,
+      score: r.score,
+    })),
+  };
+}
+
+// 给作者看自己的方法被借了几次 · 时间窗内 · 默认近 7 天
+// 返回 { total, byUpdate: [{ updateId, projectName, excerpt, count, lastAt, lastBorrower }] }
+function getBorrowsForOwner({ ownerHandle, sinceMs = null }) {
+  if (!ownerHandle) return { total: 0, byUpdate: [] };
+  const since = sinceMs || (Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const rows = db.prepare(`
+    SELECT bl.update_id, COUNT(*) AS cnt, MAX(bl.at) AS last_at,
+           u.text, p.name AS project_name
+    FROM borrow_log bl
+    LEFT JOIN updates u ON u.id = bl.update_id
+    LEFT JOIN projects p ON p.id = u.project_id
+    WHERE bl.owner_handle = ? AND bl.at > ?
+    GROUP BY bl.update_id
+    ORDER BY last_at DESC
+    LIMIT 20
+  `).all(ownerHandle, since);
+  // 每条再拉一下最近的 borrower (用来 goodnight 友好显示)
+  const lastBorrowerStmt = db.prepare(`
+    SELECT borrower_handle FROM borrow_log
+    WHERE update_id = ? AND owner_handle = ? AND at > ?
+    ORDER BY at DESC LIMIT 1
+  `);
+  const total = rows.reduce((s, r) => s + r.cnt, 0);
+  return {
+    total,
+    byUpdate: rows.map(r => ({
+      updateId: r.update_id,
+      projectName: r.project_name || '(已删)',
+      excerpt: (r.text || '').slice(0, 60),
+      count: r.cnt,
+      lastAt: r.last_at,
+      lastBorrower: lastBorrowerStmt.get(r.update_id, ownerHandle, since)?.borrower_handle || null,
+    })),
+  };
 }
 
 // ============================================
@@ -516,11 +757,22 @@ function reactToProject({ projectId, level }, { currentUserId }) {
   return { action: 'add' };
 }
 
-function submitTinkered({ projectId, name, link }, { currentUserId }) {
-  if (!name || !name.trim()) throw new Error('延伸版名字必填');
-  if (!isValidUrl(link)) throw new Error('延伸版链接必须是 https://');
+function submitTinkered({ projectId, name, link, inspiredByUpdateId }, { currentUserId }) {
+  if (!name || !name.trim()) throw new Error('你做的项目名字必填');
+  if (!isValidUrl(link)) throw new Error('产物链接必须是 https://');
   const p = db.prepare('SELECT owner_id, name FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
+
+  // v0.12 新提交必填 inspiredByUpdateId · 颗粒度从项目细化到 update
+  // 验证 update 真属于这个 parent project (防止伪造)
+  if (!inspiredByUpdateId || !inspiredByUpdateId.trim()) {
+    throw new Error('挑一条具体启发了你的进展 · 颗粒度精确到那一笔');
+  }
+  const insp = db.prepare('SELECT id, project_id FROM updates WHERE id = ?').get(inspiredByUpdateId.trim());
+  if (!insp) throw new Error('启发源那条进展找不到 · 可能被删了');
+  if (insp.project_id !== projectId) {
+    throw new Error('启发源得是这个项目下的进展 · 不能跨项目');
+  }
 
   const txn = db.transaction(() => {
     // 清 wantToTry (升级到 tinkered)
@@ -528,22 +780,23 @@ function submitTinkered({ projectId, name, link }, { currentUserId }) {
       .run(projectId, currentUserId);
     // UNIQUE(parent_project_id, user_id) · 重复 INSERT 会 throw · 改用 INSERT OR REPLACE
     db.prepare(`
-      INSERT OR REPLACE INTO tinkered (id, parent_project_id, user_id, name, link, at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO tinkered (id, parent_project_id, user_id, name, link, at, inspired_by_update_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       't-' + Date.now() + Math.random().toString(36).slice(2, 6),
-      projectId, currentUserId, name.trim(), link.trim(), Date.now()
+      projectId, currentUserId, name.trim(), link.trim(), Date.now(),
+      inspiredByUpdateId.trim()
     );
   });
   txn();
 
-  // 升级承诺 · 清掉之前给 owner 的 wantToTry 通知 · 否则 owner 同时看到 "想试试" + "接走了"
+  // 升级承诺 · 清掉之前给 owner 的 wantToTry 通知 · 否则 owner 同时看到 "想试试" + "因启发做了"
   clearNotif({ targetUserId: p.owner_id, fromUserId: currentUserId, type: 'wantToTry', projectId });
 
-  const handle = db.prepare('SELECT handle FROM users WHERE id = ?').get(currentUserId)?.handle;
+  // anchor 用 update-<id> · 原作者点通知能直接跳到那条启发了别人的具体进展
   notify({
     targetUserId: p.owner_id, fromUserId: currentUserId, type: 'tinkered',
-    projectId, extra: name.trim(), anchor: handle ? 'tinkered-' + handle : null,
+    projectId, extra: name.trim(), anchor: 'update-' + inspiredByUpdateId.trim(),
   });
   return { ok: true };
 }
@@ -675,6 +928,8 @@ function markNotifRead({ notifId }, { currentUserId }) {
 }
 
 module.exports = {
+  searchMethods, getBorrowsForOwner, // 不走 action 路径 · 直接 GET 暴露
+  listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI / MCP 用)
   // users
   editTagline, renameHandle,
   // projects
@@ -682,6 +937,10 @@ module.exports = {
   pinUpdateForShowcase, toggleShowcaseVisibility,
   // updates
   addUpdate, editUpdate, deleteUpdate,
+  // method library (v0.12)
+  markAsMethod, unmarkMethod,
+  // experience tag (v0.12) · 给 AI 检索经验 · 跟 method 同构但语义不同
+  markAsExperience, unmarkExperience,
   // reactions
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes

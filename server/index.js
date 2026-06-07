@@ -274,9 +274,62 @@ app.get('/api/state', stateLimiter, (req, res) => {
   res.json(state);
 });
 
+// 方法库搜索 (v0.12 · 给 tinker borrow 用 · 不需要登录 · 任何人都能搜公开内容)
+// ?q=<关键词>&limit=10&methodsOnly=1
+// 如果带了登录 (token / cookie session) · 自动把命中前 3 条写进 borrow_log (反馈闭环)
+app.get('/api/method/search', stateLimiter, (req, res) => {
+  const q = String(req.query.q || '').slice(0, 200);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+  const methodsOnly = req.query.methodsOnly === '1' || req.query.methodsOnly === 'true';
+  // borrower handle 来源优先级: 显式 ?borrower=  > 当前 session/token 用户的 handle
+  let borrowerHandle = req.query.borrower ? String(req.query.borrower).slice(0, 40) : null;
+  if (!borrowerHandle && req.user && req.user.handle) borrowerHandle = req.user.handle;
+  try {
+    const result = actions.searchMethods({ q, limit, methodsOnly, borrowerHandle });
+    res.json(result);
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'method search failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 作者看自己最近 N 天被借了哪些方法 (goodnight 用 · 也给 webapp 个人页用)
+// 需要登录 · 只能看自己的
+app.get('/api/method/borrows-for-me', stateLimiter, auth.requireSession, (req, res) => {
+  const days = Math.min(parseInt(req.query.days, 10) || 7, 90);
+  const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  try {
+    const handle = req.user.handle;
+    if (!handle) return res.status(400).json({ error: '当前用户没设 handle' });
+    res.json(actions.getBorrowsForOwner({ ownerHandle: handle, sinceMs }));
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'borrows-for-me failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
 app.get('/api/tools', stateLimiter, (req, res) => {
   const tools = db.prepare('SELECT tool FROM available_tools ORDER BY position').all().map(r => r.tool);
   res.json(tools);
+});
+
+// v0.12 自己的最近 update · CLI / MCP / AI agent 用
+// ?limit=N&kind=experience|method|ship|stuck|prototype|all
+// 需要登录 (session 或 api token) · 只返自己的
+app.get('/api/me/updates', stateLimiter, auth.requireSession, (req, res) => {
+  const limit = parseInt(req.query.limit, 10) || 10;
+  const kindFilter = String(req.query.kind || 'all').slice(0, 20);
+  try {
+    const result = actions.listMyUpdates({
+      currentUserId: req.user.id,
+      limit,
+      kindFilter,
+    });
+    res.json(result);
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'list my updates failed');
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // 图片单独 endpoint · 不塞 /api/state 主响应里 (那个一拉就 1.5MB)
