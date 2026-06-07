@@ -5430,6 +5430,192 @@ async function cmdUsed(updateId, opts) {
   }
 }
 
+// v0.15 编辑/删除/建项目 · 补齐 CLI 跟 server 之间最后几个动作 gap
+// 之前 editUpdate / deleteUpdate / editMethod / addProject / editProject 只有 webapp 用
+// 现在 CLI 直接能做 · 写错可以改 · 测试条可以删 · 新项目命令行起手
+
+// helper: 在自己 owned 项目里找 updateId 对应的 projectId + updateIdx
+async function findMyUpdate(cfg, updateId) {
+  if (!updateId || !updateId.startsWith('u-')) return null;
+  const state = await apiState(cfg);
+  for (const p of state.projects) {
+    if (p.owner !== cfg.handle) continue;
+    const idx = (p.updates || []).findIndex(u => u.id === updateId);
+    if (idx >= 0) return { project: p, idx, update: p.updates[idx] };
+  }
+  return null;
+}
+
+// tinker edit <updateId> -m "新内容" [--scenario "..."]
+async function cmdEditUpdate(updateId, opts) {
+  const cfg = mustHaveConfig();
+  if (!updateId || !updateId.startsWith('u-')) {
+    if (opts.json) return errJson('用法: tinker edit <updateId> -m "新内容"', 'NO_ID');
+    err('用法: ' + vermilion('tinker edit <updateId> -m "新内容"') + sepia(' [--scenario "..."]'));
+    process.exit(1);
+  }
+  if (!opts.text) {
+    if (opts.json) return errJson('-m "新内容" 必填', 'NO_TEXT');
+    err('-m "新内容" 必填'); process.exit(1);
+  }
+  const found = await findMyUpdate(cfg, updateId);
+  if (!found) {
+    if (opts.json) return errJson('找不到你的 update: ' + updateId, 'NOT_FOUND');
+    err('找不到你的 update: ' + updateId); process.exit(1);
+  }
+  const payload = { projectId: found.project.id, updateIdx: found.idx, text: opts.text };
+  if (opts.scenario !== undefined) payload.scenario = opts.scenario;
+  try {
+    await apiAction(cfg, 'editUpdate', payload);
+    if (opts.json) return outputJson({ ok: true, updateId, projectId: found.project.id });
+    ok('改好了');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'EDIT_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
+// tinker delete <updateId> [--yes]
+// 不可逆 · TTY 默认 confirm · 非 TTY 必须显式 --yes
+async function cmdDeleteUpdate(updateId, opts) {
+  const cfg = mustHaveConfig();
+  if (!updateId || !updateId.startsWith('u-')) {
+    if (opts.json) return errJson('用法: tinker delete <updateId>', 'NO_ID');
+    err('用法: ' + vermilion('tinker delete <updateId>') + sepia(' [--yes 跳过确认]'));
+    process.exit(1);
+  }
+  const found = await findMyUpdate(cfg, updateId);
+  if (!found) {
+    if (opts.json) return errJson('找不到你的 update: ' + updateId, 'NOT_FOUND');
+    err('找不到你的 update: ' + updateId); process.exit(1);
+  }
+  if (!opts.yes && !opts.json) {
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      const preview = (found.update.text || '').slice(0, 80) + ((found.update.text || '').length > 80 ? '...' : '');
+      log(sepia('  要删: ') + preview);
+      log(sepia('  项目: ') + found.project.name);
+      try {
+        const { confirm } = require('@inquirer/prompts');
+        const go = await confirm({ message: '确定删 (不可逆)?', default: false });
+        if (!go) { log(sepia('  没删')); return; }
+      } catch { log(sepia('  没删')); return; }
+    } else {
+      err('删除不可逆 · 非 TTY 调用必须加 --yes 显式确认');
+      process.exit(1);
+    }
+  }
+  try {
+    await apiAction(cfg, 'deleteUpdate', { projectId: found.project.id, updateIdx: found.idx });
+    if (opts.json) return outputJson({ ok: true, updateId });
+    ok('删了');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'DELETE_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
+// tinker edit-method <methodId> [-m] [--scenario] [--title] [--tag x --tag y]
+async function cmdEditMethod(methodId, opts) {
+  const cfg = mustHaveConfig();
+  if (!methodId || !methodId.startsWith('m-')) {
+    if (opts.json) return errJson('用法: tinker edit-method <methodId> -m "..."', 'NO_ID');
+    err('用法: ' + vermilion('tinker edit-method <methodId> -m "..."') + sepia(' [--scenario "..."] [--title "..."] [--tag x --tag y]'));
+    process.exit(1);
+  }
+  const payload = { methodId };
+  if (opts.text) payload.text = opts.text;
+  if (opts.scenario !== undefined) payload.scenario = opts.scenario;
+  if (opts.title !== undefined) payload.title = opts.title;
+  if (opts.tags) payload.tags = opts.tags;
+  const fieldCount = Object.keys(payload).length - 1;
+  if (fieldCount === 0) {
+    if (opts.json) return errJson('至少给一个字段: -m / --scenario / --title / --tag', 'NO_FIELD');
+    err('至少给一个字段: -m / --scenario / --title / --tag');
+    process.exit(1);
+  }
+  try {
+    await apiAction(cfg, 'editMethod', payload);
+    if (opts.json) return outputJson({ ok: true, methodId, fieldsChanged: fieldCount });
+    ok('方法改好了 (' + fieldCount + ' 个字段)');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'EDIT_METHOD_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
+// tinker project new --name "..." --desc "..." [--link "..."] [--tool x --tool y]
+// tinker project edit <projectId> [--name --desc --link --tool x --tool y]
+async function cmdProject(sub, projectIdArg, opts) {
+  const cfg = mustHaveConfig();
+  if (sub === 'new') {
+    if (!opts.name || !opts.desc) {
+      if (opts.json) return errJson('用法: tinker project new --name "..." --desc "..." [--link <url>] [--tool x --tool y]', 'MISSING_ARGS');
+      err('用法: ' + vermilion('tinker project new --name "..." --desc "..."') + sepia(' [--link <url>] [--tool x --tool y]'));
+      process.exit(1);
+    }
+    try {
+      const r = await apiAction(cfg, 'addProject', {
+        name: opts.name,
+        desc: opts.desc,
+        productLink: opts.link || '',
+        tools: opts.tools || [],
+      });
+      const newProj = r && r.result;
+      if (opts.json) return outputJson({ ok: true, project: newProj });
+      ok('项目建好了');
+      if (newProj && newProj.id) log(sepia('  projectId: ') + newProj.id);
+      if (newProj && newProj.slug) log(sepia('  去看: ') + cfg.serverUrl + '/#/p/' + cfg.handle + '/' + newProj.slug);
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'CREATE_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+  if (sub === 'edit') {
+    const projectId = resolveProjectId(projectIdArg);
+    if (!projectId) {
+      if (opts.json) return errJson('用法: tinker project edit <projectId> [--name --desc --link --tool]', 'NO_PROJECT');
+      err('用法: ' + vermilion('tinker project edit <projectId>') + sepia(' [--name --desc --link --tool]'));
+      process.exit(1);
+    }
+    const noField = !opts.name && !opts.desc && opts.link === undefined && !opts.tools;
+    if (noField) {
+      if (opts.json) return errJson('至少给一个字段', 'NO_FIELD');
+      err('至少给一个字段: --name / --desc / --link / --tool');
+      process.exit(1);
+    }
+    // editProject 要 name/desc 必填 · 没改的字段用当前值兜底
+    const state = await apiState(cfg);
+    const proj = state.projects.find(p => p.id === projectId);
+    if (!proj) {
+      if (opts.json) return errJson('找不到项目: ' + projectId, 'NOT_FOUND');
+      err('找不到项目: ' + projectId); process.exit(1);
+    }
+    if (proj.owner !== cfg.handle) {
+      if (opts.json) return errJson('只能改自己的项目', 'NOT_OWNER');
+      err('只能改自己的项目'); process.exit(1);
+    }
+    try {
+      await apiAction(cfg, 'editProject', {
+        projectId,
+        name: opts.name || proj.name,
+        desc: opts.desc || proj.desc,
+        productLink: opts.link !== undefined ? opts.link : (proj.productLink || ''),
+        tools: opts.tools || proj.tools || [],
+      });
+      if (opts.json) return outputJson({ ok: true, projectId });
+      ok('项目改好了');
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'EDIT_PROJECT_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+  if (opts.json) return errJson('用法: tinker project new | edit <projectId>', 'UNKNOWN_SUB');
+  err('用法: ' + vermilion('tinker project new') + sepia(' / ') + vermilion('tinker project edit <projectId>'));
+  process.exit(1);
+}
+
 // tinker contribute <updateId> — 标自己一条 update 为方法
 // 不带参数时 · 默认拿最近一条 push 的 id
 async function cmdContribute(updateIdArg, opts) {
@@ -6140,6 +6326,13 @@ function help() {
   log(sepia('                                       挂上你做的延伸版 · 因 ta 启发'));
   log('  ' + vermilion('tinker tinkered <projectId> --undo') + sepia('  撤回延伸版'));
   log('');
+  log(sepia('  ') + vermilion('编辑 / 删除 / 建项目'));
+  log('  ' + vermilion('tinker edit <updateId> -m "..."') + sepia('     改一条 update [--scenario "..."]'));
+  log('  ' + vermilion('tinker delete <updateId>') + sepia('            删一条 update · TTY confirm · 非 TTY 加 --yes'));
+  log('  ' + vermilion('tinker edit-method <methodId>') + sepia('       改一条 method [-m] [--scenario] [--title] [--tag]'));
+  log('  ' + vermilion('tinker project new --name "..." --desc "..."') + sepia(' 建项目 [--link <url>] [--tool x --tool y]'));
+  log('  ' + vermilion('tinker project edit <projectId>') + sepia('     改项目 [--name] [--desc] [--link] [--tool]'));
+  log('');
   log(sepia('  ') + vermilion('voice · 写作风格学习'));
   log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
   log('  ' + vermilion('tinker voice teach --from-claude') + sepia('    从 Claude Code 对话历史抽样本'));
@@ -6169,6 +6362,9 @@ function help() {
   log(sepia('  用户借了某条 update 且跑通了          → ') + vermilion('tinker used <updateId> -m "..." ') + dim('(给原作者反馈)'));
   log(sepia('  用户说"想试试某个项目"              → ') + vermilion('tinker react <projectId>'));
   log(sepia('  用户做了延伸版 (因 ta 启发)           → ') + vermilion('tinker tinkered <projectId> --name --link --inspired-by'));
+  log(sepia('  用户要改一条 update / method         → ') + vermilion('tinker edit <updateId> -m / tinker edit-method <methodId>'));
+  log(sepia('  用户要删测试条 / 误发条              → ') + vermilion('tinker delete <updateId> --yes ') + dim('(非 TTY 必须 --yes)'));
+  log(sepia('  用户开新项目                       → ') + vermilion('tinker project new --name "..." --desc "..."'));
   log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
   log(sepia('  ') + dim('调前看 ') + vermilion('tinker state --json') + dim(' · 静音/冷却中别打扰'));
   log(sepia('  ') + dim('幂等保险 · 给 --idempotency-key (同 key 24h 内不重复)'));
@@ -6213,6 +6409,19 @@ function parseArgs(args) {
     else if (a === '--inspired-by') opts.inspiredBy = args[++i];
     else if (a.startsWith('--inspired-by=')) opts.inspiredBy = a.slice('--inspired-by='.length);
     else if (a === '--undo') opts.undo = true;
+    else if (a === '--desc') opts.desc = args[++i];
+    else if (a.startsWith('--desc=')) opts.desc = a.slice('--desc='.length);
+    else if (a === '--scenario') opts.scenario = args[++i];
+    else if (a.startsWith('--scenario=')) opts.scenario = a.slice('--scenario='.length);
+    else if (a === '--title') opts.title = args[++i];
+    else if (a.startsWith('--title=')) opts.title = a.slice('--title='.length);
+    else if (a === '--tool') {
+      const v = args[++i];
+      if (v) { opts.tools = opts.tools || []; opts.tools.push(v); }
+    } else if (a.startsWith('--tool=')) {
+      const v = a.slice('--tool='.length);
+      if (v) { opts.tools = opts.tools || []; opts.tools.push(v); }
+    }
     else if (a === '--week') opts.week = true;
     else if (a === '--month') opts.month = true;
     else if (a === '--days') opts.daysBack = parseInt(args[++i], 10);
@@ -6669,6 +6878,10 @@ async function main() {
       case 'react': await cmdReact(args[1], opts); break;
       case 'tinkered': await cmdTinkered(args[1], opts); break;
       case 'used': await cmdUsed(args[1], opts); break;
+      case 'edit': await cmdEditUpdate(args[1], opts); break;
+      case 'delete': await cmdDeleteUpdate(args[1], opts); break;
+      case 'edit-method': await cmdEditMethod(args[1], opts); break;
+      case 'project': await cmdProject(args[1], args[2], opts); break;
       case 'mark-experience': case 'mark-exp':
         await cmdMarkExperience(args[1], opts); break;
       case 'mark-learning': case 'mark-learn':
