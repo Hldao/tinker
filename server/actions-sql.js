@@ -538,18 +538,124 @@ function syncUpdateToFts(updateId) {
 }
 
 // 作者把自己一条 update 标为方法 · 让别人 borrow 时能拿到
+// v0.81 methods 是 first-class entity · 不再是 updates 上的 flag
+// 兼容路径: 旧 markAsMethod / unmarkMethod 仍可用 · 内部 proxy 到 new methods table
+//
+// createMethod · 新建独立方法资产
+function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath, title }, { currentUserId }) {
+  if (!text || !text.trim()) throw new Error('方法内容不能空');
+  if (text.trim().length < 20) throw new Error('内容太短 · 至少写两句 (回头自己看也认得出)');
+  // project 可选 · 但传了要校验是自己的
+  if (projectId) {
+    const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+    if (!p) throw new Error('项目不存在');
+    if (p.owner_id !== currentUserId) throw new Error('只能挂在自己的项目下');
+  }
+  // 如果指定了 sourceUpdateId · 防重复升格
+  if (sourceUpdateId) {
+    const existing = db.prepare('SELECT id FROM methods WHERE source_update_id = ?').get(sourceUpdateId);
+    if (existing) return { ok: true, methodId: existing.id, alreadyExists: true };
+  }
+  const methodId = 'm-' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const now = Date.now();
+  const scenarioVal = scenario && scenario.trim() ? scenario.trim().slice(0, 100) : null;
+  const titleVal = title && title.trim() ? title.trim().slice(0, 100) : null;
+  const txn = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO methods (id, owner_id, title, scenario, text, at, updated_at, project_id, source_update_id, source_doc_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(methodId, currentUserId, titleVal, scenarioVal, text.trim(), now, now, projectId || null, sourceUpdateId || null, sourceDocPath || null);
+    syncMethodToFts(methodId);
+  });
+  txn();
+  return { ok: true, methodId };
+}
+
+function editMethod({ methodId, text, scenario, projectId, title }, { currentUserId }) {
+  if (!methodId) throw new Error('methodId 必填');
+  const m = db.prepare('SELECT owner_id, project_id FROM methods WHERE id = ?').get(methodId);
+  if (!m) throw new Error('找不到这条方法');
+  if (m.owner_id !== currentUserId) throw new Error('只能改自己的方法');
+  const txn = db.transaction(() => {
+    const fields = [];
+    const vals = [];
+    if (text !== undefined) {
+      if (!text || !text.trim() || text.trim().length < 20) throw new Error('内容太短');
+      fields.push('text = ?'); vals.push(text.trim());
+    }
+    if (scenario !== undefined) {
+      fields.push('scenario = ?');
+      vals.push(scenario && scenario.trim() ? scenario.trim().slice(0, 100) : null);
+    }
+    if (projectId !== undefined) {
+      if (projectId) {
+        const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+        if (!p) throw new Error('项目不存在');
+        if (p.owner_id !== currentUserId) throw new Error('只能挂在自己的项目下');
+      }
+      fields.push('project_id = ?'); vals.push(projectId || null);
+    }
+    if (title !== undefined) {
+      fields.push('title = ?');
+      vals.push(title && title.trim() ? title.trim().slice(0, 100) : null);
+    }
+    if (fields.length === 0) return;
+    fields.push('updated_at = ?'); vals.push(Date.now());
+    vals.push(methodId);
+    db.prepare(`UPDATE methods SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+    syncMethodToFts(methodId);
+  });
+  txn();
+  return { ok: true };
+}
+
+function deleteMethod({ methodId }, { currentUserId }) {
+  if (!methodId) throw new Error('methodId 必填');
+  const m = db.prepare('SELECT owner_id FROM methods WHERE id = ?').get(methodId);
+  if (!m) throw new Error('找不到这条方法');
+  if (m.owner_id !== currentUserId) throw new Error('只能删自己的方法');
+  db.prepare('DELETE FROM methods_fts WHERE method_id = ?').run(methodId);
+  db.prepare('DELETE FROM methods WHERE id = ?').run(methodId);
+  return { ok: true };
+}
+
+// 同步 method 到 FTS · 写入 / 编辑后都调
+function syncMethodToFts(methodId) {
+  const row = db.prepare(`
+    SELECT m.text, m.scenario, u.handle AS owner_handle, p.name AS project_name
+    FROM methods m
+    JOIN users u ON u.id = m.owner_id
+    LEFT JOIN projects p ON p.id = m.project_id
+    WHERE m.id = ?
+  `).get(methodId);
+  if (!row) return;
+  db.prepare('DELETE FROM methods_fts WHERE method_id = ?').run(methodId);
+  db.prepare(`
+    INSERT INTO methods_fts (text, scenario, owner_handle, project_name, method_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(row.text, row.scenario || '', row.owner_handle, row.project_name || '', methodId);
+}
+
+// 兼容路径: 旧 API · 内部 proxy 到 createMethod (从 update 升格)
 function markAsMethod({ updateId }, { currentUserId }) {
   if (!updateId) throw new Error('updateId 必填');
   const u = db.prepare(`
-    SELECT u.id, u.text, p.owner_id
+    SELECT u.id, u.text, u.scenario, u.project_id, p.owner_id
     FROM updates u JOIN projects p ON p.id = u.project_id
     WHERE u.id = ?
   `).get(updateId);
   if (!u) throw new Error('找不到这条进展');
   if (u.owner_id !== currentUserId) throw new Error('只能把自己写的标成方法');
-  if (!u.text || u.text.trim().length < 20) throw new Error('内容太短 · 至少写两句吧 (太短回头自己也认不出)');
+  // 调 createMethod · 从 update 复制 text + scenario · 记 source_update_id
+  const r = createMethod({
+    text: u.text,
+    scenario: u.scenario,
+    projectId: u.project_id,
+    sourceUpdateId: u.id,
+  }, { currentUserId });
+  // 同时给 updates 加 flag (向后兼容旧 webapp 读 isMethod)
   db.prepare('UPDATE updates SET is_method = 1 WHERE id = ?').run(updateId);
-  return { ok: true, updateId };
+  return { ok: true, updateId, methodId: r.methodId };
 }
 
 function unmarkMethod({ updateId }, { currentUserId }) {
@@ -561,6 +667,12 @@ function unmarkMethod({ updateId }, { currentUserId }) {
   `).get(updateId);
   if (!u) throw new Error('找不到这条进展');
   if (u.owner_id !== currentUserId) throw new Error('只能改自己的标记');
+  // 找升格出来的 method · 删它
+  const m = db.prepare('SELECT id FROM methods WHERE source_update_id = ? AND owner_id = ?').get(updateId, currentUserId);
+  if (m) {
+    deleteMethod({ methodId: m.id }, { currentUserId });
+  }
+  // 同时清 updates 的 flag
   db.prepare('UPDATE updates SET is_method = 0 WHERE id = ?').run(updateId);
   return { ok: true };
 }
@@ -669,117 +781,177 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
   };
 }
 
-// 搜方法库 + 踩坑经验 · q 是用户输入 (空格分词)
-// 优先 is_method=1 OR is_experience=1 · 其次最近
-// 返回 { hits: [{ updateId, text, projectName, ownerHandle, at, isMethod, isExperience, score }] }
-// borrowerHandle 可空 · 有就把命中的前 N 条记进 borrow_log (让作者 goodnight 看到)
-// kindFilter: undefined (默认 · 搜全部) / 'method' (只 method) / 'experience' (只 experience)
+// v0.81 搜方法库 (methods 表) + 踩坑经验 / 上手指南 (updates is_experience / is_learning)
+// methods 是 first-class · query methods_fts
+// experience / learning 仍在 updates 上 (后续可能也升格 · 这次只动 method)
+//
+// 返回 { hits: [{ id, kind, text, scenario, title, projectName, ownerHandle, at, score }] }
+// kind: 'method' | 'experience' | 'learning'
 function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowerHandle = null }) {
   if (!q || !q.trim()) return { hits: [] };
   const ftsQ = q.trim().split(/\s+/).filter(Boolean).map(t => t.replace(/["*]/g, '')).filter(Boolean).join(' ');
   if (!ftsQ) return { hits: [] };
-  // methodsOnly 是老参数 (向后兼容) · 优先看 kindFilter
-  let where = '';
-  if (kindFilter === 'method') where = 'AND u.is_method = 1';
-  else if (kindFilter === 'experience') where = 'AND u.is_experience = 1';
-  else if (kindFilter === 'learning') where = 'AND u.is_learning = 1';
-  else if (methodsOnly) where = 'AND u.is_method = 1';
-  let rows = db.prepare(`
-    SELECT u.id, u.text, u.at, u.is_method, u.is_experience, u.is_learning,
-           p.name AS project_name, usr.handle AS owner_handle,
-           bm25(updates_fts) AS score
-    FROM updates_fts
-    JOIN updates u ON u.id = updates_fts.update_id
-    JOIN projects p ON p.id = u.project_id
-    JOIN users usr ON usr.id = p.owner_id
-    WHERE updates_fts MATCH ? ${where}
-    ORDER BY (u.is_method OR u.is_experience OR u.is_learning) DESC, score ASC, u.at DESC
-    LIMIT ?
-  `).all(ftsQ, limit);
 
-  // trigram tokenizer 要 ≥3 字符才能命中 · 2 字 CJK ("邮箱") 走 LIKE 兜底
-  if (rows.length === 0) {
-    const likeWhere = where;
-    rows = db.prepare(`
-      SELECT u.id, u.text, u.at, u.is_method, u.is_experience, u.is_learning,
+  const wantMethods = !kindFilter || kindFilter === 'method' || methodsOnly;
+  const wantExperience = !kindFilter || kindFilter === 'experience';
+  const wantLearning = !kindFilter || kindFilter === 'learning';
+
+  let allRows = [];
+
+  // 1. methods 表 (first-class)
+  if (wantMethods) {
+    let methodRows = db.prepare(`
+      SELECT m.id, m.text, m.scenario, m.title, m.at,
              p.name AS project_name, usr.handle AS owner_handle,
-             0 AS score
-      FROM updates u
-      JOIN projects p ON p.id = u.project_id
-      JOIN users usr ON usr.id = p.owner_id
-      WHERE u.text LIKE ? ${likeWhere}
-      ORDER BY (u.is_method OR u.is_experience OR u.is_learning) DESC, u.at DESC
+             bm25(methods_fts) AS score,
+             'method' AS kind
+      FROM methods_fts
+      JOIN methods m ON m.id = methods_fts.method_id
+      JOIN users usr ON usr.id = m.owner_id
+      LEFT JOIN projects p ON p.id = m.project_id
+      WHERE methods_fts MATCH ?
+      ORDER BY score ASC, m.at DESC
       LIMIT ?
-    `).all('%' + q.trim() + '%', limit);
+    `).all(ftsQ, limit);
+    if (methodRows.length === 0) {
+      // LIKE 兜底 (2 字 CJK)
+      methodRows = db.prepare(`
+        SELECT m.id, m.text, m.scenario, m.title, m.at,
+               p.name AS project_name, usr.handle AS owner_handle,
+               0 AS score, 'method' AS kind
+        FROM methods m
+        JOIN users usr ON usr.id = m.owner_id
+        LEFT JOIN projects p ON p.id = m.project_id
+        WHERE m.text LIKE ? OR (m.scenario IS NOT NULL AND m.scenario LIKE ?)
+        ORDER BY m.at DESC
+        LIMIT ?
+      `).all('%' + q.trim() + '%', '%' + q.trim() + '%', limit);
+    }
+    allRows.push(...methodRows);
   }
 
-  // 借用反馈闭环: borrower 已登录 + 命中 ≥1 条 · 只记 TOP 3 条 (避免一次搜污染日志)
-  // 不记自己借自己 · 不记重复 (24h 同 borrower 同 update_id 已存在则跳过)
-  if (borrowerHandle && rows.length > 0) {
+  // 2. updates 上仍是 flag 的 experience / learning
+  if (wantExperience || wantLearning) {
+    const flagWhere = [];
+    if (wantExperience) flagWhere.push('u.is_experience = 1');
+    if (wantLearning) flagWhere.push('u.is_learning = 1');
+    const whereSql = flagWhere.length > 0 ? 'AND (' + flagWhere.join(' OR ') + ')' : '';
+    let flagRows = db.prepare(`
+      SELECT u.id, u.text, u.scenario, NULL AS title, u.at,
+             u.is_experience, u.is_learning,
+             p.name AS project_name, usr.handle AS owner_handle,
+             bm25(updates_fts) AS score
+      FROM updates_fts
+      JOIN updates u ON u.id = updates_fts.update_id
+      JOIN projects p ON p.id = u.project_id
+      JOIN users usr ON usr.id = p.owner_id
+      WHERE updates_fts MATCH ? ${whereSql}
+      ORDER BY score ASC, u.at DESC
+      LIMIT ?
+    `).all(ftsQ, limit);
+    if (flagRows.length === 0) {
+      flagRows = db.prepare(`
+        SELECT u.id, u.text, u.scenario, NULL AS title, u.at,
+               u.is_experience, u.is_learning,
+               p.name AS project_name, usr.handle AS owner_handle,
+               0 AS score
+        FROM updates u
+        JOIN projects p ON p.id = u.project_id
+        JOIN users usr ON usr.id = p.owner_id
+        WHERE u.text LIKE ? ${whereSql}
+        ORDER BY u.at DESC
+        LIMIT ?
+      `).all('%' + q.trim() + '%', limit);
+    }
+    flagRows.forEach(r => {
+      r.kind = r.is_experience ? 'experience' : (r.is_learning ? 'learning' : 'method');
+      allRows.push(r);
+    });
+  }
+
+  // 排序 · 整体按 score asc / at desc · 截断 limit
+  allRows.sort((a, b) => (a.score - b.score) || (b.at - a.at));
+  allRows = allRows.slice(0, limit);
+
+  // 借用反馈闭环: borrower 已登录 + 命中 method ≥1 条 · 记前 3 条 method
+  // 老 update.is_method 现在 method 已迁出 · 只 log method 命中
+  if (borrowerHandle && allRows.length > 0) {
     const excerpt = q.trim().slice(0, 80);
     const at = Date.now();
     const recent = at - 24 * 60 * 60 * 1000;
-    const dedupe = db.prepare(`
-      SELECT 1 FROM borrow_log WHERE update_id = ? AND borrower_handle = ? AND at > ?
-    `);
+    const dedupe = db.prepare(`SELECT 1 FROM borrow_log WHERE method_id = ? AND borrower_handle = ? AND at > ?`);
     const ins = db.prepare(`
-      INSERT INTO borrow_log (update_id, owner_handle, borrower_handle, query_excerpt, at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO borrow_log (update_id, method_id, owner_handle, borrower_handle, query_excerpt, at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    for (const r of rows.slice(0, 3)) {
+    const methodHits = allRows.filter(r => r.kind === 'method').slice(0, 3);
+    for (const r of methodHits) {
       if (r.owner_handle === borrowerHandle) continue;
       if (dedupe.get(r.id, borrowerHandle, recent)) continue;
-      ins.run(r.id, r.owner_handle, borrowerHandle, excerpt, at);
+      ins.run(null, r.id, r.owner_handle, borrowerHandle, excerpt, at);
     }
   }
 
   return {
-    hits: rows.map(r => ({
+    hits: allRows.map(r => ({
+      // 向后兼容 CLI / webapp: 用 id 字段
+      id: r.id,
+      // 兼容老 CLI 用 updateId · 取自 id (无论 method 或 update)
       updateId: r.id,
+      methodId: r.kind === 'method' ? r.id : null,
+      kind: r.kind,
       text: r.text,
+      scenario: r.scenario || null,
+      title: r.title || null,
       projectName: r.project_name,
       ownerHandle: r.owner_handle,
       at: r.at,
-      isMethod: !!r.is_method,
-      isExperience: !!r.is_experience,
-      isLearning: !!r.is_learning,
+      // 老 boolean 字段兼容
+      isMethod: r.kind === 'method',
+      isExperience: r.kind === 'experience',
+      isLearning: r.kind === 'learning',
       score: r.score,
     })),
   };
 }
 
 // 给作者看自己的方法被借了几次 · 时间窗内 · 默认近 7 天
+// v0.81: borrow_log 现在用 method_id · COALESCE 兼容老 update_id 数据
 // 返回 { total, byUpdate: [{ updateId, projectName, excerpt, count, lastAt, lastBorrower }] }
 function getBorrowsForOwner({ ownerHandle, sinceMs = null }) {
   if (!ownerHandle) return { total: 0, byUpdate: [] };
   const since = sinceMs || (Date.now() - 7 * 24 * 60 * 60 * 1000);
+  // 用 COALESCE(method_id, update_id) 作为 key · 兼容新老 borrow_log 数据
   const rows = db.prepare(`
-    SELECT bl.update_id, COUNT(*) AS cnt, MAX(bl.at) AS last_at,
-           u.text, p.name AS project_name
+    SELECT COALESCE(bl.method_id, bl.update_id) AS ref_id,
+           COUNT(*) AS cnt, MAX(bl.at) AS last_at,
+           COALESCE(m.text, u.text) AS text,
+           COALESCE(mp.name, up.name) AS project_name
     FROM borrow_log bl
+    LEFT JOIN methods m ON m.id = bl.method_id
+    LEFT JOIN projects mp ON mp.id = m.project_id
     LEFT JOIN updates u ON u.id = bl.update_id
-    LEFT JOIN projects p ON p.id = u.project_id
+    LEFT JOIN projects up ON up.id = u.project_id
     WHERE bl.owner_handle = ? AND bl.at > ?
-    GROUP BY bl.update_id
+    GROUP BY ref_id
     ORDER BY last_at DESC
     LIMIT 20
   `).all(ownerHandle, since);
-  // 每条再拉一下最近的 borrower (用来 goodnight 友好显示)
   const lastBorrowerStmt = db.prepare(`
     SELECT borrower_handle FROM borrow_log
-    WHERE update_id = ? AND owner_handle = ? AND at > ?
+    WHERE COALESCE(method_id, update_id) = ? AND owner_handle = ? AND at > ?
     ORDER BY at DESC LIMIT 1
   `);
   const total = rows.reduce((s, r) => s + r.cnt, 0);
   return {
     total,
     byUpdate: rows.map(r => ({
-      updateId: r.update_id,
+      updateId: r.ref_id,
       projectName: r.project_name || '(已删)',
       excerpt: (r.text || '').slice(0, 60),
       count: r.cnt,
       lastAt: r.last_at,
-      lastBorrower: lastBorrowerStmt.get(r.update_id, ownerHandle, since)?.borrower_handle || null,
+      lastBorrower: lastBorrowerStmt.get(r.ref_id, ownerHandle, since)?.borrower_handle || null,
     })),
   };
 }
@@ -993,7 +1165,9 @@ module.exports = {
   pinUpdateForShowcase, toggleShowcaseVisibility,
   // updates
   addUpdate, editUpdate, deleteUpdate,
-  // method library (v0.12)
+  // v0.81 methods first-class · 跟 updates 平级独立 entity
+  createMethod, editMethod, deleteMethod,
+  // method library (v0.12 兼容路径 · 内部 proxy 到 createMethod / deleteMethod)
   markAsMethod, unmarkMethod,
   // experience tag (v0.12) · 给 AI 检索经验 · 跟 method 同构但语义不同
   markAsExperience, unmarkExperience,

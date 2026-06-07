@@ -95,6 +95,13 @@ function buildState({ targetUserId } = {}) {
     'parent_project_id'
   );
 
+  // v0.81 methods first-class · 跟 updates 平级独立 entity
+  // 按 project group · 让 webapp 在项目页 "沉淀方法" 区直接读 p.methods
+  // 没绑定项目的方法 (project_id IS NULL) 走 owner 维度 · 在 workshop 页用
+  const methodsRows = db.prepare('SELECT * FROM methods ORDER BY at DESC').all();
+  const methodsByProject = groupBy(methodsRows.filter(m => m.project_id), 'project_id');
+  const methodsByOwner = groupBy(methodsRows, 'owner_id');
+
   // 组装 projects · webapp 期望的形状
   const projectsOut = projectsRows.map(p => {
     const projectUpdates = (updatesByProject[p.id] || []).map(u => {
@@ -131,6 +138,18 @@ function buildState({ targetUserId } = {}) {
       at: t.at,
       inspiredByUpdateId: t.inspired_by_update_id || null,
     }));
+    const projectMethods = (methodsByProject[p.id] || []).map(m => ({
+      id: m.id,
+      owner: idToHandle[m.owner_id],
+      title: m.title || null,
+      scenario: m.scenario || null,
+      text: m.text,
+      at: m.at,
+      updatedAt: m.updated_at,
+      projectId: m.project_id,
+      sourceUpdateId: m.source_update_id || null,
+      sourceDocPath: m.source_doc_path || null,
+    }));
     return {
       id: p.id,
       owner: idToHandle[p.owner_id],
@@ -147,6 +166,7 @@ function buildState({ targetUserId } = {}) {
       tools: (tools[p.id] || []).map(t => t.tool),
       updates: projectUpdates,
       notes: projectNotes,
+      methods: projectMethods,
       reactions: { wantToTry, tinkered: tinkeredList },
     };
   });
@@ -181,6 +201,21 @@ function buildState({ targetUserId } = {}) {
     }));
   }
 
+  // v0.81 全站 methods 数组 · webapp 工作室页 / 全站方法库浏览页都从这里 filter
+  // 字段跟 project.methods 一致
+  const methodsOut = methodsRows.map(m => ({
+    id: m.id,
+    owner: idToHandle[m.owner_id],
+    title: m.title || null,
+    scenario: m.scenario || null,
+    text: m.text,
+    at: m.at,
+    updatedAt: m.updated_at,
+    projectId: m.project_id || null,
+    sourceUpdateId: m.source_update_id || null,
+    sourceDocPath: m.source_doc_path || null,
+  }));
+
   // starters + tools
   const starters = db.prepare('SELECT title, prompt, tool_name AS toolName, tool_url AS toolUrl, category FROM starters ORDER BY position').all();
   const availableTools = db.prepare('SELECT tool FROM available_tools ORDER BY position').all().map(r => r.tool);
@@ -188,6 +223,7 @@ function buildState({ targetUserId } = {}) {
   return {
     users: usersOut,
     projects: projectsOut,
+    methods: methodsOut,
     notifications: notificationsOut,
     starters,
     availableTools,

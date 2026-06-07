@@ -4619,16 +4619,21 @@ async function cmdContribute(updateIdArg, opts) {
     if (opts.json) return errJson('未登录', 'NO_AUTH');
     err('未登录 · 先 tinker login'); process.exit(1);
   }
-  // --unmark <id> · 取消方法标
+  // --unmark <id> · 删除一个方法 (兼容老 updateId 入参 · 自动判断 prefix 走 deleteMethod 或 unmarkMethod)
   if (opts.unmark) {
     const id = typeof opts.unmark === 'string' ? opts.unmark : updateIdArg;
     if (!id) {
-      if (opts.json) return errJson('--unmark 需要 updateId', 'NO_ID');
-      err('--unmark 需要 updateId · 例: tinker contribute --unmark u-xxx'); process.exit(1);
+      if (opts.json) return errJson('--unmark 需要 id (m-xxx 或 u-xxx)', 'NO_ID');
+      err('--unmark 需要 id · 例: tinker contribute --unmark m-xxx (方法 id) 或 u-xxx (从 update 升格的)'); process.exit(1);
     }
-    await apiAction(cfg, 'unmarkMethod', { updateId: id });
-    if (opts.json) return outputJson({ ok: true, updateId: id, marked: false });
-    log(sepia('  已取消方法标: ') + id);
+    // v0.81: m-xxx 走 deleteMethod (新 API) · u-xxx 走 unmarkMethod (兼容路径)
+    if (id.startsWith('m-')) {
+      await apiAction(cfg, 'deleteMethod', { methodId: id });
+    } else {
+      await apiAction(cfg, 'unmarkMethod', { updateId: id });
+    }
+    if (opts.json) return outputJson({ ok: true, id, deleted: true });
+    log(sepia('  删了: ') + id);
     return;
   }
   // v0.13 --from-file: 从 markdown 文件按段 contribute (走 CLI 路径承载长文档)
@@ -4945,14 +4950,17 @@ async function cmdContributeFromFile(cfg, opts) {
       if (!go) { skipped.push({ heading: sec.heading, reason: 'USER_NO' }); log(sepia('    跳过')); continue; }
     }
     try {
-      // v0.78: LLM 推荐时 sec.llmReason 是"为什么值得分享"短语 · 直接当 scenario 写入
-      // 让 webapp 卡片头部能显示"这文档帮你跟 AI 合作时解决什么问题"
-      const r = await apiAction(cfg, 'addUpdate', {
-        projectId, text: sec.fullText, isMethod: true,
+      // v0.81: methods 是 first-class entity · 不再 addUpdate + isMethod=true
+      // 直接 createMethod · 关联 projectId · 记 source_doc_path
+      const r = await apiAction(cfg, 'createMethod', {
+        text: sec.fullText,
         scenario: sec.llmReason || null,
+        projectId,
+        sourceDocPath: filePath,
       });
-      successes.push({ heading: sec.heading, updateId: r.result && r.result.id, charCount: sec.charCount });
-      log(moss('    ✓ 发了 · 自动标方法 · id ' + (r.result && r.result.id || '?')));
+      const newId = r.result && r.result.methodId;
+      successes.push({ heading: sec.heading, methodId: newId, charCount: sec.charCount });
+      log(moss('    ✓ 发了 · 进方法库 · id ' + (newId || '?')));
     } catch (e) {
       log(vermilion('    ✗ 失败: ' + e.message));
       skipped.push({ heading: sec.heading, reason: 'API_ERROR', error: e.message });
