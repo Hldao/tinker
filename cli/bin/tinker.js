@@ -5233,6 +5233,18 @@ async function cmdStudio(subcmd, args, opts) {
     case 'leave': {
       const slug = args[2];
       if (!slug) { err('用法: tinker studio leave <slug>'); process.exit(1); }
+      // v0.31 legacy 是纯本地概念 · server 端没有 · 直接清本地不调 server
+      if (slug === 'legacy') {
+        bridgeLib.removeStudio('legacy');
+        try {
+          if (fs.existsSync(bridgeLib.LEGACY_SECRET_FILE)) fs.unlinkSync(bridgeLib.LEGACY_SECRET_FILE);
+        } catch {}
+        log('');
+        ok('清掉 legacy 本地暗号');
+        log(sepia('  ~/.tinker/bridge-secret 也删了 · 不会再自动迁移'));
+        log('');
+        return;
+      }
       const getRes = await safeFetchJson(cfg, '/api/studios/' + encodeURIComponent(slug));
       if (!getRes.ok) { err(getRes.error || '工作室不存在'); process.exit(1); }
       const studioId = getRes.studio.id;
@@ -5241,9 +5253,9 @@ async function cmdStudio(subcmd, args, opts) {
         headers: { Authorization: 'Bearer ' + cfg.token },
       });
       if (!res.ok) { err(res.error || '退出失败'); process.exit(1); }
+      bridgeLib.removeStudio(slug);
       log('');
-      ok(`退出了 — ${getRes.studio.name}`);
-      log(sepia('  本地暗号文件还在 · 想清掉: rm ') + bridgeLib.STUDIOS_FILE);
+      ok(`退出了 — ${getRes.studio.name} · 本地暗号也清了`);
       log('');
       return;
     }
@@ -5254,11 +5266,16 @@ async function cmdStudio(subcmd, args, opts) {
       const targetHandle = (args[3] || '').replace(/^@/, '');
       if (!slug || !targetHandle) { err('用法: tinker studio invite <slug> @<handle>'); process.exit(1); }
 
-      if (!bridgeLib.hasSecret()) {
-        err('本地没暗号 · 你不是这个工作室的成员? 先 tinker studio join 或 create');
+      // v0.31 bug fix: 取 slug 对应的 secret · 不是 active 的
+      // 之前用 loadSecret() 拿 active 的 · 如果 active != slug · secretCipher 会错
+      // (典型场景:active=legacy · 用户 invite daogu @who · 加密用 legacy secret · 接收方 accept 后拿 legacy 不是真 daogu)
+      const studiosData = bridgeLib.loadStudios();
+      const target = (studiosData.studios || []).find(s => s.slug === slug);
+      if (!target || !target.secret) {
+        err('本地没 ' + slug + ' 的暗号 · 你不是这个工作室的成员? 先 tinker studio link/join/accept');
         process.exit(1);
       }
-      const secret = bridgeLib.loadSecret();
+      const secret = target.secret;
 
       // 查 studio_id (server 要)
       const getRes = await safeFetchJson(cfg, '/api/studios/' + encodeURIComponent(slug));
