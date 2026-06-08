@@ -6131,23 +6131,32 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
 // 不主动扫别人代码 · 不弹"你也有问题" · 减少误判跟焦虑
 // =====================================================
 
-// tinker team-knowledge digest [--days N] [-y]
+// tinker team-knowledge digest [--days N] [--by-claude] [-y]
+// tinker team-knowledge publish "<content>"  (--by-claude 模式 · Claude 写完落地用)
 async function cmdTeamKnowledge(opts) {
   const sub = (opts.positional || [])[0];
+  if (sub === 'publish') {
+    await cmdTeamKnowledgePublish(opts);
+    return;
+  }
   if (sub !== 'digest') {
     log('');
     log(bold('  tinker team-knowledge · 团队知识沉淀'));
     log('');
-    log('  ' + vermilion('tinker team-knowledge digest [--days N] [-y]'));
-    log(sepia('     LLM 抽近 N 天 fix commit 的 bug 模式 · 脱敏 · push 标 learning'));
-    log(sepia('     自动广播到 active studio · 队友 SessionStart 看到 reminder'));
+    log('  ' + vermilion('tinker team-knowledge digest [--days N] [--by-claude] [-y]'));
+    log(sepia('     收集近 N 天 fix commit · 抽 bug 模式 · push 标 learning · 广播工作室'));
+    log(sepia('     默认走 cfg.llm (DeepSeek) · --by-claude 模式输出素材让当前 Claude 抽'));
+    log('  ' + vermilion('tinker team-knowledge publish "<content>"'));
+    log(sepia('     给 --by-claude 模式用 · Claude 写完内容用这条落地'));
     log('');
     return;
   }
 
   const cfg = mustHaveConfig();
-  if (!cfg.llm || !cfg.llm.apiKey) {
-    err('需要先配 LLM · 跑 tinker llm set');
+  const byClaude = !!opts.byClaude;
+
+  if (!byClaude && (!cfg.llm || !cfg.llm.apiKey)) {
+    err('--by-claude 模式不用 LLM key · 默认模式需要先 tinker llm set');
     process.exit(1);
   }
 
@@ -6168,6 +6177,32 @@ async function cmdTeamKnowledge(opts) {
 
   log('');
   log(sepia('  找到 ') + bold(commits.length + '') + sepia(' 条 fix commit · 近 ') + days + sepia(' 天'));
+
+  // v0.45 --by-claude 模式 · 不调外部 LLM · 输出素材给当前 Claude 抽
+  if (byClaude) {
+    log('');
+    log(sepia('  ─── 给 Claude 用的素材 ───'));
+    log('');
+    log('近 ' + days + ' 天的 fix commit (共 ' + commits.length + ' 条):');
+    log('');
+    commits.forEach(c => log('  ' + c));
+    log('');
+    log(sepia('  ─── 任务 ───'));
+    log('');
+    log('请抽 3-5 条最值得记下来的 bug 模式 · 让队友看完能回去检查自己代码:');
+    log('  · 工艺人工作日志气质 · 不堆 emoji · 不堆破折号 · 不用 ## 标题切段 · 不堆 bullet');
+    log('  · 每条模式: 症状 / 误以为的原因 / 真正原因 / 修法 / 怎么自检');
+    log('  · 脱敏严格 (不带具体文件路径 / API key / 公司名 / 内部产品代号)');
+    log('  · 用 "出现在 X 场景下" 描述 · 不暴露 codebase 细节');
+    log('  · 500-800 字 · 不必长');
+    log('');
+    log('写完跑下面这条落地 (替换 <content> 为你写的内容):');
+    log('  ' + vermilion('tinker team-knowledge publish "<content>"'));
+    log('');
+    log(sepia('  落地命令会自动 push + 标 [上手指南] + 广播到 active studio'));
+    log('');
+    return;
+  }
 
   // 2. 拼 prompt
   const prompt = `你看下面这些"修 bug" 的 commit 摘要 · 帮我抽 3-5 条最值得记下来的 bug 模式 · 让队友看完后能回去检查自己代码有没有类似问题。
@@ -6284,6 +6319,74 @@ ${commits.join('\n')}
     }
   } else {
     log(sepia('  (active studio 没 id · 跳过广播)'));
+  }
+  log('');
+}
+
+// v0.45 publish · --by-claude 模式 · Claude 写完内容用这条落地
+// 跳过 LLM 调用 · 直接 push + mark learning + broadcast
+async function cmdTeamKnowledgePublish(opts) {
+  const cfg = mustHaveConfig();
+  const positional = opts.positional || [];
+  // positional[0] = 'publish' · positional[1] = content
+  const digest = (opts.text || positional[1] || '').trim();
+  if (!digest || digest.length < 100) {
+    err('内容太短 (< 100 字) · 用法: tinker team-knowledge publish "<内容>"');
+    process.exit(1);
+  }
+
+  // voice check
+  try {
+    const vc = require('../lib/voice-check').detectAIVoice(digest);
+    if (vc.score >= 2) {
+      log(sepia('  ⚠ voice 自检 ') + vc.score + sepia(' 项命中:') + vc.list.join(' · '));
+      log(sepia('     如果是 Claude 直接写的 · 检查下有没有改干净'));
+    }
+  } catch {}
+
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const repoCfg = loadRepoConfig() || {};
+  let projectId = repoCfg.projectId;
+  if (!projectId) {
+    const candidates = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+    if (candidates.length === 0) { err('没找到 active/stuck/live 项目 · 给一个 cwd 绑定的项目'); process.exit(1); }
+    projectId = candidates[0].id;
+  }
+
+  const r = await apiAction(cfg, 'addUpdate', { projectId, text: digest });
+  const updateId = r.result?.id || r.id;
+  try { await apiAction(cfg, 'markAsLearning', { updateId }); } catch {}
+
+  const project = state.projects.find(p => p.id === projectId);
+  log('');
+  ok('✦ team-knowledge 沉淀 — ' + bold(project?.name || '(项目)'));
+  log(sepia('  update id: ') + updateId);
+  log(sepia('  已标 [上手指南]'));
+
+  // broadcast
+  const bridgeLib = require('../lib/bridge');
+  const activeStudio = bridgeLib.getActiveStudio();
+  if (activeStudio && activeStudio.id) {
+    try {
+      const obj = {
+        v: 1,
+        title: 'team-knowledge 沉淀',
+        body: '我整理了一份踩坑摘要 · 在 ' + (project?.name || '项目') + ' 项目下 · tinker borrow ' + updateId + ' 拉来看 · 看完检查自己代码有没有类似问题',
+        level: 'info',
+        at: Date.now(),
+        type: 'team-knowledge',
+        updateId,
+        projectName: project?.name,
+      };
+      const payload = bridgeLib.encrypt(JSON.stringify(obj), activeStudio.secret);
+      const sendRes = await safeFetchJson(cfg, '/api/bridge/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ toStudio: activeStudio.id, kind: 'noti', payload }),
+      });
+      if (sendRes && sendRes.ok) log(sepia('  ✓ 广播到 ') + bold(activeStudio.name));
+    } catch (e) { log(sepia('  ⚠ 广播失败:') + e.message); }
   }
   log('');
 }
@@ -8661,6 +8764,7 @@ function parseArgs(args) {
     else if (a === '--as-decision' || a === '--asDecision') opts.asDecision = true;
     else if (a === '--quiet' || a === '-q') opts.quiet = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
+    else if (a === '--by-claude') opts.byClaude = true;
     else if (a === '--force' || a === '-f') opts.force = true;
     else if (a === '--tag') {
       // v0.84 支持多次 · 收集 · contribute 时一并发上
