@@ -5719,6 +5719,81 @@ function cmdOutbox(opts) {
   }
 }
 
+// v0.50 看历史解码失败列表
+function cmdBridgeFailed(opts) {
+  const failedFile = path.join(CONFIG_DIR, 'inbox', '.failed-payloads.json');
+  let failed = {};
+  try { failed = JSON.parse(fs.readFileSync(failedFile, 'utf-8')); } catch {}
+  const list = Object.values(failed).sort((a, b) => a.seq - b.seq);
+  if (opts.json) { outputJson({ ok: true, failed: list }); return; }
+  log('');
+  log(bold('  bridge 解码失败队列'));
+  log('');
+  if (list.length === 0) {
+    log(sepia('  空 · 没有失败的 payload'));
+    log('');
+    return;
+  }
+  for (const e of list) {
+    const ts = new Date(e.firstSeenAt).toLocaleString('zh-CN', { hour12: false }).slice(5);
+    const target = e.toHandle ? ('@' + e.toHandle) : e.toStudio ? ('studio:' + e.toStudio.slice(0, 18)) : '(广播)';
+    log('  seq ' + e.seq + sepia(' · ') + ts + sepia(' · from @') + e.fromHandle + sepia(' → ') + target);
+    log(sepia('    kind=') + e.kind + sepia(' · 失败 ') + e.attempts + sepia(' 次'));
+  }
+  log('');
+  log(sepia('  暗号修好后跑 tinker bridge retry · 自动重试'));
+  log('');
+}
+
+// v0.50 重试历史解码失败的 payload (用当前 studios.json 全部 secret 试解)
+function cmdBridgeRetry(opts) {
+  const bridgeLib = require('../lib/bridge');
+  const dossierLib = require('../lib/dossier');
+  const INBOX = path.join(CONFIG_DIR, 'inbox');
+  const failedFile = path.join(INBOX, '.failed-payloads.json');
+  let failed = {};
+  try { failed = JSON.parse(fs.readFileSync(failedFile, 'utf-8')); } catch {}
+  const list = Object.values(failed);
+  if (list.length === 0) {
+    log(sepia('  没有要重试的 payload · 解码失败队列空'));
+    return;
+  }
+  let recovered = 0;
+  const stillFailed = {};
+  for (const e of list) {
+    const tryDec = bridgeLib.tryDecryptWithAnyStudio(e.payload);
+    if (!tryDec) {
+      stillFailed[e.seq] = { ...e, attempts: e.attempts + 1, lastSeenAt: Date.now() };
+      continue;
+    }
+    try {
+      const obj = JSON.parse(tryDec.plaintext);
+      log('  ✓ seq ' + e.seq + sepia(' from @') + e.fromHandle + sepia(' · 解开了 · kind=') + e.kind);
+      if (obj.title) log(sepia('    ') + obj.title);
+      if (obj.body) log(sepia('    ') + obj.body.slice(0, 200));
+      if (e.kind === 'task') {
+        try { dossierLib.unpackDossier({ msgId: e.msgId, fromHandle: e.fromHandle, dossier: obj }); } catch {}
+      }
+      if (obj.type === 'witness-request' && obj.context && obj.updateId) {
+        try {
+          const wDir = path.join(INBOX, 'witness-' + obj.updateId);
+          fs.mkdirSync(wDir, { recursive: true });
+          fs.writeFileSync(path.join(wDir, 'context.md'), obj.context);
+          fs.writeFileSync(path.join(wDir, 'meta.json'), JSON.stringify({
+            fromHandle: e.fromHandle, originalUpdateId: obj.updateId, topic: obj.topic || '', receivedAt: e.firstSeenAt,
+          }, null, 2));
+        } catch {}
+      }
+      recovered++;
+    } catch {
+      stillFailed[e.seq] = { ...e, attempts: e.attempts + 1, lastSeenAt: Date.now() };
+    }
+  }
+  try { fs.writeFileSync(failedFile, JSON.stringify(stillFailed, null, 2)); } catch {}
+  log('');
+  log(sepia('  恢复 ') + recovered + sepia(' 条 · 还剩 ') + Object.keys(stillFailed).length + sepia(' 条解不开'));
+}
+
 async function cmdPing(opts) {
   const cfg = mustHaveConfig();
   const bridgeLib = require('../lib/bridge');
@@ -6148,8 +6223,17 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
   if (!resRaw.ok) return;
   const data = await resRaw.json();
 
+  // v0.50 解码失败 payload 落地 · 不静默丢信
+  // 历史教训:解码失败 cursor 照推 → SessionStart 把消息标已读吞掉 · 后续不再返
+  // 修法:失败的 seq + payload 存 .failed-payloads.json · 写 bridge-errors.log
+  //      暗号修好后 tinker bridge retry 重新拉来试解
+  const failedPayloadsFile = path.join(INBOX, '.failed-payloads.json');
+  let failedPayloads = {};
+  try { failedPayloads = JSON.parse(fs.readFileSync(failedPayloadsFile, 'utf-8')); } catch {}
+
   for (const msg of (data.messages || [])) {
     const tryDec = bridgeLib.tryDecryptWithAnyStudio(msg.payload);
+    let handled = false;
     if (tryDec) {
       try {
         const obj = JSON.parse(tryDec.plaintext);
@@ -6178,6 +6262,9 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
           }
         }
         // file kind hook 模式不持久化 · 避免大文件落到本地 · 等用户跑 watch 时再处理
+        handled = true;
+        // 这个 seq 之前失败过 · 现在成功了 → 移除
+        if (failedPayloads[msg.seq]) delete failedPayloads[msg.seq];
       } catch {}
     } else {
       // fallback: invite 走明文 base64
@@ -6196,12 +6283,46 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
             seq: msg.seq,
           }, null, 2));
           fs.writeFileSync(path.join(inviteDir, 'PENDING'), String(Date.now()));
+          handled = true;
         }
+      } catch {}
+    }
+
+    if (!handled) {
+      // 解码 + invite fallback 都失败 → 落 failed-payloads + 写 errors.log
+      const prev = failedPayloads[msg.seq] || { attempts: 0 };
+      failedPayloads[msg.seq] = {
+        seq: msg.seq,
+        msgId: msg.id,
+        fromHandle: msg.fromHandle,
+        toHandle: msg.toHandle,
+        toStudio: msg.toStudio,
+        kind: msg.kind,
+        payload: msg.payload,
+        firstSeenAt: prev.firstSeenAt || Date.now(),
+        lastSeenAt: Date.now(),
+        attempts: prev.attempts + 1,
+      };
+      try {
+        const errLine = `[${new Date().toISOString()}] decode failed · seq=${msg.seq} from=@${msg.fromHandle} to=${msg.toHandle || ('studio:'+msg.toStudio) || '<broadcast>'} kind=${msg.kind} attempts=${failedPayloads[msg.seq].attempts}\n`;
+        fs.appendFileSync(path.join(CONFIG_DIR, 'bridge-errors.log'), errLine);
       } catch {}
     }
     since = Math.max(since, msg.seq);
   }
   try { fs.writeFileSync(cursorFile, String(since)); } catch {}
+  try { fs.writeFileSync(failedPayloadsFile, JSON.stringify(failedPayloads, null, 2)); } catch {}
+
+  // 解码失败的塞进 reminder · 让 AI 提醒用户跑 retry
+  const failedCount = Object.keys(failedPayloads).length;
+  if (failedCount > 0) {
+    recentNotis.push({
+      fromHandle: '(system)',
+      title: '⚠ ' + failedCount + ' 条消息解码失败 · 暗号可能不对',
+      body: '看 ~/.tinker/bridge-errors.log · 暗号修好后跑 tinker bridge retry 重试',
+      level: 'warn',
+    });
+  }
 }
 
 // =====================================================
@@ -9706,7 +9827,9 @@ async function main() {
       case 'pending':             cmdPending(opts); return;
       case 'bridge':
         if (args[1] === 'auto-ping') { await cmdBridgeAutoPing(opts); return; }
-        err('用法: tinker bridge auto-ping [--enable|--disable|--status] [--kinds X,Y] [--to @who]');
+        if (args[1] === 'retry') { cmdBridgeRetry(opts); return; }
+        if (args[1] === 'failed') { cmdBridgeFailed(opts); return; }
+        err('用法:\n  tinker bridge auto-ping [--enable|--disable|--status] [--kinds X,Y] [--to @who]\n  tinker bridge retry        # 重试历史解码失败的 payload (暗号修好后跑)\n  tinker bridge failed       # 看历史解码失败的列表');
         process.exit(1);
 
       case 'ping': await cmdPing(opts); break;

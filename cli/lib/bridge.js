@@ -60,7 +60,30 @@ function getActiveSecret() {
   return s ? s.secret : null;
 }
 
+// v0.50 守门 · 防 test-secret-1234567 这种测试占位混进 studios.json
+// 历史教训:占位 secret 进了真 studio 槽位 · AES-GCM auth 全 fail
+// 表象是网络问题 / server 收不到 · 实际是暗号根本对不上
+const BAD_SECRET_PATTERNS = [
+  /^(test|debug|demo|dummy|fake|placeholder|sample|example|temp|tmp)[-_]/i,
+  /^(secret|password|passwd|abc|xxx|yyy|zzz|123|0+|1+)/i,
+  /^changeme$/i,
+];
+function assertRealSecret(secret) {
+  if (!secret || typeof secret !== 'string') {
+    throw new Error('secret 不能空');
+  }
+  if (secret.length < 24) {
+    throw new Error('secret 太短 (< 24 字符) · 不像真暗号 · 当前长度 ' + secret.length + ' · 历史踩坑:test-secret-1234567 这种占位是 19 字符');
+  }
+  for (const re of BAD_SECRET_PATTERNS) {
+    if (re.test(secret)) {
+      throw new Error('secret 看起来是测试占位 (匹配 ' + re + ') · 不允许进 studios.json · 走正经 invite + accept 流程拿真暗号');
+    }
+  }
+}
+
 function addStudio({ slug, name, secret, id }) {
+  assertRealSecret(secret);
   const data = loadStudios();
   data.studios = data.studios.filter(s => s.slug !== slug);
   data.studios.push({ slug, name, secret, id: id || null });
