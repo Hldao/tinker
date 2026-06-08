@@ -2400,15 +2400,16 @@
   }
 
   /* ───────────────────────────────────────────────────────────────
-     C · 5 种项目状态 · 彩色 tag tint
-     active=moss · stuck=amber · done=sage深绿 · paused=slate · archive=ink-faint
+     C · 6 种项目状态 · 彩色 tag tint
+     active=moss · stuck=amber · done=sage深绿 · paused=slate · archive=ink-faint · live=moss深一档
      ─────────────────────────────────────────────────────────────── */
   .entry-status,
   .pcard-meta .active,
   .pcard-meta .stuck,
   .pcard-meta .done,
   .pcard-meta .paused,
-  .pcard-meta .archive {
+  .pcard-meta .archive,
+  .pcard-meta .live {
     display: inline-flex;
     align-items: center;
     padding: 2px 9px 3px;
@@ -2450,6 +2451,12 @@
   .pcard-meta .archive {
     background: rgba(120, 113, 108, 0.06);
     color: var(--sepia);
+  }
+  /* live = 上线 (持续打磨) · moss 深一档 · 比 active 重以示"上了线还在跑" */
+  .entry-status.live,
+  .pcard-meta .live {
+    background: rgba(13, 110, 53, 0.13);
+    color: #0d6e35;
   }
 
   /* feed entry-status 在 grid 末尾 · 保留 margin-left: auto */
@@ -7677,7 +7684,7 @@ window.addEventListener('hashchange', navigateFromHash);
 
 function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
 function projectById(id){ return state.projects.find(p=>p.id===id); }
-function statusText(s){ return {active:'在做',stuck:'卡住',done:'跑通了',paused:'暂停',archive:'归档'}[s]||s; }
+function statusText(s){ return {active:'在做',stuck:'卡住',done:'跑通了',paused:'暂停',archive:'归档',live:'上线'}[s]||s; }
 function escapeHtml(s){ if(!s)return''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // v0.32 timeline markdown 轻量渲染 · 行级处理 · 不引外部 md 库
