@@ -728,7 +728,35 @@ function sanitizeDraft(text) {
 // =============================================
 // commands
 // =============================================
-async function cmdLogin() {
+async function cmdLogin(opts = {}) {
+  // v0.35 非交互模式 · --server + --token 给齐就跳过 prompt 直接配
+  // 给"复制 AI 指令一键安装"那条体验跑通用 · 用户把 webapp 上的指令粘给 AI · AI 直接跑这条命令
+  // LLM 配置不在这里 · 留给 tinker llm set 走 (token 链路跟 LLM 链路分开 · 各自单一职责)
+  if (opts.server && opts.token) {
+    const token = String(opts.token).trim();
+    if (!/^tk_/.test(token)) {
+      err('钥匙格式不对 · 应该以 tk_ 开头');
+      process.exit(1);
+    }
+    const cfg = { serverUrl: String(opts.server).replace(/\/$/, ''), token };
+    log(sepia('  验证钥匙...'));
+    try {
+      const me = await apiMe(cfg);
+      if (!me) throw new Error('钥匙没认到任何账号');
+      cfg.handle = me.handle;
+      cfg.userId = me.id;
+    } catch (e) {
+      err('钥匙无效: ' + (e.message || ''));
+      process.exit(1);
+    }
+    saveConfig(cfg);
+    ok('登录成功 — ' + bold('@' + cfg.handle));
+    log(sepia('  配置: ') + CONFIG_FILE);
+    log(sepia('  下一步: ') + vermilion('tinker recent --limit 3') + sepia(' 验证看你最近的 update'));
+    log(sepia('  想要 AI 自动起草? ') + vermilion('tinker llm set') + sepia(' 配 LLM key'));
+    return;
+  }
+
   const { input, select, password } = require('@inquirer/prompts');
   log(vermilion('\n  tinker login') + sepia('   · 一次性配置'));
   log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
@@ -8109,6 +8137,10 @@ function parseArgs(args) {
     else if (a === '--check') opts.check = true;
     else if (a === '--clear') opts.clear = true;
     else if (a === '--clean') opts.clean = true;
+    else if (a === '--server') opts.server = args[++i];
+    else if (a.startsWith('--server=')) opts.server = a.slice('--server='.length);
+    else if (a === '--token') opts.token = args[++i];
+    else if (a.startsWith('--token=')) opts.token = a.slice('--token='.length);
     else if (a === '--mark-handled') opts.markHandled = args[++i];
     else if (a.startsWith('--mark-handled=')) opts.markHandled = a.slice('--mark-handled='.length);
     else if (a === '--desc') opts.desc = args[++i];
@@ -8528,7 +8560,7 @@ async function main() {
   const opts = parseArgs(args.slice(1));
   try {
     switch (cmd) {
-      case 'login': await cmdLogin(); break;
+      case 'login': await cmdLogin(opts); break;
       case 'config': await cmdConfig(opts); break;
       case 'projects': case 'ls': await cmdProjects(opts); break;
       case 'push': await cmdPush(opts); break;
