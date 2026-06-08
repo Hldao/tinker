@@ -6748,6 +6748,104 @@ async function cmdProject(sub, projectIdArg, opts) {
   process.exit(1);
 }
 
+// v0.32 项目编年史 · ship 之后的项目挂在头部的浓缩时间线
+// timeline show <projectId>              · 看当前 timeline
+// timeline push <projectId> -m "..."     · 直接 push 一段 markdown
+// timeline push <projectId> <file.md>    · 从草稿文件 push (推荐 · LLM 起草后用)
+// timeline clear <projectId>             · 清空(不再显示编年史)
+async function cmdTimeline(sub, args, opts) {
+  const cfg = mustHaveConfig();
+
+  if (sub === 'show') {
+    const projectId = resolveProjectId(args[2]);
+    if (!projectId) {
+      if (opts.json) return errJson('用法: tinker timeline show <projectId>', 'NO_PROJECT');
+      err('用法: ' + vermilion('tinker timeline show <projectId>'));
+      process.exit(1);
+    }
+    const state = await apiState(cfg);
+    const proj = state.projects.find(p => p.id === projectId);
+    if (!proj) {
+      if (opts.json) return errJson('找不到项目: ' + projectId, 'NOT_FOUND');
+      err('找不到项目: ' + projectId); process.exit(1);
+    }
+    if (opts.json) return outputJson({ ok: true, projectId, timeline: proj.timeline || null });
+    if (!proj.timeline) {
+      log(sepia('  这个项目还没编年史 · 跑 ') + vermilion('tinker timeline push ' + projectId + ' -m "..."') + sepia(' 写一份'));
+      return;
+    }
+    log('');
+    log(bold(proj.name) + sepia(' · 编年史'));
+    log(sepia(''.padStart(40, '─')));
+    log(proj.timeline);
+    log('');
+    return;
+  }
+
+  if (sub === 'push') {
+    const projectId = resolveProjectId(args[2]);
+    if (!projectId) {
+      if (opts.json) return errJson('用法: tinker timeline push <projectId> [-m "..." | <file.md>]', 'NO_PROJECT');
+      err('用法: ' + vermilion('tinker timeline push <projectId>') + sepia(' [-m "..." | <file.md>]'));
+      process.exit(1);
+    }
+    // 来源:opts.text (-m) 优先 · 否则看第 4 个 arg 是不是文件路径
+    let timeline = (opts.text || '').trim();
+    const maybeFile = args[3];
+    if (!timeline && maybeFile) {
+      if (!fs.existsSync(maybeFile)) {
+        if (opts.json) return errJson('文件不存在: ' + maybeFile, 'NO_FILE');
+        err('文件不存在: ' + maybeFile); process.exit(1);
+      }
+      timeline = fs.readFileSync(maybeFile, 'utf-8').trim();
+    }
+    if (!timeline) {
+      if (opts.json) return errJson('内容为空 · 给 -m "..." 或 <file.md>', 'EMPTY');
+      err('内容为空 · 给 ' + vermilion('-m "..."') + sepia(' 或 ') + vermilion('<file.md>'));
+      process.exit(1);
+    }
+    try {
+      const r = await apiAction(cfg, 'editProjectTimeline', { projectId, timeline });
+      if (opts.json) return outputJson({ ok: true, ...(r && r.result || {}) });
+      ok('编年史更新了');
+      log(sepia('  长度: ') + timeline.length + ' 字符');
+      const state = await apiState(cfg);
+      const proj = state.projects.find(p => p.id === projectId);
+      if (proj) log(sepia('  看: ') + cfg.serverUrl + '/#/p/' + proj.owner + '/' + proj.slug);
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'PUSH_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+
+  if (sub === 'clear') {
+    const projectId = resolveProjectId(args[2]);
+    if (!projectId) {
+      if (opts.json) return errJson('用法: tinker timeline clear <projectId>', 'NO_PROJECT');
+      err('用法: ' + vermilion('tinker timeline clear <projectId>'));
+      process.exit(1);
+    }
+    try {
+      await apiAction(cfg, 'editProjectTimeline', { projectId, timeline: '' });
+      if (opts.json) return outputJson({ ok: true, projectId, timeline: null });
+      ok('编年史已清空');
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'CLEAR_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+
+  if (opts.json) return errJson('用法: tinker timeline show | push | clear <projectId>', 'UNKNOWN_SUB');
+  err('用法:');
+  log('  ' + vermilion('tinker timeline show <projectId>') + sepia('              看编年史'));
+  log('  ' + vermilion('tinker timeline push <projectId> -m "..."') + sepia('     直接 push 一段'));
+  log('  ' + vermilion('tinker timeline push <projectId> <file.md>') + sepia('    从草稿文件 push'));
+  log('  ' + vermilion('tinker timeline clear <projectId>') + sepia('             清空'));
+  process.exit(1);
+}
+
 // tinker contribute <updateId> — 标自己一条 update 为方法
 // 不带参数时 · 默认拿最近一条 push 的 id
 async function cmdContribute(updateIdArg, opts) {
@@ -8218,6 +8316,9 @@ async function main() {
       case 'bridge-check-inbox': cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用
       case 'studio':
         await cmdStudio(args[1], args, opts);
+        break;
+      case 'timeline':
+        await cmdTimeline(args[1], args, opts);
         break;
 
       case 'llm': await cmdLlm(args[1], opts); break;

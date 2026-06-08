@@ -202,6 +202,26 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
   return getProjectFlat(projectId);
 }
 
+// 写 / 改项目编年史 · ship 后挂在项目页头部
+// timeline 是一段 markdown · 节点列表 + 一段总结 · 由 CLI 端 LLM 起草 · 用户编辑后 push
+// 传 null 或空字符串 = 清空(不显示编年史)
+function editProjectTimeline({ projectId, timeline }, { currentUserId }) {
+  if (!projectId) throw new Error('projectId required');
+  if (timeline != null && typeof timeline !== 'string') throw new Error('timeline 必须是 string');
+
+  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner_id !== currentUserId) throw new Error('只能改自己的项目');
+
+  const value = (timeline || '').trim() || null;
+  if (value && value.length > 20000) throw new Error('timeline 过长(超过 20000 字符)');
+
+  db.prepare('UPDATE projects SET timeline = ?, updated_at = ? WHERE id = ?')
+    .run(value, Date.now(), projectId);
+
+  return { projectId, timeline: value };
+}
+
 function changeProjectStatus({ projectId, newStatus }, { currentUserId }) {
   const p = db.prepare('SELECT owner_id, status, name, shipped_at FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
@@ -1235,7 +1255,7 @@ module.exports = {
   // users
   editTagline, renameHandle,
   // projects
-  addProject, editProject, changeProjectStatus, shipProject, exhibitProject,
+  addProject, editProject, editProjectTimeline, changeProjectStatus, shipProject, exhibitProject,
   pinUpdateForShowcase, toggleShowcaseVisibility,
   // updates
   addUpdate, editUpdate, deleteUpdate,

@@ -187,6 +187,7 @@ function buildState({ targetUserId } = {}) {
       pinnedUpdateId: p.pinned_update_id || undefined,
       hiddenFromShowcase: !!p.hidden_from_showcase,
       githubLink: p.github_link || undefined,
+      timeline: p.timeline || undefined,
       tools: (tools[p.id] || []).map(t => t.tool),
       updates: projectUpdates,
       notes: projectNotes,
