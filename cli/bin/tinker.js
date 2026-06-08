@@ -1806,7 +1806,7 @@ async function cmdClaudeHookInstall(opts = {}) {
 
   // 6 组 maybe-X · 每组 matcher 词从 MAYBE_KINDS 取
   // kind camelCase → shell command kebab-case (cleverFix → clever-fix)
-  const KIND_TO_CMD = { stuck: 'stuck', breakthrough: 'breakthrough', decision: 'decision', subtraction: 'subtraction', cleverFix: 'clever-fix', ship: 'ship' };
+  const KIND_TO_CMD = { stuck: 'stuck', breakthrough: 'breakthrough', decision: 'decision', subtraction: 'subtraction', cleverFix: 'clever-fix', ship: 'ship', handoff: 'handoff' };
   for (const [kind, cfg] of Object.entries(MAYBE_KINDS)) {
     if (!cfg.matcher) continue;
     const cmdName = KIND_TO_CMD[kind];
@@ -1831,6 +1831,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('    UserPromptSubmit subtraction      · 说砍 / 删类的话'));
   log(sepia('    UserPromptSubmit clever-fix       · 说搞通 / 跑通类的话'));
   log(sepia('    UserPromptSubmit ship             · 说完工 / 上线类的话'));
+  log(sepia('    UserPromptSubmit handoff          · 说接力 / 交接给类的话 · 自动跑 tinker handoff'));
   log(sepia('  matcher 命中 → maybe-X 静默判断 → 输出 reminder 注入 AI 上下文 → AI 看上下文决定是否提醒'));
   log('');
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
@@ -3990,6 +3991,11 @@ const MAYBE_KINDS = {
     cooldownMin: 60,
     matcher: '完工|发出去|上线了|发布了|做完了|部署了|deploy 了|push 了|release 了|线上了|搞完了',
     reminder: '用户刚说了完工 / 发出去 / 上线类的话 · 如果是真的发布了 (不只是计划) · 可以建议跑 `tinker ship -m "一句话感想"` 进陈列馆',
+  },
+  handoff: {
+    cooldownMin: 30,
+    matcher: '接力|交接给|帮我接力|给.{0,4}接着做|让.{0,4}接|你接一下|你接着做|换人|这个给.{0,4}做|把现场|把这个交给|打包给',
+    reminder: '用户对话里像是想 handoff 接力 · 把当前现场打包发给队友。\n看上下文判断是不是真的想交接 · 不是的话别打扰 (单说"接"字不算)。\n是的话主动帮用户跑命令 · 不是只提醒:\n1) 看对话上下文写一句 50-100 字 handoff 说明 · 气质参考: "X 做了一半 · 卡在 Y · 你接着 Z" · 不是产品发布会语气\n2) 找接收方 handle: 从对话里看 (比如"给猫猫" → -t @maomao) · 没指定就走 active studio 广播 (不带 -t)\n3) Bash 跑 `tinker handoff -m "<你写的说明>" [-t @<handle>]`\n4) 命令输出给用户看 · 让用户确认是否真的发了 (handoff 一旦发出去对方就收到 · 没法撤回)',
   },
 };
 
@@ -7903,6 +7909,7 @@ async function main() {
       case 'maybe-subtraction':   cmdMaybe('subtraction'); return;
       case 'maybe-clever-fix':    cmdMaybe('cleverFix'); return;
       case 'maybe-ship':          cmdMaybe('ship'); return;
+      case 'maybe-handoff':       cmdMaybe('handoff'); return;
       case 'maybe-check':         cmdMaybeCheck(opts); return;
       case 'pending':             cmdPending(opts); return;
       case 'bridge':
