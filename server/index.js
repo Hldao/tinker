@@ -322,6 +322,10 @@ app.delete('/api/account/tokens/:id', auth.requireSession, (req, res) => {
 
 app.get('/api/state', stateLimiter, (req, res) => {
   const state = buildState({ targetUserId: req.user?.id });
+  // v0.42: 加 authedAs 字段 · 让 AI 能区分"鉴权过了" vs "端点本就公开"
+  // 之前: 公开端点带不带 token 都返 200 · AI 误以为 200 = token 有效 · 实际 token 失效但拉到数据
+  // 现在: 看 authedAs · null = 未鉴权 / @handle = 鉴权通过
+  state.authedAs = req.user?.handle || null;
   res.json(state);
 });
 
