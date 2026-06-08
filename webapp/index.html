@@ -5224,44 +5224,6 @@
     color: var(--ink-soft);
     letter-spacing: 0.04em;
   }
-  .workshop-cumulative {
-    margin-top: 16px;
-    padding-top: 10px;
-    border-top: 1px dotted var(--rule);
-  }
-  .workshop-cumulative-toggle {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
-    color: var(--sepia);
-    letter-spacing: 0.08em;
-    cursor: pointer;
-    border-bottom: 1px dotted var(--rule);
-    transition: color 0.15s;
-  }
-  .workshop-cumulative-toggle:hover { color: var(--vermilion); }
-  .workshop-cumulative-panel {
-    margin-top: 8px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11.5px;
-    color: var(--sepia);
-    letter-spacing: 0.08em;
-    line-height: 1.8;
-  }
-  .workshop-cumulative-panel.hidden { display: none; }
-  .workshop-cumulative-panel .num {
-    color: var(--ink);
-    font-variant-numeric: tabular-nums;
-    font-weight: 500;
-    padding: 0 2px;
-  }
-  .workshop-cumulative-note {
-    display: block;
-    margin-top: 6px;
-    font-size: 10.5px;
-    color: var(--sepia-light);
-    letter-spacing: 0.06em;
-  }
-
   /* —— v0.38 工坊页"我的工作室"厚卡板块 —— */
   .workshop-studios-section { margin-bottom: 48px; }
   .workshop-studios-head {
@@ -8133,19 +8095,8 @@ function renderWorkshop(handle) {
     }
   });
 
-  // v0.56 工作室小档案 · 让别人秒识"这是谁"
-  // v0.58 加被接走 / 方法被用 反向信号 · 让"我的手艺被认可"可见
-  const activeCount = recent.length;
-  const doneCount = done.length;
-  const trackingCount = trackingPublic.length;
-  let receivedTinkered = 0;
-  let receivedMethodUsed = 0;
-  projects.forEach(p => {
-    receivedTinkered += (p.reactions && p.reactions.tinkered ? p.reactions.tinkered.length : 0);
-    (p.updates || []).forEach(u => {
-      receivedMethodUsed += (u.usedBy || []).length;
-    });
-  });
+  // v0.39 砍掉折叠累计 chip · 用户用一段时间觉得没啥用 · 简化
+  // 常用工具行 (topTools) 留着 · 跟工作台叙事一起属于"招牌信号"
   const toolFreq = new Map();
   projects.forEach(p => (p.tools || []).forEach(t => {
     toolFreq.set(t, (toolFreq.get(t) || 0) + 1);
@@ -8154,8 +8105,7 @@ function renderWorkshop(handle) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([t]) => t);
-  // v0.30 §3 工坊头部重塑:工作台叙事 + 常用工具 + 折叠累计
-  const benchCount = recent.length;  // 已在上面算过 in-flight 不含 stale
+  const benchCount = recent.length;
   const lastShipAt = projects
     .flatMap(p => (p.updates || []).filter(u => u.kind === 'ship'))
     .reduce((max, u) => Math.max(max, u.at || 0), 0);
@@ -8169,21 +8119,6 @@ function renderWorkshop(handle) {
   const toolsHtml = topTools.length > 0
     ? `<div class="workshop-tools-line">常用 · ${topTools.join(' · ')}</div>`
     : '';
-  const cumulativeParts = [];
-  if (doneCount > 0) cumulativeParts.push(`跑通 <span class="num">${doneCount}</span>`);
-  if (activeCount > 0) cumulativeParts.push(`在做 <span class="num">${activeCount}</span>`);
-  if (receivedTinkered > 0) cumulativeParts.push(`启发了 <span class="num">${receivedTinkered}</span> 人动手`);
-  if (receivedMethodUsed > 0) cumulativeParts.push(`方法被用 <span class="num">${receivedMethodUsed}</span>`);
-  if (trackingCount > 0) cumulativeParts.push(`跟进过 <span class="num">${trackingCount}</span>`);
-  const cumulativeHtml = (isMe && cumulativeParts.length > 0) ? `
-      <div class="workshop-cumulative">
-        <span class="workshop-cumulative-toggle" onclick="toggleWorkshopCumulative(this)">看看复用累计 →</span>
-        <div class="workshop-cumulative-panel hidden">
-          ${cumulativeParts.join(' · ')}
-          <span class="workshop-cumulative-note">这是只有自己看到的</span>
-        </div>
-      </div>
-    ` : '';
 
   const renderPcards = (list, opts = {}) => list.map(p => {
     const ex = findExhibitUpdate(p);
@@ -8262,7 +8197,6 @@ function renderWorkshop(handle) {
           <a class="workshop-affiliation-link" onclick="openAcceptInvite()">接受邀请</a>
         </div>
       ` : '')}
-      ${cumulativeHtml}
     </div>
     <div id="workshop-studios-block"></div>
     <div class="mb-12">
@@ -11629,19 +11563,6 @@ function navAddUpdate() {
 }
 
 // v0.30 §3 工坊头部 · 累计折叠 chip
-function toggleWorkshopCumulative(toggleEl) {
-  const panel = toggleEl.nextElementSibling;
-  if (!panel) return;
-  const isHidden = panel.classList.contains('hidden');
-  if (isHidden) {
-    panel.classList.remove('hidden');
-    toggleEl.textContent = '看看复用累计 ↓';
-  } else {
-    panel.classList.add('hidden');
-    toggleEl.textContent = '看看复用累计 →';
-  }
-}
-
 // v0.38 工坊页"我的工作室"厚卡板块 · 异步拉 preview
 async function apiGetStudiosPreview(handle) {
   const res = await fetch('/api/users/' + encodeURIComponent(handle) + '/studios-preview', { credentials: 'same-origin' });
