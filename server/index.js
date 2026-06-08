@@ -28,6 +28,7 @@ const actions = require('./actions-sql');
 const bridge = require('./bridge');
 const studios = require('./studios');
 const auth = require('./auth');
+const prefs = require('./prefs');
 
 // ============================================
 // 配置
@@ -234,6 +235,28 @@ app.post('/api/auth/dev-login', (req, res) => {
 app.get('/api/auth/me', (req, res) => {
   if (!req.user) return res.status(401).json({ error: '未登录' });
   res.json({ user: req.user });
+});
+
+// v0.35 通知偏好 (web + CLI + 桥 共享)
+app.get('/api/user/prefs', auth.requireSession, (req, res) => {
+  try {
+    const p = prefs.getPrefs(req.user.id);
+    res.json({ ok: true, prefs: p, quietNow: prefs.isQuietNow(p) });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'get prefs failed');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/user/prefs', auth.requireSession, (req, res) => {
+  try {
+    const body = req.body || {};
+    const updated = prefs.setPrefs(req.user.id, body);
+    res.json({ ok: true, prefs: updated, quietNow: prefs.isQuietNow(updated) });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'set prefs failed');
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // 新用户欢迎流程 · 改 handle + tagline · 标记 welcomed

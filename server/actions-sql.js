@@ -59,22 +59,40 @@ function extractMentions(text, excludeUserId) {
   return Array.from(ids);
 }
 
+// v0.35 通知偏好闭环 · 弱信号类型 · 接收方开 web_mute_weak 直接跳过 INSERT
+const WEAK_NOTIF_TYPES = new Set(['wantToTry', 'noted']);
+let _prefsModule = null;
+function getPrefsModule() {
+  if (!_prefsModule) {
+    try { _prefsModule = require('./prefs'); } catch { _prefsModule = { getPrefs: () => null, isQuietNow: () => false }; }
+  }
+  return _prefsModule;
+}
+
 // 发通知 · 去重 (同 target+fromUser+type+project 只留最新)
 // anchor: 'update-<id>' / 'note-<id>' / 'tinkered-<handle>' · webapp 跳转后定位 + flash
 function notify({ targetUserId, fromUserId, type, projectId, extra, anchor }) {
   if (!targetUserId || targetUserId === fromUserId) return;
+
+  // v0.35 接收方通知偏好 · 弱信号屏蔽直接跳过 · 勿扰窗口内 INSERT 但标已读 (不亮红点 · 但留档案)
+  const p = getPrefsModule().getPrefs(targetUserId);
+  if (p && p.webMuteWeak && WEAK_NOTIF_TYPES.has(type)) return;
+  const muted = p && getPrefsModule().isQuietNow(p);
+
   db.prepare(`
     DELETE FROM notifications
     WHERE target_user_id = ? AND from_user_id = ? AND type = ?
       AND ((project_id IS NULL AND ? IS NULL) OR project_id = ?)
   `).run(targetUserId, fromUserId, type, projectId || null, projectId || null);
 
+  const now = Date.now();
   db.prepare(`
     INSERT INTO notifications (id, target_user_id, from_user_id, type, project_id, extra, anchor, at, read_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-    targetUserId, fromUserId, type, projectId || null, extra || null, anchor || null, Date.now()
+    'n-' + now + '-' + Math.random().toString(36).slice(2, 6),
+    targetUserId, fromUserId, type, projectId || null, extra || null, anchor || null, now,
+    muted ? now : null
   );
 }
 

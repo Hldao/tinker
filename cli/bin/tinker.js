@@ -1859,6 +1859,72 @@ function savePromptState(s) {
     fs.writeFileSync(PROMPT_STATE_FILE, JSON.stringify(s, null, 2));
   } catch (e) { /* 容错 · 失败不影响 */ }
 }
+
+// v0.35 通知偏好闭环 · server 端 user_prefs 的本地 cache · 5min TTL
+// 设计:同步代码用 cache · 过期就后台异步刷新 · 网络/无 token 都不影响触发器
+const PREFS_CACHE_FILE = path.join(CONFIG_DIR, 'prefs-cache.json');
+const PREFS_CACHE_TTL_MS = 5 * 60 * 1000;
+function loadPrefsCache() {
+  try {
+    if (!fs.existsSync(PREFS_CACHE_FILE)) return null;
+    return JSON.parse(fs.readFileSync(PREFS_CACHE_FILE, 'utf8'));
+  } catch { return null; }
+}
+function savePrefsCache(prefs) {
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(PREFS_CACHE_FILE, JSON.stringify({ prefs, fetchedAt: Date.now() }));
+  } catch { /* swallow */ }
+}
+async function fetchPrefsFromServer() {
+  try {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.serverUrl || !cfg.token) return null;
+    const res = await fetch(cfg.serverUrl + '/api/user/prefs', {
+      headers: { 'Authorization': 'Bearer ' + cfg.token },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.ok) return null;
+    savePrefsCache(data.prefs);
+    return data.prefs;
+  } catch { return null; }
+}
+// 同步入口 · 返当前 cache · 过期/没 cache 就后台刷新
+function getPrefsSync() {
+  const c = loadPrefsCache();
+  if (!c) {
+    fetchPrefsFromServer().catch(() => {});
+    return null;
+  }
+  const age = Date.now() - (c.fetchedAt || 0);
+  if (age > PREFS_CACHE_TTL_MS) {
+    fetchPrefsFromServer().catch(() => {});
+  }
+  return c.prefs || null;
+}
+function shouldSuppressKindLocal(kind, prefs) {
+  if (!prefs) return false;
+  if (prefs.mutedUntil && prefs.mutedUntil > Date.now()) return true;
+  if (prefs.quietStart && prefs.quietEnd) {
+    const now = new Date();
+    const [sh, sm] = prefs.quietStart.split(':').map(Number);
+    const [eh, em] = prefs.quietEnd.split(':').map(Number);
+    if (!isNaN(sh) && !isNaN(eh)) {
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      if (startMin !== endMin) {
+        const inWindow = startMin < endMin
+          ? (nowMin >= startMin && nowMin < endMin)
+          : (nowMin >= startMin || nowMin < endMin);
+        if (inWindow) return true;
+      }
+    }
+  }
+  if (Array.isArray(prefs.cliDisabledKinds) && prefs.cliDisabledKinds.includes(kind)) return true;
+  return false;
+}
 // v0.25 Tinker 服务东八区用户 · 所有"今天 / 这周 / 这个月" 一律按北京时间算
 // 不依赖运行机器时区 (阿里云 ECS 跑 UTC / 国外协作者跑 CLI 都能拿到一致结果)
 const TZ_BEIJING = 'Asia/Shanghai';
@@ -4257,6 +4323,12 @@ function logTriggerEvent(kind, event, extra) {
 function cmdMaybe(kind) {
   const cfg = MAYBE_KINDS[kind];
   if (!cfg) return;
+  // v0.35 服务器通知偏好闭环 · 命中先看 prefs
+  const prefs = getPrefsSync();
+  if (shouldSuppressKindLocal(kind, prefs)) {
+    logTriggerEvent(kind, 'suppressed_by_prefs', {});
+    return;
+  }
   const ps = loadPromptState();
   ps.lastMaybeAtByKind = ps.lastMaybeAtByKind || {};
   const last = ps.lastMaybeAtByKind[kind];
@@ -4293,10 +4365,18 @@ function cmdMaybeCheck(opts) {
   const now = Date.now();
   const fired = [];
   const cooled = [];
+  const suppressed = [];
+  // v0.35 服务器通知偏好闭环 · 拉一次 cache 给整批共用
+  const prefs = getPrefsSync();
   for (const [kind, cfg] of Object.entries(MAYBE_KINDS)) {
     if (!cfg.matcher) continue;
     const re = new RegExp(cfg.matcher);
     if (!re.test(text)) continue;
+    if (shouldSuppressKindLocal(kind, prefs)) {
+      suppressed.push({ kind });
+      logTriggerEvent(kind, 'suppressed_by_prefs_check', {});
+      continue;
+    }
     const last = ps.lastMaybeAtByKind[kind];
     if (last && (now - last) < cfg.cooldownMin * 60 * 1000) {
       cooled.push({ kind, remainingMs: cfg.cooldownMin * 60 * 1000 - (now - last) });
@@ -4309,11 +4389,14 @@ function cmdMaybeCheck(opts) {
   }
   savePromptState(ps);
   if (opts.json) {
-    return outputJson({ ok: true, fired, cooled });
+    return outputJson({ ok: true, fired, cooled, suppressed });
   }
   if (fired.length === 0) {
-    if (cooled.length === 0) log(sepia('  没命中任何 maybe-X'));
-    else log(sepia('  命中 ' + cooled.length + ' 个 kind 但都在冷却中: ' + cooled.map(c => c.kind).join(' / ')));
+    const parts = [];
+    if (cooled.length > 0) parts.push('冷却中: ' + cooled.map(c => c.kind).join(' / '));
+    if (suppressed.length > 0) parts.push('偏好屏蔽: ' + suppressed.map(c => c.kind).join(' / '));
+    if (parts.length === 0) log(sepia('  没命中任何 maybe-X'));
+    else log(sepia('  ' + parts.join(' · ')));
     return;
   }
   for (const f of fired) {
@@ -4360,8 +4443,12 @@ function cmdPending(opts) {
     // 命中 pending → stdout 注入我 (AI) 的 context · 我看上下文判断要不要提醒用户
     // 没 pending → 静默退出 · 不打扰
     if (pending.length === 0) return;
-    const recent = pending.slice(-3).map(r => `[${r.kind}] ${r.msg.slice(0, 60)}`).join(' / ');
-    process.stdout.write(`Tinker hook 触发了 ${pending.length} 条待处理 reminder · 最近: ${recent} · 看完整列表 \`tinker pending --json\` · 跟用户聊到合适时机时建议 \`tinker resolve <choice> -m "..."\` 处理 · 或者 \`tinker pending --mark-handled <id>\` 标已处理 · 不每次都打扰用户\n`);
+    // v0.35 服务器通知偏好闭环 · 屏蔽掉用户在 webapp 关掉的 kind + 勿扰窗口内全静默
+    const prefs = getPrefsSync();
+    const visible = pending.filter(r => !shouldSuppressKindLocal(r.kind, prefs));
+    if (visible.length === 0) return;
+    const recent = visible.slice(-3).map(r => `[${r.kind}] ${r.msg.slice(0, 60)}`).join(' / ');
+    process.stdout.write(`Tinker hook 触发了 ${visible.length} 条待处理 reminder · 最近: ${recent} · 看完整列表 \`tinker pending --json\` · 跟用户聊到合适时机时建议 \`tinker resolve <choice> -m "..."\` 处理 · 或者 \`tinker pending --mark-handled <id>\` 标已处理 · 不每次都打扰用户\n`);
     return;
   }
   if (opts.json) return outputJson({ ok: true, count: pending.length, pending, handledCount: reminders.length - pending.length });
@@ -5088,6 +5175,12 @@ async function maybeAutoPing(triggerResult, repoCfg, cfg) {
     // result.reason 也行 · 比如 keyword-ship · 取前缀
     const kind = triggerResult.kind || (triggerResult.reason || '').replace(/^keyword-/, '');
     if (!apCfg.kinds.includes(kind)) return;
+    // v0.35 服务器通知偏好 · 我自己在勿扰 / 关掉了这个 kind · 就不主动 ping 队友
+    const prefs = getPrefsSync();
+    if (shouldSuppressKindLocal(kind, prefs)) {
+      logTriggerEvent(kind, 'auto_ping_suppressed_by_prefs', { to: apCfg.toHandle || 'broadcast' });
+      return;
+    }
     const bridgeLib = require('../lib/bridge');
     if (!bridgeLib.hasSecret()) return;  // 没设暗号 · 静默放弃
     const secret = bridgeLib.loadSecret();
@@ -7815,7 +7908,72 @@ async function cmdMarkLearning(updateIdArg, opts) {
   log('');
 }
 
-function cmdMute(args) {
+// best-effort 把 mutedUntil 推到 server · 失败不影响本地
+async function syncMuteToServer(mutedUntil) {
+  try {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.serverUrl || !cfg.token) return false;
+    const res = await fetch(cfg.serverUrl + '/api/user/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.token },
+      body: JSON.stringify({ mutedUntil }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data && data.ok && data.prefs) savePrefsCache(data.prefs);
+    return true;
+  } catch { return false; }
+}
+
+// v0.35 tinker prefs · 看当前通知偏好 (从 server 拉新的)
+//   tinker prefs           人可读当前状态
+//   tinker prefs --json    JSON
+//   tinker prefs --sync    强制拉一次 (绕过 5min cache)
+async function cmdPrefs(opts) {
+  if (opts && opts.sync) {
+    const fresh = await fetchPrefsFromServer();
+    if (!fresh) {
+      if (opts.json) return errJson('拉不到 · 没 token / 离线 / server 没接通', 'PREFS_FETCH_FAIL');
+      err('拉不到 prefs · 检查 token (' + vermilion('tinker login') + ') 或网络');
+      process.exit(1);
+    }
+  }
+  const prefs = getPrefsSync();
+  if (opts && opts.json) {
+    return outputJson({ ok: true, prefs: prefs || null, source: prefs ? 'cache' : 'none' });
+  }
+  if (!prefs) {
+    log(sepia('  还没拉到 prefs · 跑 ') + vermilion('tinker prefs --sync') + sepia(' 强制拉一次'));
+    log(sepia('  或者 ') + vermilion('tinker login') + sepia(' 配 server + token'));
+    return;
+  }
+  log('');
+  log(bold('  通知偏好 · server 同步状态'));
+  log('');
+  if (prefs.mutedUntil && prefs.mutedUntil > Date.now()) {
+    const left = prefs.mutedUntil - Date.now();
+    const leftLabel = left > 365 * 24 * 3600 * 1000 ? '一直勿扰' : Math.round(left / 60000) + ' 分钟后解除';
+    log(vermilion('  · 勿扰中 · ') + leftLabel);
+  } else {
+    log(sepia('  · 没勿扰'));
+  }
+  if (prefs.quietStart && prefs.quietEnd) {
+    log(sepia('  · 夜间安静时段 · ') + vermilion(prefs.quietStart + ' - ' + prefs.quietEnd));
+  } else {
+    log(sepia('  · 没设夜间时段'));
+  }
+  const disabled = prefs.cliDisabledKinds || [];
+  if (disabled.length > 0) {
+    log(sepia('  · CLI 触发器关掉 ' + disabled.length + ' 类: ') + vermilion(disabled.join(' / ')));
+  } else {
+    log(sepia('  · CLI 触发器全开'));
+  }
+  log('');
+  log(sepia('  在 webapp 账号页改 · ') + vermilion('tinker prefs --sync') + sepia(' 强拉'));
+  log('');
+}
+
+async function cmdMute(args) {
   const arg = (args || '').trim();
   const state = loadPromptState();
   const now = Date.now();
@@ -7825,7 +7983,8 @@ function cmdMute(args) {
     state.laterUntilByReason = {};      // v0.13 per-reason 延后清空
     state.dismissedTodayKey = null;
     savePromptState(state);
-    ok('解除静音 · 触发器开启');
+    const synced = await syncMuteToServer(null);
+    ok('解除静音 · 触发器开启' + (synced ? ' · 多机同步' : ' · 仅本机 (没 token / 离线)'));
     return;
   }
   const m = arg.match(/^(\d+)(m|h|d)$/);
@@ -7842,15 +8001,19 @@ function cmdMute(args) {
   } else if (arg === 'forever') {
     state.mutedUntil = Number.MAX_SAFE_INTEGER;
     savePromptState(state);
-    ok('永久静音 · 用 ' + vermilion('tinker mute off') + ' 解除');
+    const fixedFar = now + 50 * 365 * 24 * 3600 * 1000;  // server 不接 MAX_SAFE_INTEGER · 用 50 年
+    const synced = await syncMuteToServer(fixedFar);
+    ok('永久静音 · 用 ' + vermilion('tinker mute off') + ' 解除' + (synced ? ' · 多机同步' : ' · 仅本机'));
     return;
   } else if (arg) {
     err('用法: tinker mute [Nm|Nh|Nd|today|forever|off]');
     process.exit(1);
   }
-  state.mutedUntil = now + duration;
+  const until = now + duration;
+  state.mutedUntil = until;
   savePromptState(state);
-  ok('静音 ' + label + ' · 用 ' + vermilion('tinker mute off') + ' 解除');
+  const synced = await syncMuteToServer(until);
+  ok('静音 ' + label + ' · 用 ' + vermilion('tinker mute off') + ' 解除' + (synced ? ' · 多机同步' : ' · 仅本机'));
 }
 
 // v0.13 tinker stream <resource> · 长跑 NDJSON 输出
@@ -8595,7 +8758,8 @@ async function main() {
           log(sepia('      从单个文件读样本'));
         }
         break;
-      case 'mute': cmdMute(args[1]); break;
+      case 'mute': await cmdMute(args[1]); break;
+      case 'prefs': await cmdPrefs(opts); break;
       case 'borrow': {
         // borrow 接所有 positional 参数当查询词 · 跳过 --xxx flag
         // tinker borrow "supabase 邮箱" --kind learning

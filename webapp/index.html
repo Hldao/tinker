@@ -5299,6 +5299,33 @@
   }
   .account-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
 
+  /* —— v0.35 通知偏好 panel —— */
+  .prefs-block { padding: 10px 0; border-bottom: 1px dotted var(--rule); }
+  .prefs-block:last-child { border-bottom: none; }
+  .prefs-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .prefs-label { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia); letter-spacing: 0.08em; min-width: 110px; }
+  .prefs-select, .prefs-time-input {
+    font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink);
+    border: none; border-bottom: 1px dotted var(--rule); padding: 4px 8px; background: transparent;
+  }
+  .prefs-select:focus, .prefs-time-input:focus { outline: none; border-bottom-color: var(--vermilion); }
+  .prefs-status { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.06em; }
+  .prefs-status.muted { color: var(--vermilion); }
+  .prefs-status.clear { color: var(--moss); }
+  .prefs-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia); cursor: pointer; letter-spacing: 0.06em; border-bottom: 1px dotted var(--rule); }
+  .prefs-toggle:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .prefs-toggle.on { color: var(--moss); border-bottom-color: var(--moss); }
+  .prefs-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .prefs-chip {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 3px 9px; border: 1px solid var(--rule); border-radius: 3px;
+    color: var(--ink-soft); cursor: pointer; letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+  .prefs-chip:hover { border-color: var(--vermilion); }
+  .prefs-chip.off { color: var(--vermilion); border-color: var(--vermilion); background: rgba(194, 65, 12, 0.05); text-decoration: line-through; text-decoration-color: var(--vermilion); }
+  .prefs-help { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--sepia-light); letter-spacing: 0.04em; margin-top: 4px; }
+
   /* —— B · 做过的索引 chip —— */
   .done-index-list {
     border-top: 1px solid var(--rule);
@@ -11583,11 +11610,15 @@ async function renderAccount() {
         </div>
       </div>
 
-      <div class="account-section">
+      <div class="account-section" id="prefs-section">
         <div class="account-section-head">
           <span class="account-section-title">通知偏好</span>
+          <span class="account-section-action" id="prefs-status-chip">读取中...</span>
         </div>
-        <p class="account-sub-text">CLI 端 (tinker) 的静音 / 触发器开关同步还在做 · 目前只在你装了 CLI 的机器上生效 · 用 <span class="mono" style="background: var(--paper); padding: 1px 4px;">tinker mute</span> 或 <span class="mono" style="background: var(--paper); padding: 1px 4px;">tinker hook</span> 管。</p>
+        <p class="account-sub-text">站内通知 · CLI 触发器 · bridge 自动 ping 都看这一份偏好 · 多台机器同步。</p>
+        <div id="prefs-panel" style="margin-top: 14px;">
+          <div style="color: var(--sepia); font-size: 13px;">读取中...</div>
+        </div>
       </div>
 
       <div class="account-section">
@@ -11608,6 +11639,7 @@ async function renderAccount() {
     </div>
   `;
   refreshAccountTokensList();
+  loadAndRenderPrefs();
 }
 
 async function refreshAccountTokensList() {
@@ -11694,6 +11726,181 @@ function copyAccountAiInstall(el) {
 
 function confirmDeleteAccount() {
   alert('删账号还没接通 · 想删的话给 daodao 发邮件 · shanthiserot@mail.com');
+}
+
+// v0.35 通知偏好闭环 · CLI 触发器 kind 中文 label
+const CLI_KIND_LABELS = {
+  'ship':            '完工 / 上线',
+  'stuck':           '卡住',
+  'clever-fix':      '巧妙修法',
+  'tool-combo':      '工具组合',
+  'decision':        '决策推演',
+  'ai-limit':        'AI 边界',
+  'ui-session':      'UI 这一波',
+  'docs-contribute': '文档贡献',
+  'reversal':        '反转 / 改主意',
+  'cross-project':   '跨项目',
+  'subtraction':     '砍东西',
+  'prototype':       '原型',
+  'test-verify':     '测试验证',
+  'long-body':       '长 body commit',
+  'frustrated':      '破防',
+  'naming':          '命名',
+  'file':            '文件',
+  'noti':            '通知',
+  'progress':        '进展',
+  'restart':         '重启',
+  'task':            '任务',
+};
+let _currentPrefs = null;  // 最近一次拉到的 prefs · 改完保存后回写
+
+async function loadAndRenderPrefs() {
+  const panel = document.getElementById('prefs-panel');
+  const chip = document.getElementById('prefs-status-chip');
+  if (!panel) return;
+  try {
+    const { prefs, quietNow } = await apiGetPrefs();
+    _currentPrefs = prefs;
+    renderPrefsPanel(prefs, quietNow);
+    if (chip) {
+      chip.textContent = quietNow ? '现在勿扰中' : '没勿扰';
+      chip.style.color = quietNow ? 'var(--vermilion)' : 'var(--moss)';
+    }
+  } catch (e) {
+    panel.innerHTML = '<div style="color: var(--vermilion); font-size: 13px;">读不到 · ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderPrefsPanel(prefs, quietNow) {
+  const panel = document.getElementById('prefs-panel');
+  if (!panel) return;
+  const mutedUntil = prefs.mutedUntil;
+  const FOREVER_THRESHOLD = Date.now() + 365 * 24 * 3600 * 1000;  // > 1 年算 forever
+  let muteMode = 'off';
+  if (mutedUntil && mutedUntil > FOREVER_THRESHOLD) muteMode = 'forever';
+  else if (mutedUntil && mutedUntil > Date.now()) {
+    const left = mutedUntil - Date.now();
+    if (left <= 3600 * 1000 * 1.2) muteMode = '1h';
+    else if (left <= 3600 * 1000 * 25) muteMode = '24h';
+    else muteMode = '7d';
+  }
+  const mutedHint = muteMode === 'forever'
+    ? '一直勿扰 · 直到你手动关掉'
+    : (mutedUntil && mutedUntil > Date.now()
+        ? '到 ' + new Date(mutedUntil).toLocaleString('zh-CN', { hour12: false })
+        : '');
+
+  const cliKindsHtml = Object.keys(CLI_KIND_LABELS).map(k => {
+    const off = (prefs.cliDisabledKinds || []).includes(k);
+    return `<span class="prefs-chip ${off ? 'off' : ''}" onclick="toggleCliKind('${k}')" title="${off ? '关掉了 · 点开' : '在弹 · 点关掉'}">${CLI_KIND_LABELS[k]}</span>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div class="prefs-block">
+      <div class="prefs-row">
+        <span class="prefs-label">勿扰</span>
+        <select class="prefs-select" id="prefs-mute-mode" onchange="updateMuteMode(this.value)">
+          <option value="off" ${muteMode === 'off' ? 'selected' : ''}>不勿扰</option>
+          <option value="1h" ${muteMode === '1h' ? 'selected' : ''}>暂停 1 小时</option>
+          <option value="24h" ${muteMode === '24h' ? 'selected' : ''}>暂停 24 小时</option>
+          <option value="7d" ${muteMode === '7d' ? 'selected' : ''}>暂停 7 天</option>
+          <option value="forever" ${muteMode === 'forever' ? 'selected' : ''}>一直勿扰</option>
+        </select>
+        ${mutedHint ? `<span class="prefs-status muted">${mutedHint}</span>` : ''}
+      </div>
+      <div class="prefs-help">站内通知不亮红点 · CLI 触发器不弹 · bridge auto-ping 不主动发</div>
+    </div>
+
+    <div class="prefs-block">
+      <div class="prefs-row">
+        <span class="prefs-label">夜间安静时段</span>
+        <input type="time" class="prefs-time-input" id="prefs-quiet-start" value="${prefs.quietStart || ''}" onchange="updateQuietHours()">
+        <span style="color: var(--sepia);">到</span>
+        <input type="time" class="prefs-time-input" id="prefs-quiet-end" value="${prefs.quietEnd || ''}" onchange="updateQuietHours()">
+        <span class="prefs-toggle" onclick="clearQuietHours()">清空</span>
+        ${quietNow ? '<span class="prefs-status muted">现在在时段内</span>' : ''}
+      </div>
+      <div class="prefs-help">跨午夜也行 · 比如 23:00 - 07:00 · 留空就不限制</div>
+    </div>
+
+    <div class="prefs-block">
+      <div class="prefs-row">
+        <span class="prefs-label">站内通知</span>
+        <span class="prefs-toggle ${prefs.webMuteWeak ? 'on' : ''}" onclick="toggleWebMuteWeak()">
+          ${prefs.webMuteWeak ? '✓ 屏蔽弱信号 (想试试 / 留便签)' : '屏蔽弱信号 (想试试 / 留便签)'}
+        </span>
+      </div>
+      <div class="prefs-help">强信号 (mention · 接走 · 方法被用 · 卡住) 不让关 · 按 spec 是核心反馈链</div>
+    </div>
+
+    <div class="prefs-block">
+      <div class="prefs-row">
+        <span class="prefs-label">CLI 触发器</span>
+        <span class="prefs-toggle" onclick="toggleCliKindsExpand(this)">展开 ${Object.keys(CLI_KIND_LABELS).length} 类 →</span>
+        <span class="prefs-status" style="color: var(--sepia);">关掉了 ${(prefs.cliDisabledKinds || []).length} 类</span>
+      </div>
+      <div class="prefs-help">点 chip 切换 · 关掉的画线 · 关了不会再弹 reminder · commit 检查不变</div>
+      <div id="prefs-cli-kinds" class="prefs-chip-row" style="display: none;">${cliKindsHtml}</div>
+    </div>
+  `;
+}
+
+function toggleCliKindsExpand(el) {
+  const panel = document.getElementById('prefs-cli-kinds');
+  if (!panel) return;
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? 'flex' : 'none';
+  el.textContent = isHidden ? '收起 →' : ('展开 ' + Object.keys(CLI_KIND_LABELS).length + ' 类 →');
+}
+
+async function updateMuteMode(mode) {
+  let mutedUntil;
+  if (mode === 'off') mutedUntil = null;
+  else if (mode === 'forever') mutedUntil = Date.now() + 50 * 365 * 24 * 3600 * 1000;  // 50 年 ≈ 永久
+  else if (mode === '1h') mutedUntil = Date.now() + 3600 * 1000;
+  else if (mode === '24h') mutedUntil = Date.now() + 24 * 3600 * 1000;
+  else if (mode === '7d') mutedUntil = Date.now() + 7 * 24 * 3600 * 1000;
+  else return;
+  await syncPrefs({ mutedUntil });
+}
+
+async function updateQuietHours() {
+  const start = document.getElementById('prefs-quiet-start').value || null;
+  const end = document.getElementById('prefs-quiet-end').value || null;
+  await syncPrefs({ quietStart: start, quietEnd: end });
+}
+
+async function clearQuietHours() {
+  await syncPrefs({ quietStart: null, quietEnd: null });
+}
+
+async function toggleWebMuteWeak() {
+  if (!_currentPrefs) return;
+  await syncPrefs({ webMuteWeak: !_currentPrefs.webMuteWeak });
+}
+
+async function toggleCliKind(kind) {
+  if (!_currentPrefs) return;
+  const cur = new Set(_currentPrefs.cliDisabledKinds || []);
+  if (cur.has(kind)) cur.delete(kind);
+  else cur.add(kind);
+  await syncPrefs({ cliDisabledKinds: Array.from(cur) });
+}
+
+async function syncPrefs(partial) {
+  try {
+    const { prefs, quietNow } = await apiSetPrefs(partial);
+    _currentPrefs = prefs;
+    renderPrefsPanel(prefs, quietNow);
+    const chip = document.getElementById('prefs-status-chip');
+    if (chip) {
+      chip.textContent = quietNow ? '现在勿扰中' : '没勿扰';
+      chip.style.color = quietNow ? 'var(--vermilion)' : 'var(--moss)';
+    }
+    showToast('改了 · 多台机器都同步');
+  } catch (e) {
+    showToast(e.message);
+  }
 }
 </script>
 </body>
