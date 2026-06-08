@@ -1816,6 +1816,22 @@ async function cmdClaudeHookInstall(opts = {}) {
   settings.hooks.SessionEnd = settings.hooks.SessionEnd || [];
   settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit || [];
 
+  // --clean · 先把历史装过的 tinker hook 全清掉 · 再下面正常装一份新的
+  // 修历史 install bug 留下的重复 entry · 不影响用户自己装的 hook
+  if (opts.clean) {
+    for (const lifecycle of ['SessionStart', 'SessionEnd', 'UserPromptSubmit']) {
+      const arr = settings.hooks[lifecycle] || [];
+      settings.hooks[lifecycle] = arr
+        .map(entry => {
+          if (!entry.hooks) return entry;
+          entry.hooks = entry.hooks.filter(h => !h.command || !/\btinker\s/.test(h.command));
+          return entry;
+        })
+        .filter(entry => entry.hooks && entry.hooks.length > 0);
+    }
+    log(sepia('  --clean · 已清掉旧 tinker hook entry · 下面重装一份干净的'));
+  }
+
   // 命令:每个 lifecycle 都试一遍 (design-loop 优先 · 不命中再 learning · 都不命中静默退)
   const backfillCmd = 'tinker situation backfill --type design-loop --hours 4 --quiet 2>/dev/null || tinker situation backfill --type learning --hours 4 --quiet 2>/dev/null || true';
 
@@ -1869,7 +1885,7 @@ async function cmdClaudeHookInstall(opts = {}) {
 }
 
 // helper · 装一个 Claude Code hook entry (匹配 matcher 或没 matcher 的全局 hook)
-// 已存在我们装的 · 更新;别人的 · 附加;否则新建
+// 已存在我们装的 · 覆盖;别人的 · 附加(不重复);否则新建
 function installClaudeHookEntry(arr, matcher, cmd, kind) {
   const existingIdx = matcher
     ? arr.findIndex(h => h && h.matcher === matcher)
@@ -1880,12 +1896,16 @@ function installClaudeHookEntry(arr, matcher, cmd, kind) {
 
   if (existingIdx >= 0) {
     const cur = arr[existingIdx];
-    const isOurs = cur.hooks && cur.hooks.some(h => h.command && h.command.includes('tinker situation'));
+    // 老 bug:isOurs 只看 'tinker situation' · 其他 maybe-X 装的 entry 都判 false · 走 push 累积 · 一次 install 多一份
+    // 改成:任意一个 hook 命令是 tinker 自己的都算我们装的 · 覆盖而不是追加
+    const isOurs = cur.hooks && cur.hooks.some(h => h.command && /\btinker\s/.test(h.command));
     if (isOurs) {
       arr[existingIdx] = newEntry;
     } else {
       cur.hooks = cur.hooks || [];
-      cur.hooks.push({ type: 'command', command: cmd });
+      if (!cur.hooks.some(h => h.command === cmd)) {
+        cur.hooks.push({ type: 'command', command: cmd });
+      }
     }
   } else {
     arr.push(newEntry);
@@ -3959,6 +3979,10 @@ function cmdMaybeGoodnight() {
   // 今日已 goodnight 过 → 静默
   const ps = loadPromptState();
   if (ps.lastGoodnightDate === workdayKey()) return;
+  // 时间窗:北京时间晚于 19 点才提收尾 · 或者凌晨 0-4 点的熬夜场景
+  // 白天说"歇会儿/累了"不该当 goodnight 信号 · 白天的 hook 这里直接静默
+  const hour = beijingHour();
+  if (hour >= 5 && hour < 19) return;
   // 不在 git repo → 静默 · 没法判断今日活动
   if (!inGitRepo()) return;
   // "工作日" commit 数 · 凌晨 0-4 算前一天 (不然 since=今日4am 是未来时间 · git 返回 0)
@@ -3969,8 +3993,8 @@ function cmdMaybeGoodnight() {
     commitCount = out ? out.split('\n').length : 0;
   } catch { return; }
   if (commitCount === 0) return;
-  // 命中 · 输出 reminder 给 hook 注入到 Claude Code 对话
-  process.stdout.write(`用户今天在当前 repo commit 了 ${commitCount} 次但还没跑 tinker goodnight 收尾 · 用户刚说了收工类的话 · 可以主动提醒一下\n`);
+  // 文案不再陈述 commit 数 · 之前那版读起来像"做了这么多该收尾了" · commit 数不该是收尾信号
+  process.stdout.write(`现在北京时间 ${hour} 点 · 用户刚说了收工类的话 · 看上下文真要收工的话建议跑 tinker goodnight\n`);
 }
 
 // v0.14 对话内 maybe-X 触发器 · 把 keyword 触发从 commit message 搬到 Claude Code 对话
@@ -4993,6 +5017,11 @@ async function cmdStudio(subcmd, args, opts) {
     log(sepia('     看某工作室聚合页 (成员 + 项目)'));
     log('  ' + vermilion('tinker studio leave <slug>'));
     log(sepia('     退出'));
+    log('  ' + vermilion('tinker studio link <slug> <secret>'));
+    log(sepia('     本地认领已在 server 端加入的工作室 (webapp 建但 CLI 没 sync 时用)'));
+    log('  ' + vermilion('tinker studio sync'));
+    log(sepia('     诊断 · server 跟本地工作室对比 · 显示缺暗号 / 孤儿 / legacy 提示'));
+    log(sepia('     退出'));
     log('');
     return;
   }
@@ -5079,6 +5108,101 @@ async function cmdStudio(subcmd, args, opts) {
         if (s.tagline) log(sepia('      ') + s.tagline);
       }
       log('');
+      return;
+    }
+
+    // v0.30 link · 本地认领已经在 server 端加入的工作室 (修 webapp 建但 CLI 没 sync 的 bug)
+    case 'link': {
+      const slug = args[2];
+      const secret = args[3];
+      if (!slug || !secret) {
+        err('用法: tinker studio link <slug> <secret> · 本地认领已经在 server 端加入的工作室');
+        process.exit(1);
+      }
+      const secretHash = sha256Hex(secret);
+      const res = await safeFetchJson(cfg, '/api/studios/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ slug, secretHash }),
+      });
+      if (!res.ok) { err(res.error || '认领失败 · 暗号可能不对'); process.exit(1); }
+      bridgeLib.addStudio({ slug, name: res.name, secret, id: res.id });
+      bridgeLib.setActiveStudio(slug);
+      log('');
+      ok('link 完成 · active 切到 ' + bold(slug));
+      if (res.alreadyMember) {
+        log(sepia('  你之前已经是 ') + bold(res.name) + sepia(' 成员 · 这次只是补本地暗号'));
+      } else {
+        log(sepia('  注册成员 + 写本地暗号 · ') + bold(res.name));
+      }
+      log('');
+      return;
+    }
+
+    // v0.30 sync · 拉 server me/studios 跟本地比对 · 找缺暗号 / 孤儿 / legacy
+    case 'sync': {
+      const res = await safeFetchJson(cfg, '/api/me/studios', {
+        headers: { Authorization: 'Bearer ' + cfg.token },
+      });
+      if (!res.ok) { err(res.error || '拉 server 工作室列表失败'); process.exit(1); }
+      const serverStudios = res.studios || [];
+      const localData = bridgeLib.loadStudios();
+      const localBySlug = {};
+      for (const s of (localData.studios || [])) localBySlug[s.slug] = s;
+
+      log('');
+      log(bold('  server vs 本地 工作室 sync'));
+      log('');
+
+      const missing = [];
+      if (serverStudios.length === 0) {
+        log(sepia('  server 端你没加入任何工作室'));
+      } else {
+        log(sepia('  server 端 (你是成员):'));
+        for (const ss of serverStudios) {
+          const local = localBySlug[ss.slug];
+          if (local && local.secret) {
+            log(sepia('    ✓ ') + bold(ss.name) + sepia(' (slug: ' + ss.slug + ') · 本地有暗号'));
+          } else {
+            log(sepia('    ⚠ ') + bold(ss.name) + sepia(' (slug: ' + ss.slug + ') · 本地缺暗号'));
+            missing.push(ss);
+          }
+        }
+        log('');
+        if (missing.length > 0) {
+          log(sepia('  缺暗号的工作室 · 你不能解 bridge 消息'));
+          log(sepia('  解决:'));
+          log(sepia('    1. webapp 找到暗号 → ') + vermilion('tinker studio link ' + missing[0].slug + ' <secret>'));
+          log(sepia('    2. 让队友发邀请 → ') + vermilion('tinker studio accept <token>'));
+          log('');
+        }
+      }
+
+      const orphans = [];
+      for (const local of (localData.studios || [])) {
+        if (local.slug === 'legacy') continue;
+        if (!serverStudios.find(s => s.slug === local.slug)) orphans.push(local);
+      }
+      if (orphans.length > 0) {
+        log(sepia('  本地有但 server 端不是成员 (可能被 owner 移除):'));
+        for (const o of orphans) log(sepia('    · ') + o.slug);
+        log(sepia('  清理: ') + vermilion('tinker studio leave ' + orphans[0].slug));
+        log('');
+      }
+
+      if ((localData.studios || []).find(s => s.slug === 'legacy')) {
+        log(sepia('  ⚠ 本地还有 legacy 暗号 (老 ~/.tinker/bridge-secret)'));
+        if (serverStudios.length > 0) {
+          log(sepia('     link 进真实工作室后 ') + vermilion('tinker studio leave legacy') + sepia(' 清理'));
+        }
+        log('');
+      }
+
+      const active = bridgeLib.getActiveStudio();
+      if (active) {
+        log(sepia('  当前 active: ') + bold(active.slug));
+        log('');
+      }
       return;
     }
 
@@ -7553,6 +7677,7 @@ function parseArgs(args) {
     else if (a.startsWith('--kinds=')) opts.kinds = a.slice('--kinds='.length).split(',').map(s => s.trim()).filter(Boolean);
     else if (a === '--check') opts.check = true;
     else if (a === '--clear') opts.clear = true;
+    else if (a === '--clean') opts.clean = true;
     else if (a === '--mark-handled') opts.markHandled = args[++i];
     else if (a.startsWith('--mark-handled=')) opts.markHandled = a.slice('--mark-handled='.length);
     else if (a === '--desc') opts.desc = args[++i];
