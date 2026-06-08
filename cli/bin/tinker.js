@@ -862,7 +862,9 @@ async function cmdProjects(opts = {}) {
   mine.forEach(p => {
     const status = p.status === 'active' ? moss('● 在做')
                  : p.status === 'stuck' ? vermilion('● 卡住')
-                 : p.status === 'done' ? moss('✓ 跑通了')
+                 : p.status === 'live' ? moss('✦ 上线 (持续打磨)')
+                 : p.status === 'done' ? sepia('◯ 停手')
+                 : p.status === 'archive' ? sepia('▪ 归档')
                  : sepia('● ' + p.status);
     log('  ' + bold(p.name) + '  ' + status);
     log('  ' + sepia(p.desc));
@@ -992,7 +994,7 @@ async function cmdPush(opts) {
 
   const state = await apiState(cfg);
   const me = cfg.handle;
-  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck'].includes(p.status));
+  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
   if (mine.length === 0) {
     err('你没有 active/stuck 的项目 · 去 ' + cfg.serverUrl + ' 开一个');
     process.exit(1);
@@ -1101,7 +1103,7 @@ async function cmdPushFromDraft(cfg, opts) {
   // 拿项目列表 · 让用户选
   const state = await apiState(cfg);
   const me = cfg.handle;
-  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck'].includes(p.status));
+  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
   if (mine.length === 0) { err('你没有 active/stuck 的项目'); process.exit(1); }
 
   let projectId;
@@ -1164,7 +1166,7 @@ async function cmdPushExperienceDraft(cfg, opts, text, productTag = 'experience'
   if (!text || text.length < 20) { err('草稿内容太短 · ' + productLabel + ' 池要求 ≥ 20 字'); process.exit(1); }
   const state = await apiState(cfg);
   const me = cfg.handle;
-  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck'].includes(p.status));
+  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
   if (mine.length === 0) { err('你没有 active/stuck 的项目'); process.exit(1); }
 
   let projectId;
@@ -1434,7 +1436,7 @@ async function cmdShip(opts) {
     recordPushAt(projectId);
     const wt = (p.reactions && p.reactions.wantToTry) ? p.reactions.wantToTry.length : 0;
     log('');
-    ok(vermilion('✦ 完工 ') + '— ' + bold(p.name));
+    ok(vermilion('✦ 上线了 ') + '— ' + bold(p.name) + sepia(' · status: live (持续打磨中)'));
     log(sepia('  感想: ') + reflection.slice(0, 80) + (reflection.length > 80 ? '…' : ''));
     if (coverNote) log(sepia('  封面: ') + coverNote);
     if (seekingFeedback) log(sepia('  求反馈: ') + (feedbackAsk || '勾上了,没填具体问题'));
@@ -1462,6 +1464,74 @@ async function cmdShip(opts) {
       log('');
       log(sepia('  想要自动起草编年史? 跑 ') + vermilion('tinker login') + sepia(' 配个 LLM key'));
     }
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
+// =====================================================
+// v0.33 freeze / relaunch · 上线产品的"暂停维护 / 重新动起来"
+// =====================================================
+
+// tinker freeze [-p <projectId>] · live → done · 主动暂停维护
+async function cmdFreeze(opts) {
+  const cfg = mustHaveConfig();
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const candidates = state.projects.filter(p => p.owner === me && p.status === 'live');
+  if (candidates.length === 0) { err('你没有 live 状态的项目 (上线后还在维护的) 可以暂停'); process.exit(1); }
+
+  let projectId;
+  if (opts.projectId) {
+    projectId = opts.projectId;
+  } else if (candidates.length === 1) {
+    projectId = candidates[0].id;
+    log(sepia('  自动选了唯一一个 live 项目: ') + bold(candidates[0].name));
+  } else {
+    const { select } = require('@inquirer/prompts');
+    projectId = await select({
+      message: '暂停维护哪个?',
+      choices: candidates.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
+    });
+  }
+
+  try {
+    await apiAction(cfg, 'changeProjectStatus', { projectId, newStatus: 'done' });
+    const p = candidates.find(x => x.id === projectId);
+    log('');
+    ok('◯ 暂停维护 — ' + bold(p.name));
+    log(sepia('  状态: live → done · 想重新动 ') + vermilion('tinker relaunch'));
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
+// tinker relaunch [-p <projectId>] · done → live · 重新动起来
+async function cmdRelaunch(opts) {
+  const cfg = mustHaveConfig();
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const candidates = state.projects.filter(p => p.owner === me && p.status === 'done');
+  if (candidates.length === 0) { err('你没有 done 状态的项目可以重新激活'); process.exit(1); }
+
+  let projectId;
+  if (opts.projectId) {
+    projectId = opts.projectId;
+  } else if (candidates.length === 1) {
+    projectId = candidates[0].id;
+    log(sepia('  自动选了唯一一个 done 项目: ') + bold(candidates[0].name));
+  } else {
+    const { select } = require('@inquirer/prompts');
+    projectId = await select({
+      message: '重新激活哪个?',
+      choices: candidates.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
+    });
+  }
+
+  try {
+    await apiAction(cfg, 'changeProjectStatus', { projectId, newStatus: 'live' });
+    const p = candidates.find(x => x.id === projectId);
+    log('');
+    ok('✦ 重新动起来 — ' + bold(p.name));
+    log(sepia('  状态: done → live · 后续 ') + vermilion('tinker push') + sepia(' 就是上线后迭代'));
     log('');
   } catch (e) { err(e.message); process.exit(1); }
 }
@@ -7484,7 +7554,7 @@ async function cmdFeed(handleArg, opts) {
     log('');
     log(bold('  @' + handle + ' · ' + (userInfo?.name || handle)));
     if (userInfo?.tagline) log(sepia('  ' + userInfo.tagline));
-    const active = projects.filter(p => ['active', 'stuck'].includes(p.status));
+    const active = projects.filter(p => ['active', 'stuck', 'live'].includes(p.status));
     const stuck = projects.filter(p => p.status === 'stuck');
     const done = projects.filter(p => p.status === 'done');
     const parts = [];
@@ -8397,6 +8467,9 @@ async function main() {
       case 'push': await cmdPush(opts); break;
       case 'stuck': await cmdStuck(opts); break;
       case 'ship': await cmdShip(opts); break;
+      // v0.33 已上线产品状态管理
+      case 'freeze': await cmdFreeze(opts); break;
+      case 'relaunch': await cmdRelaunch(opts); break;
       case 'update': await cmdUpdate({ checkOnly: args.includes('--check-only') }); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':

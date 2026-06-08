@@ -229,8 +229,9 @@ function changeProjectStatus({ projectId, newStatus }, { currentUserId }) {
 
   const oldStatus = p.status;
   const now = Date.now();
-  // 首次进 done · 记 shipped_at(以后再 done 不重置 · "ship 时刻"只算第一次)
-  if (newStatus === 'done' && oldStatus !== 'done' && !p.shipped_at) {
+  // 首次进 done / live · 记 shipped_at(以后再切不重置 · "ship 时刻"只算第一次)
+  // v0.33: live 也算 ship 过 · 跟 done 一起进入"shipped_at 有值"的状态
+  if (['done', 'live'].includes(newStatus) && !['done', 'live'].includes(oldStatus) && !p.shipped_at) {
     db.prepare('UPDATE projects SET status = ?, shipped_at = ?, updated_at = ? WHERE id = ?')
       .run(newStatus, now, now, projectId);
   } else {
@@ -297,15 +298,16 @@ function exhibitProject({ projectId, kind, statement, seekingFeedback, feedbackA
   const updateId = 'u-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
-  const wasDone = p.status === 'done';
+  const wasShipped = p.status === 'done' || p.status === 'live';
   const isShipKind = kind === 'ship';
 
   const txn = db.transaction(() => {
     // 第一次进陈列馆 · 记 shipped_at (用作"首次陈列时间")
-    // ship kind 额外把 status 改成 done
-    if (isShipKind && !wasDone) {
+    // v0.33: ship kind 把 status 改成 'live' (上线 + 持续优化) · 不是 'done'
+    // done 现在改成"作者主动停手"的状态 · ship 默认进 live
+    if (isShipKind && !wasShipped) {
       db.prepare('UPDATE projects SET status = ?, shipped_at = ?, updated_at = ? WHERE id = ?')
-        .run('done', p.shipped_at || now, now, projectId);
+        .run('live', p.shipped_at || now, now, projectId);
     } else if (!p.shipped_at) {
       db.prepare('UPDATE projects SET shipped_at = ?, updated_at = ? WHERE id = ?').run(now, now, projectId);
     } else {
