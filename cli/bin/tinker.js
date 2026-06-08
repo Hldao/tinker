@@ -1469,6 +1469,73 @@ async function cmdShip(opts) {
 }
 
 // =====================================================
+// v0.34 edit-ship · 改老 ship update 的感想 / 求反馈
+// 老项目 ship 时的 feedbackAsk 可能过时 · 加这个命令撤回 / 改写
+// =====================================================
+
+// tinker edit-ship [-p <projectId>] [-m "新感想"] [--feedback-ask "..."] [--no-feedback]
+async function cmdEditShip(opts) {
+  const cfg = mustHaveConfig();
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+
+  let projectId = opts.projectId;
+  if (!projectId) {
+    const candidates = state.projects.filter(p => p.owner === me && p.updates.some(u => u.kind === 'ship'));
+    if (candidates.length === 0) { err('你没 ship 过任何项目'); process.exit(1); }
+    if (candidates.length === 1) {
+      projectId = candidates[0].id;
+      log(sepia('  自动选了唯一一个 shipped 项目: ') + bold(candidates[0].name));
+    } else {
+      const { select } = require('@inquirer/prompts');
+      projectId = await select({
+        message: '改哪个项目的完工感想?',
+        choices: candidates.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
+      });
+    }
+  }
+
+  const project = state.projects.find(p => p.id === projectId);
+  if (!project) { err('项目不存在'); process.exit(1); }
+
+  // 找 ship update 的 idx (按 updates 数组顺序 · 跟 server editUpdate 的 updateIdx 对齐)
+  const shipIdx = project.updates.findIndex(u => u.kind === 'ship');
+  if (shipIdx < 0) { err('这个项目没 ship 过'); process.exit(1); }
+  const shipUpdate = project.updates[shipIdx];
+
+  let newText = (opts.text || shipUpdate.text || '').trim();
+  let seekingFeedback;
+  let feedbackAsk;
+
+  if (opts.noFeedback) {
+    seekingFeedback = false;
+    feedbackAsk = '';
+  } else if (opts.feedbackAsk !== undefined) {
+    seekingFeedback = true;
+    feedbackAsk = opts.feedbackAsk;
+  } else {
+    seekingFeedback = shipUpdate.feedbackAsk !== null && shipUpdate.feedbackAsk !== undefined;
+    feedbackAsk = shipUpdate.feedbackAsk || '';
+  }
+
+  try {
+    await apiAction(cfg, 'editUpdate', {
+      projectId,
+      updateIdx: shipIdx,
+      text: newText,
+      seekingFeedback,
+      feedbackAsk,
+    });
+    log('');
+    ok('改好了 — ' + bold(project.name));
+    if (opts.text) log(sepia('  感想已更新'));
+    if (opts.noFeedback) log(sepia('  求反馈撤了 · feedback 横条不再显示'));
+    else if (opts.feedbackAsk !== undefined) log(sepia('  求反馈问题改成: ') + opts.feedbackAsk);
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
+// =====================================================
 // v0.33 freeze / relaunch · 上线产品的"暂停维护 / 重新动起来"
 // =====================================================
 
@@ -8470,6 +8537,8 @@ async function main() {
       // v0.33 已上线产品状态管理
       case 'freeze': await cmdFreeze(opts); break;
       case 'relaunch': await cmdRelaunch(opts); break;
+      // v0.34 改老 ship 感想 / 求反馈
+      case 'edit-ship': await cmdEditShip(opts); break;
       case 'update': await cmdUpdate({ checkOnly: args.includes('--check-only') }); break;
       case 'draft': await cmdDraft(opts); break;
       case 'hook':
