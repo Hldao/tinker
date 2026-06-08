@@ -1836,7 +1836,7 @@ async function cmdClaudeHookInstall(opts = {}) {
 
   // 6 组 maybe-X · 每组 matcher 词从 MAYBE_KINDS 取
   // kind camelCase → shell command kebab-case (cleverFix → clever-fix)
-  const KIND_TO_CMD = { stuck: 'stuck', breakthrough: 'breakthrough', decision: 'decision', subtraction: 'subtraction', cleverFix: 'clever-fix', ship: 'ship', handoff: 'handoff' };
+  const KIND_TO_CMD = { stuck: 'stuck', breakthrough: 'breakthrough', decision: 'decision', subtraction: 'subtraction', cleverFix: 'clever-fix', ship: 'ship', handoff: 'handoff', invite: 'invite' };
   for (const [kind, cfg] of Object.entries(MAYBE_KINDS)) {
     if (!cfg.matcher) continue;
     const cmdName = KIND_TO_CMD[kind];
@@ -1862,6 +1862,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('    UserPromptSubmit clever-fix       · 说搞通 / 跑通类的话'));
   log(sepia('    UserPromptSubmit ship             · 说完工 / 上线类的话'));
   log(sepia('    UserPromptSubmit handoff          · 说接力 / 交接给类的话 · 自动跑 tinker handoff'));
+  log(sepia('    UserPromptSubmit invite           · 说邀请加入类的话 · 自动跑 tinker studio invite'));
   log(sepia('  matcher 命中 → maybe-X 静默判断 → 输出 reminder 注入 AI 上下文 → AI 看上下文决定是否提醒'));
   log('');
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
@@ -4016,6 +4017,11 @@ const MAYBE_KINDS = {
     matcher: '接力|交接给|帮我接力|给.{0,4}接着做|让.{0,4}接|你接一下|你接着做|换人|这个给.{0,4}做|把现场|把这个交给|打包给',
     reminder: '用户对话里像是想 handoff 接力 · 把当前现场打包发给队友。\n看上下文判断是不是真的想交接 · 不是的话别打扰 (单说"接"字不算)。\n是的话主动帮用户跑命令 · 不是只提醒:\n1) 看对话上下文写一句 50-100 字 handoff 说明 · 气质参考: "X 做了一半 · 卡在 Y · 你接着 Z" · 不是产品发布会语气\n2) 找接收方 handle: 从对话里看 (比如"给猫猫" → -t @maomao) · 没指定就走 active studio 广播 (不带 -t)\n3) Bash 跑 `tinker handoff -m "<你写的说明>" [-t @<handle>]`\n4) 命令输出给用户看 · 让用户确认是否真的发了 (handoff 一旦发出去对方就收到 · 没法撤回)',
   },
+  invite: {
+    cooldownMin: 30,
+    matcher: '邀请.{0,4}加入|拉.{0,4}进|拉.{0,4}入|加入.{0,4}(工作室|团队|我们)|让.{0,4}(进|加入)|把.{0,4}拉.{0,4}进|拉一下.{0,4}(进|入)',
+    reminder: '用户对话里像是想邀请队友加入工作室。跟其他 maybe-X 不同 · invite 让你主动跑命令:\n1) 找 slug: 跑 `tinker studio list` 看用户哪个 active · 用 active 的 slug\n2) 找目标 handle: 从对话里看 (比如"邀请猫猫" → @猫猫)\n3) Bash 跑 `tinker studio invite <slug> @<handle>`\n4) 命令自动通过 bridge 投递邀请通知给对方 · 不用复制 token 微信发\n5) 报告用户已发 · 对方 watch 上会收 + 下次起 Claude session 提示一键加入',
+  },
 };
 
 // goodnight matcher · 单独存 (cmdMaybeGoodnight 有自己的判断逻辑 · 不走 MAYBE_KINDS)
@@ -5147,10 +5153,39 @@ async function cmdStudio(subcmd, args, opts) {
       });
       if (!res.ok) { err(res.error || '邀请失败'); process.exit(1); }
 
+      // v0.29 自动通过 bridge 投递邀请通知 · 减少"复制 token 微信发"
+      // payload 走明文 base64 (没暗号 chicken-egg · 接收方还没共享 secret · 解不了普通密文)
+      // server 看到 base64 跟其他密文长一样 · 不能区分
+      let autoSent = false;
+      try {
+        const inviteObj = {
+          type: 'studio-invite',
+          slug,
+          studioName: getRes.studio.name,
+          token,
+          fromHandle: cfg.handle,
+          at: Date.now(),
+        };
+        const invitePayload = Buffer.from(JSON.stringify(inviteObj), 'utf-8').toString('base64');
+        const sendRes = await safeFetchJson(cfg, '/api/bridge/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+          body: JSON.stringify({ to: targetHandle, kind: 'noti', payload: invitePayload }),
+        });
+        autoSent = !!(sendRes && sendRes.ok);
+      } catch { /* bridge 发不出也不阻塞主流程 · token 还能手动发 */ }
+
       log('');
       ok(`邀请生成了 · 给 @${targetHandle} · 24h 内有效`);
-      log('');
-      log(bold('  把这一行发给 @' + targetHandle + ':'));
+      if (autoSent) {
+        log(sepia('  ✓ 已自动通过 bridge 投递到 ta 的 inbox'));
+        log(sepia('  ✓ ta tinker watch 上会自动收到 · 下次起 Claude session 提示一键加入'));
+        log('');
+        log(sepia('  备份方案 (bridge 失效时):'));
+      } else {
+        log('');
+        log(bold('  把这一行发给 @' + targetHandle + ':'));
+      }
       log('');
       log('  ' + vermilion(`tinker studio accept ${token}`));
       log('');
@@ -5344,6 +5379,15 @@ async function cmdBridgeWatch(opts) {
             const obj = JSON.parse(tryDec.plaintext);
             renderInboxMessage(msg, obj, tryDec.studio, inboxDir);
           } catch { /* JSON 坏 · 忽略 */ }
+        } else {
+          // v0.29 fallback: 邀请走明文 base64 (没暗号可解 · 这是设计)
+          try {
+            const plain = Buffer.from(msg.payload, 'base64').toString('utf-8');
+            const obj = JSON.parse(plain);
+            if (obj && obj.type === 'studio-invite') {
+              renderInviteMessage(msg, obj, inboxDir);
+            }
+          } catch { /* 不是 invite · 别的团队的密文 · 忽略 */ }
         }
         since = Math.max(since, msg.seq);
       }
@@ -5392,6 +5436,37 @@ function renderInboxMessage(msg, obj, studio, inboxDir) {
     } catch (e) {
       log(sepia('  ⚠ handoff 解包失败:') + e.message);
     }
+  }
+  log('');
+}
+
+// v0.29 邀请通知 · 走明文 base64 (没暗号可解 · 这是设计)
+// payload = base64 JSON { type:'studio-invite', slug, studioName, token, fromHandle, at }
+function renderInviteMessage(msg, obj, inboxDir) {
+  const ts = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
+  const from = obj.fromHandle || msg.fromHandle;
+  const name = obj.studioName || obj.slug || '(无名工作室)';
+  log('');
+  log(sepia('  ─── ') + ts + sepia(' · @') + from + sepia(' · studio-invite · seq ') + msg.seq);
+  log('  📩 ' + bold('@' + from + ' 邀请你加入 ' + name));
+  log(sepia('     slug: ') + (obj.slug || '?'));
+  log(sepia('     一键加入: ') + vermilion('tinker studio accept ' + (obj.token || '?')));
+
+  const inviteDir = path.join(inboxDir, 'invite-' + msg.id);
+  try {
+    fs.mkdirSync(inviteDir, { recursive: true });
+    fs.writeFileSync(path.join(inviteDir, 'INVITE.json'), JSON.stringify({
+      msgId: msg.id,
+      fromHandle: from,
+      studio: { slug: obj.slug, name: obj.studioName },
+      token: obj.token,
+      at: obj.at || msg.createdAt,
+      seq: msg.seq,
+    }, null, 2));
+    fs.writeFileSync(path.join(inviteDir, 'PENDING'), String(Date.now()));
+    log(sepia('     落地: ') + inviteDir);
+  } catch (e) {
+    log(sepia('  ⚠ 落地 invite 失败:') + e.message);
   }
   log('');
 }
@@ -5508,16 +5583,43 @@ function cmdBridgeCheckInbox() {
   try {
     const dossierLib = require('../lib/dossier');
     const items = dossierLib.listInbox().filter(it => it.pending);
-    if (items.length === 0) return;
-    // stdout 直接写 · 不带颜色 · 给 hook reminder
-    const lines = [];
-    lines.push('收到 ' + items.length + ' 个未处理的 handoff 接力 · 队友把现场打包发过来了');
-    for (const it of items.slice(0, 3)) {
-      lines.push('  · ' + it.id + ' · ' + (it.message || '').slice(0, 80));
-      lines.push('    cat ' + path.join(dossierLib.INBOX_DIR, it.id, 'README.md') + ' 看完整接力说明');
+
+    // v0.29 加 invite 检查 · 走 ~/.tinker/inbox/invite-<msgId>/
+    const invites = [];
+    const INBOX = path.join(CONFIG_DIR, 'inbox');
+    if (fs.existsSync(INBOX)) {
+      for (const d of fs.readdirSync(INBOX)) {
+        if (!d.startsWith('invite-')) continue;
+        if (!fs.existsSync(path.join(INBOX, d, 'PENDING'))) continue;
+        try {
+          const inv = JSON.parse(fs.readFileSync(path.join(INBOX, d, 'INVITE.json'), 'utf-8'));
+          invites.push(inv);
+        } catch {}
+      }
     }
-    if (items.length > 3) lines.push('  ... 还有 ' + (items.length - 3) + ' 个 · tinker inbox 看全部');
-    lines.push('处理完跑 tinker inbox done <id> 标完工');
+
+    if (items.length === 0 && invites.length === 0) return;
+
+    const lines = [];
+    // invite 优先 (跟 handoff 比 · 加入团队是一次性 onboarding)
+    if (invites.length > 0) {
+      lines.push('收到 ' + invites.length + ' 个工作室邀请');
+      for (const inv of invites.slice(0, 3)) {
+        const name = inv.studio?.name || inv.studio?.slug || '(无名)';
+        lines.push('  · @' + inv.fromHandle + ' 邀请你加入 ' + name);
+        lines.push('    一键加入: tinker studio accept ' + inv.token);
+      }
+      lines.push('如果用户确认要加入: Bash 跑 tinker studio accept <token>');
+    }
+    if (items.length > 0) {
+      lines.push('收到 ' + items.length + ' 个未处理的 handoff 接力 · 队友把现场打包发过来了');
+      for (const it of items.slice(0, 3)) {
+        lines.push('  · ' + it.id + ' · ' + (it.message || '').slice(0, 80));
+        lines.push('    cat ' + path.join(dossierLib.INBOX_DIR, it.id, 'README.md') + ' 看完整接力说明');
+      }
+      if (items.length > 3) lines.push('  ... 还有 ' + (items.length - 3) + ' 个 · tinker inbox 看全部');
+      lines.push('处理完跑 tinker inbox done <id> 标完工');
+    }
     console.log(lines.join('\n'));
   } catch { /* hook 出错不阻塞 Claude Code 启动 */ }
 }
@@ -7959,6 +8061,7 @@ async function main() {
       case 'maybe-clever-fix':    cmdMaybe('cleverFix'); return;
       case 'maybe-ship':          cmdMaybe('ship'); return;
       case 'maybe-handoff':       cmdMaybe('handoff'); return;
+      case 'maybe-invite':        cmdMaybe('invite'); return;
       case 'maybe-check':         cmdMaybeCheck(opts); return;
       case 'pending':             cmdPending(opts); return;
       case 'bridge':
