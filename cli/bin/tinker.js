@@ -5226,8 +5226,8 @@ async function cmdPing(opts) {
   const to = opts.toHandle || null;
   const useStudio = !to;
   const positional = opts.positional || [];
-  const title = (opts.title || positional[1] || '').trim();
-  const noteBody = (opts.body || opts.text || positional[2] || '').trim();
+  const title = (opts.title || positional[0] || '').trim();
+  const noteBody = (opts.body || opts.text || positional[1] || '').trim();
   const level = (opts.level || 'info').toLowerCase();
   if (!title) { err('要一句 title · 例: tinker ping "构建挂了" -l urgent'); process.exit(1); }
   if (!['info', 'ok', 'warn', 'urgent'].includes(level)) { err('level 只支持: info / ok / warn / urgent'); process.exit(1); }
@@ -5262,7 +5262,7 @@ async function cmdSend(opts) {
   const secret = activeStudio.secret;
 
   const positional = opts.positional || [];
-  const files = positional.slice(1);
+  const files = positional.slice(0);
   if (files.length === 0) { err('要给至少一个文件 · 例: tinker send foo.md -t @maomao'); process.exit(1); }
   const to = opts.toHandle;
   const useStudio = !to;
@@ -5461,8 +5461,8 @@ async function cmdHandoff(opts) {
 // tinker inbox done <id> · 标已处理
 function cmdInbox(opts) {
   const dossierLib = require('../lib/dossier');
-  const sub = (opts.positional || [])[1];
-  const arg = (opts.positional || [])[2];
+  const sub = (opts.positional || [])[0];
+  const arg = (opts.positional || [])[1];
 
   if (sub === 'done') {
     if (!arg) { err('要给 task id · 例:tinker inbox done msg-xxx'); process.exit(1); }
@@ -7526,10 +7526,12 @@ function parseArgs(args) {
       else opts.unmark = true;
     }
     else if (a.startsWith('--unmark=')) opts.unmark = a.slice('--unmark='.length);
-    // 不以 - 开头的第一个 positional 当成草稿文件路径
-    else if (!a.startsWith('-') && !opts.draftFile) {
-      // 必须是已存在的文件 / 以 .md 结尾
-      if (fs.existsSync(a) || /\.md$/i.test(a)) opts.draftFile = a;
+    // 不以 - 开头的 positional · 全部收集到 opts.positional 数组 (给 ping/send/inbox 等用)
+    // 同时第一个看着像文件路径的设到 opts.draftFile (push <file> 兼容)
+    else if (!a.startsWith('-')) {
+      if (!opts.positional) opts.positional = [];
+      opts.positional.push(a);
+      if (!opts.draftFile && (fs.existsSync(a) || /\.md$/i.test(a))) opts.draftFile = a;
     }
   }
   return opts;
