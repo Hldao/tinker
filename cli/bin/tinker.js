@@ -1440,6 +1440,28 @@ async function cmdShip(opts) {
     if (seekingFeedback) log(sepia('  求反馈: ') + (feedbackAsk || '勾上了,没填具体问题'));
     if (wt > 0) log(sepia('  已通知 ') + bold(wt + '') + sepia(' 个想试试的人'));
     log(sepia('  陈列馆: ') + cfg.serverUrl + '/#/showcase');
+
+    // v0.32 ship 完同步起草项目编年史 · LLM 看 update 流挑节点 · 落到 .tinker/drafts/
+    // 失败静默 · 不阻塞 ship 成功的喜悦 · 用户随时可以手动 tinker timeline draft 重试
+    if (cfg.llm && cfg.llm.apiKey) {
+      log('');
+      log(sepia('  起草编年史中...'));
+      try {
+        const state2 = await apiState(cfg);
+        const shipped = state2.projects.find(x => x.id === projectId);
+        if (shipped) {
+          const draftPath = await draftTimelineForProject(cfg, shipped);
+          log(sepia('  编年史草稿: ') + draftPath);
+          log(sepia('  改完发: ') + vermilion('tinker timeline push ' + projectId + ' ' + draftPath));
+        }
+      } catch (e) {
+        log(sepia('  ⚠ 编年史起草失败: ') + e.message);
+        log(sepia('  随时可以手动重跑: ') + vermilion('tinker timeline draft ' + projectId));
+      }
+    } else {
+      log('');
+      log(sepia('  想要自动起草编年史? 跑 ') + vermilion('tinker login') + sepia(' 配个 LLM key'));
+    }
     log('');
   } catch (e) { err(e.message); process.exit(1); }
 }
@@ -6837,13 +6859,170 @@ async function cmdTimeline(sub, args, opts) {
     return;
   }
 
-  if (opts.json) return errJson('用法: tinker timeline show | push | clear <projectId>', 'UNKNOWN_SUB');
+  if (sub === 'draft') {
+    const projectId = resolveProjectId(args[2]);
+    if (!projectId) {
+      if (opts.json) return errJson('用法: tinker timeline draft <projectId>', 'NO_PROJECT');
+      err('用法: ' + vermilion('tinker timeline draft <projectId>'));
+      process.exit(1);
+    }
+    if (!cfg.llm || !cfg.llm.apiKey) {
+      if (opts.json) return errJson('LLM 没配,跑 tinker login 配一下', 'NO_LLM');
+      err('LLM 没配,跑 ' + vermilion('tinker login') + sepia(' 配一下'));
+      process.exit(1);
+    }
+    const state = await apiState(cfg);
+    const proj = state.projects.find(p => p.id === projectId);
+    if (!proj) {
+      if (opts.json) return errJson('找不到项目: ' + projectId, 'NOT_FOUND');
+      err('找不到项目: ' + projectId); process.exit(1);
+    }
+    try {
+      const draftPath = await draftTimelineForProject(cfg, proj);
+      if (opts.json) return outputJson({ ok: true, projectId, draftPath });
+      ok('编年史草稿起好了');
+      log(sepia('  路径: ') + draftPath);
+      log(sepia('  改完发: ') + vermilion('tinker timeline push ' + projectId + ' ' + draftPath));
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'DRAFT_FAILED');
+      err('起草失败: ' + e.message); process.exit(1);
+    }
+    return;
+  }
+
+  if (opts.json) return errJson('用法: tinker timeline show | draft | push | clear <projectId>', 'UNKNOWN_SUB');
   err('用法:');
   log('  ' + vermilion('tinker timeline show <projectId>') + sepia('              看编年史'));
+  log('  ' + vermilion('tinker timeline draft <projectId>') + sepia('             LLM 起草到 .tinker/drafts/'));
   log('  ' + vermilion('tinker timeline push <projectId> -m "..."') + sepia('     直接 push 一段'));
   log('  ' + vermilion('tinker timeline push <projectId> <file.md>') + sepia('    从草稿文件 push'));
   log('  ' + vermilion('tinker timeline clear <projectId>') + sepia('             清空'));
   process.exit(1);
+}
+
+// v0.32 给 cmdTimelineDraft / cmdShip 用 · 看项目所有 update 挑重要节点 · LLM 起草编年史 markdown · 写到 .tinker/drafts/
+// 返回草稿文件路径 · 失败抛 (调用方决定显不显示给用户)
+async function draftTimelineForProject(cfg, proj) {
+  const updates = proj.updates || [];
+  if (updates.length === 0) throw new Error('这个项目还没 update 可以起编年史');
+
+  // 排序 · 时间正序 (从开张到现在)
+  const sorted = updates.slice().sort((a, b) => a.at - b.at);
+
+  // 挑节点:第一条(开张) + 所有升格(method/experience/learning/decision) + ship 节点
+  // 没升格的项目就只有第一条 + 最后一条,LLM 也能写,但内容会单薄
+  const picked = [];
+  picked.push(sorted[0]);
+  for (const u of sorted) {
+    if (u === sorted[0]) continue;
+    if (u.isMethod || u.isExperience || u.isLearning || u.isDecision || u.kind === 'ship') {
+      picked.push(u);
+    }
+  }
+  // 如果就第一条 · 把最后一条也加上,LLM 至少有两端可参照
+  if (picked.length === 1 && sorted.length > 1) picked.push(sorted[sorted.length - 1]);
+  // 上限 10 个节点 · 太多 LLM 容易写散
+  const nodes = picked.slice(0, 10);
+
+  const nodeLines = nodes.map(u => {
+    const date = new Date(u.at).toISOString().slice(0, 10);
+    const tag = u.isMethod ? '[方法]' : u.isExperience ? '[踩坑]' : u.isLearning ? '[上手]' : u.isDecision ? '[决策]' : (u.kind === 'ship' ? '[完工]' : '');
+    return date + (tag ? ' ' + tag : '') + ' ' + (u.text || '').replace(/\n+/g, ' ').slice(0, 280);
+  }).join('\n\n');
+
+  const fingerprint = loadFingerprint();
+  const prompt = `你帮一个 Tinker 工坊作者起草项目编年史 · 给陌生人看的浓缩版时间线。
+
+项目: ${proj.name}
+描述: ${proj.desc || ''}
+
+作者的 voice fingerprint:
+"""
+${fingerprint}
+"""
+
+关键时刻 (作者标过升格的 update + ship 完工节点 · 按时间正序):
+"""
+${nodeLines}
+"""
+
+输出要求:
+
+1. 时间线 ${Math.min(nodes.length, 8)} 个节点左右 · 每个节点格式 \`YYYY-MM-DD · 一句话事件\` (不超 25 字)
+2. 节点之间空一行
+3. 时间线下面留一段 2-3 句的总结 (项目在做什么 / 跑通了什么 / 最大收获)
+4. 全中文 · 工艺人日志气质 · 不堆中点 · 不用破折号 · 普通话标点
+5. 不像 PM 周报 · 不像产品发布会
+6. 不要写 "##" 这种标题 · 直接节点然后空一行然后总结段
+7. 直接输出 markdown · 不要 \`\`\` 不要 commentary
+
+例子格式 (你要的输出长这样,内容是你写的):
+
+2026-03-12 · 开张 · 决定做 X
+2026-04-02 · 跑通核心循环
+2026-04-20 · 完工
+
+这个项目用了大概两个月,核心想验证 Y。最大的收获是 Z,后面如果要做类似的事,
+会先想清楚 W。`;
+
+  const provider = cfg.llm.provider || 'anthropic';
+  const apiKey = cfg.llm.apiKey;
+  let rawText;
+  if (provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
+    rawText = data.content[0].text.trim();
+    recordLLMUsage(provider, data.usage && (data.usage.input_tokens + data.usage.output_tokens), 'timeline');
+  } else if (provider === 'deepseek') {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'deepseek-chat',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
+    rawText = data.choices[0].message.content.trim();
+    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'timeline');
+  } else if (provider === 'openai') {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'gpt-4o-mini',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
+    rawText = data.choices[0].message.content.trim();
+    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'timeline');
+  } else {
+    throw new Error('不支持的 LLM provider: ' + provider);
+  }
+
+  // 容错 · 剥可能的代码块包裹
+  rawText = rawText.replace(/^```(?:markdown|md)?\s*/, '').replace(/\s*```\s*$/, '');
+
+  // 写文件
+  const draftsDir = path.join(process.cwd(), '.tinker', 'drafts');
+  fs.mkdirSync(draftsDir, { recursive: true });
+  const draftPath = path.join(draftsDir, 'timeline-' + proj.id + '.md');
+  fs.writeFileSync(draftPath, rawText + '\n');
+  return draftPath;
 }
 
 // tinker contribute <updateId> — 标自己一条 update 为方法
