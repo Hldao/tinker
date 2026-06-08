@@ -9667,7 +9667,7 @@ async function submitCreateStudio() {
 
 function copyStudioSecret() {
   if (!lastCreatedStudio) return;
-  navigator.clipboard.writeText(lastCreatedStudio.secret).then(() => showToast('暗号复制了'));
+  safeCopy(lastCreatedStudio.secret, '暗号复制了');
 }
 function closeStudioCreated() {
   closeModal('modal-studio-created');
@@ -9738,7 +9738,7 @@ async function submitInvite() {
 
 function copyInviteToken() {
   if (!lastInviteToken) return;
-  navigator.clipboard.writeText(lastInviteToken).then(() => showToast('token 复制了'));
+  safeCopy(lastInviteToken, 'token 复制了');
 }
 
 function openAcceptInvite(prefillToken) {
@@ -9967,11 +9967,10 @@ GET /api/state · 返回 JSON。
 - 不要写"在做 / 正在 / 努力中",进展是已经发生的事
 - 不要把"自评"行带进 POST 的 text 字段里
 `;
-  navigator.clipboard.writeText(prompt).then(() => {
-    if (el) { const orig = el.textContent; el.textContent = '复制了 ✓'; setTimeout(() => el.textContent = orig, 1800); }
-    showToast(withToken ? '复制了 · 粘到 AI 对话里就能用 · 注意保护钥匙' : '复制了模板 · 钥匙位置需要你手动填');
-  }).catch(() => {
-    showToast('剪贴板拒绝了 · 试试手动复制');
+  safeCopy(prompt,
+    withToken ? '复制了 · 粘到 AI 对话里就能用 · 注意保护钥匙' : '复制了模板 · 钥匙位置需要你手动填',
+    '剪贴板拒绝了 · 试试手动复制').then(ok => {
+    if (ok && el) { const orig = el.textContent; el.textContent = '复制了 ✓'; setTimeout(() => el.textContent = orig, 1800); }
   });
 }
 
@@ -10749,9 +10748,7 @@ function shareProject(platform) {
   const url = location.href;
   const shareText = `${p.name} · ${p.desc} — @${p.owner} on Tinker / 捣鼓`;
   if (platform === 'copy') {
-    navigator.clipboard.writeText(`${shareText}\n${url}`).then(() => {
-      showToast('项目链接已复制 · 可以贴到群里 / 朋友圈');
-    }).catch(() => showToast('复制失败 · 手动复制 ' + url));
+    safeCopy(`${shareText}\n${url}`, '项目链接已复制 · 可以贴到群里 / 朋友圈', '复制失败 · 手动复制 ' + url);
     return;
   }
   if (platform === 'x') {
@@ -10761,9 +10758,7 @@ function shareProject(platform) {
   }
   if (platform === 'xhs') {
     // 小红书没有 web share intent · 复制文案+链接,提示用户粘到笔记
-    navigator.clipboard.writeText(`${shareText}\n${url}`).then(() => {
-      showToast('文案+链接已复制 · 去小红书贴到笔记里就行');
-    }).catch(() => showToast('复制失败 · 手动复制'));
+    safeCopy(`${shareText}\n${url}`, '文案+链接已复制 · 去小红书贴到笔记里就行', '复制失败 · 手动复制');
     setTimeout(() => window.open('https://www.xiaohongshu.com', '_blank', 'noopener'), 700);
     return;
   }
@@ -10780,12 +10775,42 @@ function showWeChatQR(url, title) {
   document.getElementById('modal-wechat-qr').classList.remove('hidden');
 }
 function copyText(el, text) {
-  navigator.clipboard.writeText(text).then(() => {
+  safeCopy(text, null, '复制失败,手动复制').then(ok => {
+    if (!ok) return;
     const orig = el.textContent;
     el.textContent = '已复制';
     setTimeout(() => { el.textContent = orig; }, 1500);
-  }).catch(() => showToast('复制失败,手动复制'));
+  });
 }
+// http+IP (insecure context) 下 navigator.clipboard 是 undefined · 直接调会同步抛 TypeError
+// fallback 走老办法 · 临时 textarea + execCommand('copy')
+async function safeCopy(text, okMsg, errMsg) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      if (okMsg) showToast(okMsg);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) {
+      if (okMsg) showToast(okMsg);
+      return true;
+    }
+  } catch {}
+  showToast(errMsg || '复制失败 · 请手动选中文本复制');
+  return false;
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
