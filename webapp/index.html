@@ -7380,6 +7380,12 @@
       <div class="flex gap-2 flex-wrap" id="np-tools-row"></div>
     </div>
 
+    <div class="mb-5" id="np-studio-row" style="display: none;">
+      <label class="mono text-xs block mb-2" style="color: var(--sepia);">归属 (你在工作室才会出现这一行)</label>
+      <div class="flex gap-2 flex-wrap" id="np-studio-pills"></div>
+      <div class="field-hint">个人作品只在你的工坊页显示 · 工作室作品会出现在工作室聚合页</div>
+    </div>
+
     <div class="flex justify-end gap-4 mt-6">
       <button id="np-cancel-btn" onclick="closeModal('modal-new-project')" class="btn-act" style="border-bottom: none;">取消</button>
       <button id="np-submit-btn" onclick="submitNewProject()" class="btn-act-primary">挂上 · 开始捣鼓</button>
@@ -8421,6 +8427,13 @@ function renderProject(owner, slug) {
       <div class="mb-3 flex items-center gap-3 flex-wrap">
         <span class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">项目 · ${statusText(p.status)}</span>
         ${(() => {
+          // v0.41 归属标记 · 挂在工作室才显示 · 个人作品不加标(避免视觉噪音)
+          if (!p.studioId) return '';
+          const studio = (state.studios || []).find(s => s.id === p.studioId);
+          if (!studio) return '';
+          return `<span class="react-action mono" style="color: var(--vermilion); font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; border-bottom-color: var(--vermilion);" onclick="showScreen('studio','${studio.slug}')">✦ ${escapeHtml(studio.name)} →</span>`;
+        })()}
+        ${(() => {
           const ex = findExhibitUpdate(p);
           if (!ex) return '';
           const cfg = EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship;
@@ -9459,6 +9472,38 @@ function makeSlug(name) {
   return 'p-' + Date.now().toString(36);
 }
 
+// v0.41 项目归属 picker · 给 modal-new-project 用 · 0 工作室不显示这一行
+let npStudioId = null;
+function renderNpStudioRow(currentStudioId) {
+  const row = document.getElementById('np-studio-row');
+  const pillsEl = document.getElementById('np-studio-pills');
+  const myStudios = ((state.users || {})[currentUser.handle] && state.users[currentUser.handle].studios) || [];
+  if (myStudios.length === 0) {
+    row.style.display = 'none';
+    npStudioId = null;
+    return;
+  }
+  row.style.display = '';
+  npStudioId = currentStudioId || null;
+  pillsEl.innerHTML = '';
+  const makePill = (label, value) => {
+    const pill = document.createElement('span');
+    pill.className = 'tools-pill' + (npStudioId === value ? ' selected' : '');
+    pill.textContent = label;
+    pill.onclick = () => {
+      npStudioId = value;
+      pillsEl.querySelectorAll('.tools-pill').forEach(x => x.classList.remove('selected'));
+      pill.classList.add('selected');
+    };
+    return pill;
+  };
+  pillsEl.appendChild(makePill('个人作品', null));
+  myStudios.forEach(s => {
+    const studio = (state.studios || []).find(x => x.slug === s.slug);
+    if (studio) pillsEl.appendChild(makePill(s.name, studio.id));
+  });
+}
+
 async function submitNewProject() {
   const name = document.getElementById('np-name').value.trim();
   const desc = document.getElementById('np-desc').value.trim();
@@ -9478,6 +9523,11 @@ async function submitNewProject() {
         name, desc, productLink: link,
         tools: Array.from(npTools),
       });
+      // v0.41 归属变了 · 单独调 changeProjectStudio · editProject 不动归属字段
+      const currentStudio = updated.studioId || null;
+      if (currentStudio !== npStudioId) {
+        await apiAction('changeProjectStudio', { projectId: editingProjectId, studioId: npStudioId });
+      }
       closeModal('modal-new-project');
       editingProjectId = null;
       renderProject(updated.owner, updated.slug);
@@ -9491,6 +9541,7 @@ async function submitNewProject() {
       name, desc, productLink: link,
       status: npStatus,
       tools: Array.from(npTools),
+      studioId: npStudioId,
     });
     clearDraft('new-project');
     closeModal('modal-new-project');
@@ -10999,6 +11050,9 @@ function openEditProject(projectId) {
   const allTools = new Set([...(state.availableTools || []), ...(p.tools || [])]);
   allTools.forEach(tool => toolsRow.appendChild(makePill(tool, npTools.has(tool))));
 
+  // v0.41 渲染归属 picker · 用当前项目的 studioId 作为默认选中
+  renderNpStudioRow(p.studioId || null);
+
   document.getElementById('modal-new-project').classList.remove('hidden');
   setTimeout(() => document.getElementById('np-name').focus(), 80);
 }
@@ -11098,6 +11152,9 @@ function openNewProject(isFirst) {
     }
   };
   toolsRow.appendChild(customInput);
+
+  // v0.41 渲染归属 picker · 新建项目默认 solo · 用户可在 picker 切到工作室
+  renderNpStudioRow(null);
 
   document.getElementById('modal-new-project').classList.remove('hidden');
   setTimeout(() => document.getElementById('np-name').focus(), 50);
