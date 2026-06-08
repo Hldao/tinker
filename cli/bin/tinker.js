@@ -6019,12 +6019,22 @@ function cmdInbox(opts) {
 
 // 给 SessionStart hook 跑 · 有 PENDING task 则 stdout 注入 reminder
 // Claude Code 看到 stdout 就 load 接力现场
-function cmdBridgeCheckInbox() {
+// v0.38 改: 先去 server 拉一次未消化的消息 · 不依赖 watch
+// 这样接收方不需要挂 watch · SessionStart hook 启动时自动拉 + 注入 Claude
+// 异步触发式协作: daodao 发 → server 中转 → 猫猫起 Claude Code → SessionStart 拉 → Claude 看 reminder
+async function cmdBridgeCheckInbox() {
   try {
+    const recentNotis = [];  // 这次拉到的 ping · inline 进 reminder (不持久化)
+    try {
+      const cfg = loadConfig();
+      if (cfg && cfg.token && cfg.serverUrl && cfg.handle) {
+        await pullBridgeMessagesForHook(cfg, recentNotis);
+      }
+    } catch { /* 拉失败静默 · 下次 hook 重试 */ }
+
     const dossierLib = require('../lib/dossier');
     const items = dossierLib.listInbox().filter(it => it.pending);
 
-    // v0.29 加 invite 检查 · 走 ~/.tinker/inbox/invite-<msgId>/
     const invites = [];
     const INBOX = path.join(CONFIG_DIR, 'inbox');
     if (fs.existsSync(INBOX)) {
@@ -6038,10 +6048,23 @@ function cmdBridgeCheckInbox() {
       }
     }
 
-    if (items.length === 0 && invites.length === 0) return;
+    if (items.length === 0 && invites.length === 0 && recentNotis.length === 0) return;
 
     const lines = [];
-    // invite 优先 (跟 handoff 比 · 加入团队是一次性 onboarding)
+
+    // ping (noti) 优先 · 即时消息 · 用户上次离开后队友发的
+    if (recentNotis.length > 0) {
+      lines.push('收到 ' + recentNotis.length + ' 条新通知 · 用户离开期间队友发的');
+      for (const n of recentNotis.slice(0, 5)) {
+        const tag = n.level === 'urgent' ? '🚨' : n.level === 'warn' ? '⚠' : n.level === 'ok' ? '✓' : '🔔';
+        lines.push('  ' + tag + ' @' + n.fromHandle + ': ' + (n.title || '(无标题)'));
+        if (n.body) lines.push('    ' + n.body.slice(0, 200));
+      }
+      if (recentNotis.length > 5) lines.push('  ... 还有 ' + (recentNotis.length - 5) + ' 条');
+      lines.push('看上下文判断:是真的找你 → 转告用户 / 主动响应 · 还是闲聊性的 → 收下不打扰');
+    }
+
+    // invite (onboarding · 一次性)
     if (invites.length > 0) {
       lines.push('收到 ' + invites.length + ' 个工作室邀请');
       for (const inv of invites.slice(0, 3)) {
@@ -6049,8 +6072,10 @@ function cmdBridgeCheckInbox() {
         lines.push('  · @' + inv.fromHandle + ' 邀请你加入 ' + name);
         lines.push('    一键加入: tinker studio accept ' + inv.token);
       }
-      lines.push('如果用户确认要加入: Bash 跑 tinker studio accept <token>');
+      lines.push('用户确认要加入: Bash 跑 tinker studio accept <token>');
     }
+
+    // handoff task (整包接力)
     if (items.length > 0) {
       lines.push('收到 ' + items.length + ' 个未处理的 handoff 接力 · 队友把现场打包发过来了');
       for (const it of items.slice(0, 3)) {
@@ -6060,8 +6085,75 @@ function cmdBridgeCheckInbox() {
       if (items.length > 3) lines.push('  ... 还有 ' + (items.length - 3) + ' 个 · tinker inbox 看全部');
       lines.push('处理完跑 tinker inbox done <id> 标完工');
     }
+
     console.log(lines.join('\n'));
   } catch { /* hook 出错不阻塞 Claude Code 启动 */ }
+}
+
+// SessionStart hook 用 · 不挂长轮询 · 短超时拉一波就退
+// 拉到的消息按 kind 分流:
+//   task → unpack 到 ~/.tinker/inbox/<msgId>/ · 后续 reminder 引导 Claude
+//   noti (ping) → 累积到 recentNotis · 直接 inline 进 reminder · 不持久化
+//   invite → 落地 ~/.tinker/inbox/invite-<msgId>/
+async function pullBridgeMessagesForHook(cfg, recentNotis) {
+  const bridgeLib = require('../lib/bridge');
+  const dossierLib = require('../lib/dossier');
+  const INBOX = path.join(CONFIG_DIR, 'inbox');
+  if (!fs.existsSync(INBOX)) fs.mkdirSync(INBOX, { recursive: true });
+  const cursorFile = path.join(INBOX, '.cursor');
+  let since = 0;
+  try { since = parseInt(fs.readFileSync(cursorFile, 'utf-8').trim(), 10) || 0; } catch {}
+
+  let resRaw;
+  try {
+    resRaw = await fetch(cfg.serverUrl + '/api/bridge/poll?since=' + since, {
+      headers: { Authorization: 'Bearer ' + cfg.token },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(3500) : undefined,
+    });
+  } catch { return; }
+  if (!resRaw.ok) return;
+  const data = await resRaw.json();
+
+  for (const msg of (data.messages || [])) {
+    const tryDec = bridgeLib.tryDecryptWithAnyStudio(msg.payload);
+    if (tryDec) {
+      try {
+        const obj = JSON.parse(tryDec.plaintext);
+        if (msg.kind === 'task') {
+          try { dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj }); } catch {}
+        } else if (msg.kind === 'noti') {
+          recentNotis.push({
+            fromHandle: msg.fromHandle,
+            title: obj.title || '',
+            body: obj.body || '',
+            level: obj.level || 'info',
+          });
+        }
+        // file kind hook 模式不持久化 · 避免大文件落到本地 · 等用户跑 watch 时再处理
+      } catch {}
+    } else {
+      // fallback: invite 走明文 base64
+      try {
+        const plain = Buffer.from(msg.payload, 'base64').toString('utf-8');
+        const obj = JSON.parse(plain);
+        if (obj && obj.type === 'studio-invite') {
+          const inviteDir = path.join(INBOX, 'invite-' + msg.id);
+          fs.mkdirSync(inviteDir, { recursive: true });
+          fs.writeFileSync(path.join(inviteDir, 'INVITE.json'), JSON.stringify({
+            msgId: msg.id,
+            fromHandle: obj.fromHandle || msg.fromHandle,
+            studio: { slug: obj.slug, name: obj.studioName },
+            token: obj.token,
+            at: obj.at || msg.createdAt,
+            seq: msg.seq,
+          }, null, 2));
+          fs.writeFileSync(path.join(inviteDir, 'PENDING'), String(Date.now()));
+        }
+      } catch {}
+    }
+    since = Math.max(since, msg.seq);
+  }
+  try { fs.writeFileSync(cursorFile, String(since)); } catch {}
 }
 
 async function gateVoiceCheck(text, opts = {}) {
@@ -8849,7 +8941,7 @@ async function main() {
       case 'send': await cmdSend(opts); break;
       case 'handoff': await cmdHandoff(opts); break;
       case 'inbox': cmdInbox(opts); break;
-      case 'bridge-check-inbox': cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用
+      case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'studio':
         await cmdStudio(args[1], args, opts);
         break;
