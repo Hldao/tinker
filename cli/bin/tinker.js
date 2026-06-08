@@ -4872,7 +4872,7 @@ async function maybeAutoPing(triggerResult, repoCfg, cfg) {
 }
 
 // tinker bridge auto-ping --enable/--disable/--status [--kinds ship,stuck] [--to @maomao]
-function cmdBridgeAutoPing(opts) {
+async function cmdBridgeAutoPing(opts) {
   const apCfg = loadAutoPingConfig();
   if (opts.disable) {
     apCfg.enabled = false;
@@ -4883,7 +4883,27 @@ function cmdBridgeAutoPing(opts) {
   if (opts.enable) {
     apCfg.enabled = true;
     if (opts.kinds && opts.kinds.length > 0) apCfg.kinds = opts.kinds;
-    if (opts.toHandle !== undefined) apCfg.toHandle = opts.toHandle || null;
+    if (opts.toHandle !== undefined) {
+      const newHandle = opts.toHandle || null;
+      if (newHandle) {
+        try {
+          const cfg = mustHaveConfig();
+          const state = await apiState(cfg);
+          const allHandles = Object.keys(state.users || {});
+          if (!allHandles.includes(newHandle)) {
+            err('找不到 @' + newHandle + ' · 没保存');
+            if (allHandles.length > 0) {
+              const list = allHandles.slice(0, 20).map(h => '@' + h).join(sepia(' · '));
+              log(sepia('  现有 handles: ') + list);
+            }
+            return;
+          }
+        } catch (e) {
+          log(sepia('  ⚠ handle 校验跳过 (' + (e.message || 'unknown') + ') · 保存原值'));
+        }
+      }
+      apCfg.toHandle = newHandle;
+    }
     saveAutoPingConfig(apCfg);
     const bridgeLib = require('../lib/bridge');
     const hasSecret = bridgeLib.hasSecret();
@@ -6898,6 +6918,7 @@ async function cmdFeed(handleArg, opts) {
   async function fetchEvents() {
     const state = await apiState(cfg);
     const userInfo = (state.users && state.users[handle]) || null;
+    const allHandles = Object.keys(state.users || {});
     const events = [];
     for (const p of state.projects) {
       if (p.owner !== handle) continue;
@@ -6917,7 +6938,7 @@ async function cmdFeed(handleArg, opts) {
       }
     }
     events.sort((a, b) => b.at - a.at);
-    return { userInfo, events, projects: state.projects.filter(p => p.owner === handle) };
+    return { userInfo, events, allHandles, projects: state.projects.filter(p => p.owner === handle) };
   }
 
   function renderHeader(userInfo, projects) {
@@ -6957,10 +6978,18 @@ async function cmdFeed(handleArg, opts) {
     log('');
   }
 
-  let { userInfo, events, projects } = await fetchEvents();
+  let { userInfo, events, projects, allHandles } = await fetchEvents();
   if (!userInfo && projects.length === 0) {
-    if (opts.json) return errJson('找不到 @' + handle, 'NOT_FOUND');
-    err('找不到 @' + handle + ' · 拼写对吗?');
+    if (opts.json) {
+      return outputJson({ ok: false, error: '找不到 @' + handle, code: 'NOT_FOUND',
+        availableHandles: allHandles });
+    }
+    err('找不到 @' + handle);
+    if (allHandles && allHandles.length > 0) {
+      const list = allHandles.slice(0, 20).map(h => '@' + h).join(sepia(' · '));
+      log(sepia('  现有 handles: ') + list
+        + (allHandles.length > 20 ? sepia(' (共 ' + allHandles.length + ' 个)') : ''));
+    }
     process.exit(1);
   }
   if (opts.json) {
@@ -7913,7 +7942,7 @@ async function main() {
       case 'maybe-check':         cmdMaybeCheck(opts); return;
       case 'pending':             cmdPending(opts); return;
       case 'bridge':
-        if (args[1] === 'auto-ping') { cmdBridgeAutoPing(opts); return; }
+        if (args[1] === 'auto-ping') { await cmdBridgeAutoPing(opts); return; }
         err('用法: tinker bridge auto-ping [--enable|--disable|--status] [--kinds X,Y] [--to @who]');
         process.exit(1);
 
