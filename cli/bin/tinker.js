@@ -1792,6 +1792,10 @@ async function cmdClaudeHookInstall(opts = {}) {
   // SessionStart matcher=compact · 用户 /compact 时触发
   installClaudeHookEntry(settings.hooks.SessionStart, 'compact', backfillCmd, 'compact');
 
+  // v0.22 SessionStart (无 matcher · 每次 Claude Code 启动跑) · 看 inbox 有没有未处理 handoff
+  // 有的话 stdout 注入 reminder · 让接收方 Claude 自动 load 接力现场
+  installClaudeHookEntry(settings.hooks.SessionStart, null, 'tinker bridge-check-inbox 2>/dev/null || true', 'bridge-inbox');
+
   // SessionEnd · 用户 Cmd+Q 或 session 终止时触发
   installClaudeHookEntry(settings.hooks.SessionEnd, null, backfillCmd, 'session-end');
 
@@ -1817,6 +1821,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   log('');
   ok('Claude Code hooks 装好了:');
   log(sepia('    SessionStart compact              · /compact 时'));
+  log(sepia('    SessionStart bridge-inbox         · 每次启动 · 看 inbox 有未处理 handoff'));
   log(sepia('    SessionEnd                         · 关 Claude Code / 系统 sleep 时'));
   log(sepia('    UserPromptSubmit pending-check    · 每次用户 prompt · 检查 hook 触发的待处理 reminder'));
   log(sepia('    UserPromptSubmit goodnight        · 说收工类的话'));
@@ -5331,9 +5336,145 @@ function renderInboxMessage(msg, obj, studio, inboxDir) {
       } catch (e) { log(sepia('    ⚠ ') + e.message); }
     }
   } else if (msg.kind === 'task') {
-    log(sepia('  🎯 task (handoff) · v0.23 Phase 2 还在做 · 标题:') + (obj.title || ''));
+    // v0.22 handoff · 落地 dossier 到 ~/.tinker/inbox/<msgId>/
+    try {
+      const dossierLib = require('../lib/dossier');
+      const targetDir = dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj });
+      log(sepia('  🎯 ') + bold('handoff 接力包') + sepia(' · ') + (obj.message || '(无说明)').slice(0, 80));
+      log(sepia('     落地: ') + targetDir);
+      log(sepia('     看 README: ') + vermilion('cat ' + path.join(targetDir, 'README.md')));
+      log(sepia('     处理完: ') + vermilion('tinker inbox done ' + msg.id));
+    } catch (e) {
+      log(sepia('  ⚠ handoff 解包失败:') + e.message);
+    }
   }
   log('');
+}
+
+// =====================================================
+// v0.22 handoff · 把当前现场打包加密发给队友 / 工作室
+// 包含: situation JSON / git diff / voice fingerprint / cwd / repo info
+// =====================================================
+
+// tinker handoff -m "..." [-t @who] [--situation <id>]
+async function cmdHandoff(opts) {
+  const cfg = mustHaveConfig();
+  const bridgeLib = require('../lib/bridge');
+  const dossierLib = require('../lib/dossier');
+  const activeStudio = bridgeLib.getActiveStudio();
+  if (!activeStudio) {
+    err('要先加入工作室才能接力 · tinker studio create / accept');
+    process.exit(1);
+  }
+
+  const message = (opts.text || opts.body || '').trim();
+  if (!message) {
+    err('要给接力说明 · 例:tinker handoff -m "图片压缩做一半 · 剩 webp 转换"');
+    process.exit(1);
+  }
+  const to = opts.toHandle || null;
+  const useStudio = !to;
+
+  let situationId = opts.situation || dossierLib.pickActiveSituationId();
+  if (!situationId) {
+    log(sepia('  没找到 active situation · 不带 situation 也能发 · 接收方只看 git/voice'));
+  }
+
+  const dossier = dossierLib.packDossier({ situationId, message, cwd: process.cwd() });
+  const plain = JSON.stringify(dossier);
+  if (plain.length > 8 * 1024 * 1024) {
+    err('dossier 太大 (' + plain.length + ' 字节) · server 限 10MB · 试 --no-diff (TODO) 或缩小工作树');
+    process.exit(1);
+  }
+  const payload = bridgeLib.encrypt(plain, activeStudio.secret);
+
+  const apiBody = useStudio
+    ? { toStudio: activeStudio.id, kind: 'task', payload }
+    : { to, kind: 'task', payload };
+
+  try {
+    const r = await safeFetchJson(cfg, '/api/bridge/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+      body: JSON.stringify(apiBody),
+    });
+    log('');
+    ok('🎯 handoff 发了 → ' + (useStudio ? bold(activeStudio.name) + sepia(' (工作室广播)') : '@' + to));
+    log(sepia('  说明:    ') + message);
+    log(sepia('  situation: ') + (situationId || sepia('(无)')));
+    log(sepia('  dossier:  ') + plain.length + ' 字节 (含 ' + (dossier.diff ? 'git diff' : '无 diff') + ' / ' + (dossier.voiceFingerprint ? 'voice fingerprint' : '无 voice') + ')');
+    log(sepia('  seq ') + r.seq);
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
+// =====================================================
+// v0.22 inbox · 看 / 处理收到的 handoff task
+// =====================================================
+
+// tinker inbox [<id>] · 列表 / 看详情
+// tinker inbox done <id> · 标已处理
+function cmdInbox(opts) {
+  const dossierLib = require('../lib/dossier');
+  const sub = (opts.positional || [])[1];
+  const arg = (opts.positional || [])[2];
+
+  if (sub === 'done') {
+    if (!arg) { err('要给 task id · 例:tinker inbox done msg-xxx'); process.exit(1); }
+    const ok2 = dossierLib.markInboxDone(arg);
+    if (ok2) ok('标已处理: ' + arg);
+    else err('找不到 PENDING · 可能已处理或 id 错: ' + arg);
+    return;
+  }
+
+  // 看单个 (id 当 sub 传)
+  if (sub && sub !== 'list') {
+    const readmePath = path.join(dossierLib.INBOX_DIR, sub, 'README.md');
+    if (!fs.existsSync(readmePath)) { err('找不到 inbox 项: ' + sub); process.exit(1); }
+    log('');
+    log(fs.readFileSync(readmePath, 'utf-8'));
+    log('');
+    return;
+  }
+
+  // 列表
+  const items = dossierLib.listInbox();
+  log('');
+  if (items.length === 0) {
+    log(sepia('  inbox 空 · 还没收到 handoff task'));
+    log('');
+    return;
+  }
+  for (const it of items) {
+    const tag = it.pending ? vermilion('● 待处理') : sepia('○ 完成 ');
+    const ts = new Date(it.packedAt).toLocaleString('zh-CN', { hour12: false });
+    log('  ' + tag + ' ' + bold(it.id) + sepia(' · ') + ts);
+    log(sepia('    ' + (it.message || '').slice(0, 100)));
+    log('');
+  }
+  log(sepia('  看一个:    ') + vermilion('tinker inbox <id>'));
+  log(sepia('  标处理完:  ') + vermilion('tinker inbox done <id>'));
+  log('');
+}
+
+// 给 SessionStart hook 跑 · 有 PENDING task 则 stdout 注入 reminder
+// Claude Code 看到 stdout 就 load 接力现场
+function cmdBridgeCheckInbox() {
+  try {
+    const dossierLib = require('../lib/dossier');
+    const items = dossierLib.listInbox().filter(it => it.pending);
+    if (items.length === 0) return;
+    // stdout 直接写 · 不带颜色 · 给 hook reminder
+    const lines = [];
+    lines.push('收到 ' + items.length + ' 个未处理的 handoff 接力 · 队友把现场打包发过来了');
+    for (const it of items.slice(0, 3)) {
+      lines.push('  · ' + it.id + ' · ' + (it.message || '').slice(0, 80));
+      lines.push('    cat ' + path.join(dossierLib.INBOX_DIR, it.id, 'README.md') + ' 看完整接力说明');
+    }
+    if (items.length > 3) lines.push('  ... 还有 ' + (items.length - 3) + ' 个 · tinker inbox 看全部');
+    lines.push('处理完跑 tinker inbox done <id> 标完工');
+    console.log(lines.join('\n'));
+  } catch { /* hook 出错不阻塞 Claude Code 启动 */ }
 }
 
 async function gateVoiceCheck(text, opts = {}) {
@@ -7771,6 +7912,9 @@ async function main() {
 
       case 'ping': await cmdPing(opts); break;
       case 'send': await cmdSend(opts); break;
+      case 'handoff': await cmdHandoff(opts); break;
+      case 'inbox': cmdInbox(opts); break;
+      case 'bridge-check-inbox': cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用
       case 'studio':
         await cmdStudio(args[1], args, opts);
         break;

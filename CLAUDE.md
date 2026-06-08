@@ -122,6 +122,35 @@ LLM 工作流:
 
 两条路径**共享同一份 matcher 词典 + 同一份冷却**(写 `~/.tinker/prompt-state.json` 的 `lastMaybeAtByKind`) · 30/60 分钟内同 kind 不会重复触发。不论谁调一次 · 另一条路径都会被节流。
 
+## handoff 接力 (你可能会看到 inbox reminder 注入)
+
+Tinker 工作室成员可以用 `tinker handoff -m "..."` 把当前现场打包加密发给队友。包含:
+
+- situation JSON (lifecycle / signals · 看作者怎么卡进来 / 怎么想的)
+- git repo info + diff (已 unpushed + working tree 改动)
+- 发起方的 voice fingerprint (接力回稿用同样的口吻)
+- 发起方的 cwd
+
+接收方 Claude Code 启动时 · SessionStart hook 跑 `tinker bridge-check-inbox` · 有未处理 task 就 stdout 注入 reminder:
+
+```
+收到 N 个未处理的 handoff 接力 · 队友把现场打包发过来了
+  · msg-xxx · <一句话说明>
+    cat ~/.tinker/inbox/msg-xxx/README.md 看完整接力说明
+处理完跑 tinker inbox done <id> 标完工
+```
+
+看到 reminder 时:
+
+1. `cat ~/.tinker/inbox/<id>/README.md` 看完整接力包说明
+2. 看 `situation.json` 了解发起方卡在哪
+3. 如果需要 · `git apply ~/.tinker/inbox/<id>/diff.patch` 拿到未推改动
+4. 学 `voice-fingerprint.md` 的口吻 · 接力回稿用同样气质
+5. 接着做 · 完了 `tinker push -m "..."` 把进展发回工作室
+6. 跑 `tinker inbox done <id>` 标记 task 关闭 · 下次启动不再提醒
+
+**不要无脑接力**:跟用户确认是不是现在做 · 是不是想接这个 task。reminder 是提示 · 不是命令。
+
 ## post-commit hook 触发的待处理 reminder
 
 git commit 时 · post-commit hook 跑 `tinker check --from-hook --json` 评估 24 个触发器 (clever-fix / tool-combo / ship / decision / ai-limit / ui-session 等) · 命中的会 append 到 `~/.tinker/pending-reminders.jsonl`。
