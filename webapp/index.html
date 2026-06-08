@@ -9089,6 +9089,15 @@ function isValidUrl(s) {
   if (!s) return false;
   return /^https?:\/\/\S+\.\S+/i.test(s.trim());
 }
+// 浏览器地址栏默认藏 https:// · 粘贴出来常常是裸的 example.com/x · 提交时自动补 https://
+// 没"."的让 isValidUrl 自然报错 · 不强补
+function normalizeUrl(s) {
+  if (!s) return s;
+  s = s.trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/\S+\.\S+/.test(s)) return 'https://' + s;
+  return s;
+}
 function makeSlug(name) {
   return 'p-' + Date.now().toString(36);
 }
@@ -9096,7 +9105,8 @@ function makeSlug(name) {
 async function submitNewProject() {
   const name = document.getElementById('np-name').value.trim();
   const desc = document.getElementById('np-desc').value.trim();
-  const link = document.getElementById('np-link').value.trim();
+  const rawLink = document.getElementById('np-link').value.trim();
+  const link = normalizeUrl(rawLink);
 
   if (!name) { showToast('项目得有个名字'); return; }
   if (!desc) { showToast('一句话描述能让别人知道这是什么'); return; }
@@ -9421,10 +9431,11 @@ function openTinkered() {
 }
 async function submitTinkered() {
   const name = document.getElementById('tinkered-name').value.trim();
-  const link = document.getElementById('tinkered-link').value.trim();
+  const link = normalizeUrl(document.getElementById('tinkered-link').value.trim());
   const inspiredByUpdateId = document.getElementById('tinkered-inspired-by').value;
   if (!inspiredByUpdateId) { showToast('挑一条具体启发了你的进展 — 颗粒度精确到那一笔'); return; }
   if (!name || !link) { showToast('名字和链接都要填 — 得真做出来才挂上'); return; }
+  if (!isValidUrl(link)) { showToast('链接得是 http(s):// 开头的网址'); return; }
   const p = projectById(currentTinkeredCtx);
   try {
     await apiAction('submitTinkered', { projectId: p.id, name, link, inspiredByUpdateId });

@@ -13,6 +13,14 @@ function isValidUrl(s) {
   if (!s) return false;
   return /^https?:\/\/\S+\.\S+/i.test(s.trim());
 }
+// 浏览器地址栏默认藏 https:// · 粘出来常常是裸的 example.com/x · server 兜底补 https://
+function normalizeUrl(s) {
+  if (!s) return s;
+  s = s.trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/\S+\.\S+/.test(s)) return 'https://' + s;
+  return s;
+}
 
 // v0.62: state.js 返回 image.src = "/api/image/{id}" · 不再是 data URL
 // 当 webapp re-submit (比如改 ship 仪式) 时, src 是这种相对引用 · 不是新上传
@@ -115,8 +123,8 @@ function renameHandle({ handle }, { currentUserId }) {
 function addProject({ name, desc, productLink, status = 'active', tools = [], githubLink }, { currentUserId }) {
   if (!name || !name.trim()) throw new Error('项目得有个名字');
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
-  // productLink 可选 · 但如果填了必须是合法 https URL(微信小程序 / 桌面应用 / 审核中的项目可以暂时空着)
-  const link = (productLink || '').trim();
+  // productLink 可选 · 但如果填了必须是合法 URL(微信小程序 / 桌面应用 / 审核中的项目可以暂时空着)
+  const link = normalizeUrl((productLink || '').trim());
   if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 http(s):// 开头的可访问链接');
 
   const projectId = 'p-' + Date.now() + Math.random().toString(36).slice(2, 6);
@@ -145,7 +153,7 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
   if (!name || !name.trim()) throw new Error('项目得有个名字');
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
   // productLink 可选 · 但如果填了必须是合法 URL
-  const link = (productLink || '').trim();
+  const link = normalizeUrl((productLink || '').trim());
   if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 http(s):// 开头的可访问链接');
 
   const p = db.prepare('SELECT owner_id, product_link FROM projects WHERE id = ?').get(projectId);
@@ -1052,6 +1060,7 @@ function reactToProject({ projectId, level }, { currentUserId }) {
 
 function submitTinkered({ projectId, name, link, inspiredByUpdateId }, { currentUserId }) {
   if (!name || !name.trim()) throw new Error('你做的项目名字必填');
+  link = normalizeUrl(link);
   if (!isValidUrl(link)) throw new Error('产物链接得是 http(s):// 开头的网址');
   const p = db.prepare('SELECT owner_id, name FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
