@@ -248,11 +248,18 @@ function buildState({ targetUserId } = {}) {
   const starters = db.prepare('SELECT title, prompt, tool_name AS toolName, tool_url AS toolUrl, category FROM starters ORDER BY position').all();
   const availableTools = db.prepare('SELECT tool FROM available_tools ORDER BY position').all().map(r => r.tool);
 
+  // v0.41 暴露所有 studio 列表 · 给 cli/webapp 项目归属 picker 用
+  // 不含成员列表 (那个走 studioGet 单独拿) · 只给 id/slug/name 这层够用
+  const studiosOut = db.prepare(`
+    SELECT id, slug, name, tagline FROM studios ORDER BY created_at ASC
+  `).all();
+
   return {
     users: usersOut,
     projects: projectsOut,
     methods: methodsOut,
     notifications: notificationsOut,
+    studios: studiosOut,
     starters,
     availableTools,
   };

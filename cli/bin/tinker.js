@@ -7040,9 +7040,25 @@ async function cmdProject(sub, projectIdArg, opts) {
   const cfg = mustHaveConfig();
   if (sub === 'new') {
     if (!opts.name || !opts.desc) {
-      if (opts.json) return errJson('用法: tinker project new --name "..." --desc "..." [--link <url>] [--tool x --tool y]', 'MISSING_ARGS');
-      err('用法: ' + vermilion('tinker project new --name "..." --desc "..."') + sepia(' [--link <url>] [--tool x --tool y]'));
+      if (opts.json) return errJson('用法: tinker project new --name "..." --desc "..." [--link <url>] [--tool x --tool y] [--studio <slug>]', 'MISSING_ARGS');
+      err('用法: ' + vermilion('tinker project new --name "..." --desc "..."') + sepia(' [--link <url>] [--tool x --tool y] [--studio <slug>]'));
       process.exit(1);
+    }
+    // v0.41 归属 · 显式给 --studio 就挂 · --solo 强制 solo · 都没给默认 solo (但成功后提示)
+    let studioId = null;
+    const state = await apiState(cfg);
+    const myStudios = ((state.users || {})[cfg.handle] && state.users[cfg.handle].studios) || [];
+    if (opts.studio) {
+      const targetSlug = String(opts.studio).replace(/^@/, '').trim();
+      const mine = myStudios.find(s => s.slug === targetSlug);
+      if (!mine) {
+        if (opts.json) return errJson('你不是工作室 ' + targetSlug + ' 的成员', 'NOT_MEMBER');
+        err('你不是工作室 ' + bold(targetSlug) + ' 的成员');
+        process.exit(1);
+      }
+      const found = (state.studios || []).find(s => s.slug === targetSlug);
+      if (!found) { err('找不到工作室 id: ' + targetSlug); process.exit(1); }
+      studioId = found.id;
     }
     try {
       const r = await apiAction(cfg, 'addProject', {
@@ -7050,12 +7066,22 @@ async function cmdProject(sub, projectIdArg, opts) {
         desc: opts.desc,
         productLink: opts.link || '',
         tools: opts.tools || [],
+        studioId,
       });
       const newProj = r && r.result;
       if (opts.json) return outputJson({ ok: true, project: newProj });
       ok('项目建好了');
       if (newProj && newProj.id) log(sepia('  projectId: ') + newProj.id);
       if (newProj && newProj.slug) log(sepia('  去看: ') + cfg.serverUrl + '/#/p/' + cfg.handle + '/' + newProj.slug);
+      if (studioId) {
+        log(sepia('  归属: ') + bold(opts.studio) + sepia(' 工作室'));
+      } else if (myStudios.length > 0 && !opts.solo) {
+        // 没传 --studio 也没 --solo · 默认 solo · 但提示一下用户有工作室可以挂
+        log('');
+        log(sepia('  这是个人作品 · 想挂到工作室跑 ') + vermilion('tinker project attribute ' + (newProj && newProj.id) + ' --studio <slug>'));
+        log(sepia('  你的工作室:'));
+        myStudios.forEach(s => log(sepia('    · ' + s.slug + ' (' + s.name + ')')));
+      }
     } catch (e) {
       if (opts.json) return errJson(e.message, 'CREATE_FAILED');
       err(e.message); process.exit(1);
@@ -7102,8 +7128,57 @@ async function cmdProject(sub, projectIdArg, opts) {
     }
     return;
   }
-  if (opts.json) return errJson('用法: tinker project new | edit <projectId>', 'UNKNOWN_SUB');
-  err('用法: ' + vermilion('tinker project new') + sepia(' / ') + vermilion('tinker project edit <projectId>'));
+  if (sub === 'attribute') {
+    // tinker project attribute <projectId> --studio <slug>  挂到工作室
+    // tinker project attribute <projectId> --solo            拿回个人作品
+    const projectId = resolveProjectId(projectIdArg);
+    if (!projectId) {
+      if (opts.json) return errJson('用法: tinker project attribute <projectId> --studio <slug> 或 --solo', 'NO_PROJECT');
+      err('用法: ' + vermilion('tinker project attribute <projectId>') + sepia(' --studio <slug> 或 --solo'));
+      process.exit(1);
+    }
+    if (!opts.solo && !opts.studio) {
+      if (opts.json) return errJson('给一个: --studio <slug> 或 --solo', 'NO_FIELD');
+      err('给一个: ' + vermilion('--studio <slug>') + sepia(' 或 ') + vermilion('--solo'));
+      process.exit(1);
+    }
+    let studioId = null;
+    if (opts.studio) {
+      const state = await apiState(cfg);
+      const mine = ((state.users || {})[cfg.handle] && state.users[cfg.handle].studios) || [];
+      const targetSlug = String(opts.studio).replace(/^@/, '').trim();
+      const matched = mine.find(s => s.slug === targetSlug);
+      if (!matched) {
+        if (opts.json) return errJson('你不是工作室 ' + targetSlug + ' 的成员', 'NOT_MEMBER');
+        err('你不是工作室 ' + bold(targetSlug) + ' 的成员');
+        if (mine.length === 0) log(sepia('  你还没加入任何工作室'));
+        else { log(sepia('  你所属的工作室:')); mine.forEach(s => log(sepia('    · ' + s.slug + ' (' + s.name + ')'))); }
+        process.exit(1);
+      }
+      const allStudios = state.studios || [];
+      const found = allStudios.find(s => s.slug === targetSlug);
+      if (!found) {
+        if (opts.json) return errJson('找不到工作室 id: ' + targetSlug, 'NO_STUDIO');
+        err('找不到工作室 id: ' + targetSlug); process.exit(1);
+      }
+      studioId = found.id;
+    }
+    try {
+      await apiAction(cfg, 'changeProjectStudio', { projectId, studioId });
+      if (opts.json) return outputJson({ ok: true, projectId, studioId });
+      ok(studioId ? '挂上工作室了 · ' + bold(opts.studio) : '改回个人作品了');
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'ATTRIBUTE_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+
+  if (opts.json) return errJson('用法: tinker project new | edit | attribute <projectId>', 'UNKNOWN_SUB');
+  err('用法:');
+  log('  ' + vermilion('tinker project new --name "..." --desc "..." [--studio <slug>]'));
+  log('  ' + vermilion('tinker project edit <projectId>') + sepia(' [--name --desc --link --tool]'));
+  log('  ' + vermilion('tinker project attribute <projectId>') + sepia(' --studio <slug> 或 --solo'));
   process.exit(1);
 }
 
@@ -8383,6 +8458,9 @@ function parseArgs(args) {
     else if (a.startsWith('--server=')) opts.server = a.slice('--server='.length);
     else if (a === '--token') opts.token = args[++i];
     else if (a.startsWith('--token=')) opts.token = a.slice('--token='.length);
+    else if (a === '--studio') opts.studio = args[++i];
+    else if (a.startsWith('--studio=')) opts.studio = a.slice('--studio='.length);
+    else if (a === '--solo') opts.solo = true;
     else if (a === '--mark-handled') opts.markHandled = args[++i];
     else if (a.startsWith('--mark-handled=')) opts.markHandled = a.slice('--mark-handled='.length);
     else if (a === '--desc') opts.desc = args[++i];
