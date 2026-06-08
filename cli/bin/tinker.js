@@ -5656,6 +5656,69 @@ function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, '
 // 默认广播到 active studio · -t @who 点对点
 // =====================================================
 
+// v0.49 outbox · 本地落地所有 outbound 走 bridge 的命令
+// 解 server poll API 设计 gap (只返 inbox · 不返 outbox)
+// 文件: ~/.tinker/outbox/<YYYY-MM-DD>.jsonl · 一行一条
+function appendOutbox(entry) {
+  try {
+    const dir = path.join(CONFIG_DIR, 'outbox');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const date = new Date(entry.at || Date.now()).toISOString().slice(0, 10);
+    const file = path.join(dir, date + '.jsonl');
+    fs.appendFileSync(file, JSON.stringify({ at: Date.now(), ...entry }) + '\n');
+  } catch { /* outbox 落地失败不能阻塞主流程 */ }
+}
+
+// tinker outbox [--days N] [--to @who] [--kind ping|send|handoff|witness-publish] [--json]
+function cmdOutbox(opts) {
+  const dir = path.join(CONFIG_DIR, 'outbox');
+  if (!fs.existsSync(dir)) {
+    log(sepia('  outbox 空 · v0.49 之前发的找不回 (server poll 不返自己发的)'));
+    return;
+  }
+  const days = opts.daysBack || 1;
+  const cutoff = Date.now() - days * 86400000;
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.jsonl')).sort().reverse();
+  const entries = [];
+  for (const f of files) {
+    try {
+      const lines = fs.readFileSync(path.join(dir, f), 'utf-8').split('\n').filter(Boolean);
+      for (const line of lines) {
+        try {
+          const e = JSON.parse(line);
+          if (e.at < cutoff) continue;
+          if (opts.toHandle && e.to !== opts.toHandle) continue;
+          if (opts.kind && e.kind !== opts.kind) continue;
+          entries.push(e);
+        } catch {}
+      }
+    } catch {}
+  }
+  entries.sort((a, b) => b.at - a.at);
+  if (opts.json) { outputJson({ ok: true, entries }); return; }
+  log('');
+  log(bold('  outbox · 我发出去的私信 (近 ' + days + ' 天)'));
+  log('');
+  if (entries.length === 0) {
+    log(sepia('  空 · 范围内没发过 (或者 v0.49 之前 · outbox 没装)'));
+    log('');
+    return;
+  }
+  for (const e of entries) {
+    const ts = new Date(e.at).toLocaleString('zh-CN', { hour12: false }).slice(5);
+    const tag = e.kind === 'ping' ? '🔔' : e.kind === 'send' ? '📎' : e.kind === 'handoff' ? '🎯' : e.kind === 'witness-publish' ? '✦' : '·';
+    const target = e.to ? ('@' + e.to) : e.toStudio ? ('studio:' + e.toStudio) : '(广播)';
+    log('  ' + tag + ' ' + ts + sepia(' → ') + target + sepia(' · ') + e.kind);
+    if (e.title) log(sepia('     ') + e.title);
+    if (e.body) log(sepia('     ') + e.body.slice(0, 100));
+    if (e.message) log(sepia('     说明: ') + e.message);
+    if (e.updateId) log(sepia('     update: ') + e.updateId);
+    if (e.files) log(sepia('     files: ') + e.files.join(', '));
+    if (e.seq) log(sepia('     seq ') + e.seq);
+    log('');
+  }
+}
+
 async function cmdPing(opts) {
   const cfg = mustHaveConfig();
   const bridgeLib = require('../lib/bridge');
@@ -5694,6 +5757,7 @@ async function cmdPing(opts) {
     if (noteBody) log(sepia('  ' + noteBody.slice(0, 200)));
     log(sepia('  seq ') + r.seq + sepia(' · id ') + r.id);
     log('');
+    appendOutbox({ kind: 'ping', to: to || null, toStudio: useStudio ? activeStudio.slug : null, title, body: noteBody, level, msgId: r.id, seq: r.seq });
   } catch (e) { err(e.message); process.exit(1); }
 }
 
@@ -5740,6 +5804,7 @@ async function cmdSend(opts) {
     for (const it of items) log(sepia('    · ') + it.name + sepia(' (' + it.size + ' 字节)'));
     log(sepia('  seq ') + r.seq);
     log('');
+    appendOutbox({ kind: 'send', to: to || null, toStudio: useStudio ? activeStudio.slug : null, files: items.map(it => it.name), totalSize, message: opts.text || '', msgId: r.id, seq: r.seq });
   } catch (e) { err(e.message); process.exit(1); }
 }
 
@@ -5933,6 +5998,7 @@ async function cmdHandoff(opts) {
     log(sepia('  dossier:  ') + plain.length + ' 字节 (含 ' + (dossier.diff ? 'git diff' : '无 diff') + ' / ' + (dossier.voiceFingerprint ? 'voice fingerprint' : '无 voice') + ')');
     log(sepia('  seq ') + r.seq);
     log('');
+    appendOutbox({ kind: 'handoff', to: to || null, toStudio: useStudio ? activeStudio.slug : null, message, situationId, dossierBytes: plain.length, msgId: r.id, seq: r.seq });
   } catch (e) { err(e.message); process.exit(1); }
 }
 
@@ -6556,6 +6622,7 @@ async function cmdWitnessPublish(opts) {
       });
       log(sepia('  ✓ 广播到 ') + bold(activeStudio.name));
       log(sepia('  队友 SessionStart 时 reminder 注入 · 她 Claude 决定回不回'));
+      appendOutbox({ kind: 'witness-publish', toStudio: activeStudio.slug, title: 'witness: ' + content.split('\n')[0].slice(0, 60), updateId, hasContext: !!transcript, contextBytes: transcript ? transcript.length : 0 });
     } catch (e) { log(sepia('  ⚠ 广播失败:') + e.message); }
   }
   log('');
@@ -9648,6 +9715,7 @@ async function main() {
       case 'team-knowledge': await cmdTeamKnowledge(opts); break;
       case 'witness': await cmdWitness(opts); break;
       case 'inbox': cmdInbox(opts); break;
+      case 'outbox': cmdOutbox(opts); break;  // v0.49 我发出去的私信
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'studio':
         await cmdStudio(args[1], args, opts);
