@@ -3940,53 +3940,17 @@ function getClaudeCodeUsageToday(opts = {}) {
     }
   } catch { return null; }
 
-  if (totalMessages === 0) return { messages: 0, models: {}, sessions: 0, totalUsd: 0, totalRmb: 0 };
+  if (totalMessages === 0) return { messages: 0, models: {}, sessions: 0 };
 
-  // 估算成本 · USD per million tokens
-  // Anthropic 官网公开定价 (2026 标准 200K context 版本):
-  //   Opus 4: $15 input / $75 output · cache write 1.25x input · cache read 10% input
-  //   Sonnet 4: $3 input / $15 output
-  //   Haiku 4: $0.8 input / $4 output
-  // 1M context 版本 (claude-opus-4-7 / claude-sonnet-4-6 等带 "1m" / 高版本号) 标准 2x:
-  //   Opus 1M: $30 input / $150 output
-  // 这里按 model 名字推断 · 不准时按 standard 算 · 用户可以认为是 "下限估算"
-  const PRICING = {
-    opus: { input: 15, output: 75, cacheCreate: 18.75, cacheRead: 1.5 },
-    opus1m: { input: 30, output: 150, cacheCreate: 37.5, cacheRead: 3.0 },
-    sonnet: { input: 3, output: 15, cacheCreate: 3.75, cacheRead: 0.3 },
-    sonnet1m: { input: 6, output: 30, cacheCreate: 7.5, cacheRead: 0.6 },
-    haiku: { input: 0.8, output: 4, cacheCreate: 1, cacheRead: 0.08 },
-  };
-  function priceFor(modelStr) {
-    const s = (modelStr || '').toLowerCase();
-    // claude-opus-4-7 / claude-opus-4-8 等高版本走 1M 价 (1M context premium)
-    if (s.includes('opus')) {
-      const m = s.match(/opus-(\d+)-(\d+)/);
-      if (m && parseInt(m[2], 10) >= 5) return PRICING.opus1m;
-      return PRICING.opus;
-    }
-    if (s.includes('sonnet')) {
-      const m = s.match(/sonnet-(\d+)-(\d+)/);
-      if (m && parseInt(m[2], 10) >= 5) return PRICING.sonnet1m;
-      return PRICING.sonnet;
-    }
-    if (s.includes('haiku')) return PRICING.haiku;
-    return PRICING.sonnet; // 兜底
-  }
-  let totalUsd = 0;
-  for (const [model, u] of Object.entries(byModel)) {
-    const p = priceFor(model);
-    totalUsd += (u.input * p.input + u.output * p.output + u.cacheCreate * p.cacheCreate + u.cacheRead * p.cacheRead) / 1000000;
-  }
-  // 汇率按 7.2 估算 (人民币)
-  const totalRmb = totalUsd * 7.2;
+  // v0.40 砍掉成本估算 · 之前按 Anthropic 标准价 + 1M context premium + 汇率乘 7.2 算出来的数
+  // 跟用户在 Anthropic console 看到的实际账单差得太远 (cache 读单价 1/10 是已扣折扣 ·
+  // 加上各种企业 / 教育 / 量级折扣不可预测)。误导用户比不报更差,直接砍。
+  // 想看真账单去 https://console.anthropic.com/settings/usage
 
   return {
     messages: totalMessages,
     models: byModel,
     sessions: sessionFiles.size,
-    totalUsd: totalUsd,
-    totalRmb: totalRmb,
   };
 }
 
@@ -4106,14 +4070,18 @@ async function cmdGoodnight(opts = {}) {
   // Claude Code 今日 token 用量 (复用上面 ccUsageEarly · 避免重新扫一遍 jsonl)
   const ccUsage = ccUsageEarly;
   if (ccUsage && ccUsage.messages > 0) {
+    // v0.40 token 紧凑显示 · < 1k 原数 · < 1M 用 k · ≥ 1M 用 M · 一位小数
+    const fmtTok = (n) => {
+      if (n < 1000) return String(n);
+      if (n < 1000000) return (n / 1000).toFixed(1) + 'k';
+      return (n / 1000000).toFixed(1) + 'M';
+    };
     log('  ' + bold('Coding 跟 AI'));
     log(sepia('    Claude Code ') + bold(ccUsage.messages + ' 条 assistant') + sepia(' · 跨 ') + bold(ccUsage.sessions + ' 个 session'));
-    // 按 model 分行
     for (const [model, u] of Object.entries(ccUsage.models)) {
       const totalInput = u.input + u.cacheCreate + u.cacheRead;
-      log(sepia('      · ') + model + sepia(' · 入 ') + sepia(totalInput.toLocaleString()) + sepia(' (') + sepia('cache 读 ' + u.cacheRead.toLocaleString()) + sepia(') · 出 ') + sepia(u.output.toLocaleString()));
+      log(sepia('      · ') + model + sepia(' · 入 ') + bold(fmtTok(totalInput)) + sepia(' (cache 读 ') + sepia(fmtTok(u.cacheRead)) + sepia(') · 出 ') + bold(fmtTok(u.output)));
     }
-    log(sepia('    估算成本 $') + bold(ccUsage.totalUsd.toFixed(2)) + sepia(' ≈ ¥') + bold(ccUsage.totalRmb.toFixed(2)) + sepia(' (粗略 · 实际看 Anthropic console)'));
     log('');
   }
 
