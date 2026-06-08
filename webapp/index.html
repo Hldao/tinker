@@ -9101,7 +9101,7 @@ async function submitNewProject() {
   if (!name) { showToast('项目得有个名字'); return; }
   if (!desc) { showToast('一句话描述能让别人知道这是什么'); return; }
   // 链接可选(微信小程序 / 桌面应用 / 审核中的作品可以暂时空着) · 但填了就得是合法 URL
-  if (link && !isValidUrl(link)) { showToast('如果填了链接, 得是 https:// 开头的'); return; }
+  if (link && !isValidUrl(link)) { showToast('如果填了链接, 得是 http(s):// 开头的网址'); return; }
 
   // 编辑模式: 走 editProject · 不走 addProject
   if (editingProjectId) {

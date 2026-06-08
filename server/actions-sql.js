@@ -117,7 +117,7 @@ function addProject({ name, desc, productLink, status = 'active', tools = [], gi
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
   // productLink 可选 · 但如果填了必须是合法 https URL(微信小程序 / 桌面应用 / 审核中的项目可以暂时空着)
   const link = (productLink || '').trim();
-  if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 https:// 开头的可访问链接');
+  if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 http(s):// 开头的可访问链接');
 
   const projectId = 'p-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const slug = makeSlug();
@@ -146,7 +146,7 @@ function editProject({ projectId, name, desc, productLink, tools }, { currentUse
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
   // productLink 可选 · 但如果填了必须是合法 URL
   const link = (productLink || '').trim();
-  if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 https:// 开头的可访问链接');
+  if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 http(s):// 开头的可访问链接');
 
   const p = db.prepare('SELECT owner_id, product_link FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
@@ -1052,7 +1052,7 @@ function reactToProject({ projectId, level }, { currentUserId }) {
 
 function submitTinkered({ projectId, name, link, inspiredByUpdateId }, { currentUserId }) {
   if (!name || !name.trim()) throw new Error('你做的项目名字必填');
-  if (!isValidUrl(link)) throw new Error('产物链接必须是 https://');
+  if (!isValidUrl(link)) throw new Error('产物链接得是 http(s):// 开头的网址');
   const p = db.prepare('SELECT owner_id, name FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
 
