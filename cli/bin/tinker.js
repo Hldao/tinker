@@ -6493,9 +6493,13 @@ async function cmdWitnessPublish(opts) {
       log(transcript.slice(0, 800) + (transcript.length > 800 ? '\n... 共 ' + sizeKB + 'KB' : ''));
       log(sepia('  ─── 共 ') + sizeKB + sepia(' KB ───'));
       log('');
-      const { confirm } = require('@inquirer/prompts');
-      const yes = await confirm({ message: 'context 看起来 OK · 加进 witness 一起广播?', default: true });
-      if (!yes) { transcript = null; log(sepia('  跳过 context · 只发 witness 主体')); }
+      if (process.stdout.isTTY) {
+        const { confirm } = require('@inquirer/prompts');
+        const yes = await confirm({ message: 'context 看起来 OK · 加进 witness 一起广播?', default: true });
+        if (!yes) { transcript = null; log(sepia('  跳过 context · 只发 witness 主体')); }
+      } else {
+        log(sepia('  (非 TTY · 默认接受 context · 加进 witness)'));
+      }
     }
   }
 
