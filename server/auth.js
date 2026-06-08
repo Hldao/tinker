@@ -299,6 +299,40 @@ function completeWelcome({ userId, handle, tagline }) {
   return db.prepare('SELECT id, handle, email, name, tagline FROM users WHERE id = ?').get(userId);
 }
 
+// ============================================
+// 7. Dev 旁路登录 · 仅 development · 跳过邮件
+// ============================================
+function devLogin({ email, userAgent }) {
+  email = (email || '').trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw new Error('邮箱格式不对');
+  }
+  let user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  let isNew = false;
+  let userId;
+  if (user) {
+    userId = user.id;
+  } else {
+    userId = db.uuidv7();
+    const handle = findUniqueHandle(deriveHandle(email));
+    const now = Date.now();
+    db.prepare(`INSERT INTO users
+      (id, handle, email, name, tagline, created_at, updated_at)
+      VALUES (?, ?, ?, ?, NULL, ?, ?)`).run(
+      userId, handle, email, handle, now, now
+    );
+    isNew = true;
+  }
+  const sessionId = db.randomToken(32);
+  const now = Date.now();
+  db.prepare(`INSERT INTO sessions
+    (id, user_id, created_at, expires_at, last_seen_at, user_agent)
+    VALUES (?, ?, ?, ?, ?, ?)`).run(
+    sessionId, userId, now, now + SESSION_TTL_MS, now, (userAgent || 'dev-login').slice(0, 200)
+  );
+  return { sessionId, userId, isNew };
+}
+
 module.exports = {
   checkHandleAvailability,
   sendMagicLink,
@@ -311,6 +345,7 @@ module.exports = {
   createApiToken,
   listApiTokens,
   revokeApiToken,
+  devLogin,
   COOKIE_NAME,
   SESSION_TTL_MS,
 };

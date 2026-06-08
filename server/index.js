@@ -204,6 +204,32 @@ app.get('/api/auth/verify', (req, res) => {
   }
 });
 
+// Dev 旁路登录 · 跳过邮件 · 直接 setCookie · 仅 development 启用
+// 生产环境 (NODE_ENV=production) 直接返回 404 · 不暴露
+app.post('/api/auth/dev-login', (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ error: '不存在的接口' });
+  }
+  try {
+    const { email } = req.body || {};
+    const { sessionId, isNew } = auth.devLogin({
+      email,
+      userAgent: req.get('user-agent'),
+    });
+    res.cookie(auth.COOKIE_NAME, sessionId, {
+      httpOnly: true,
+      secure: req.secure,
+      sameSite: 'lax',
+      maxAge: auth.SESSION_TTL_MS,
+      path: '/',
+    });
+    res.json({ ok: true, isNew });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'dev-login failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // 当前 session · 给 webapp 用 (开机查一次知道登录态)
 app.get('/api/auth/me', (req, res) => {
   if (!req.user) return res.status(401).json({ error: '未登录' });

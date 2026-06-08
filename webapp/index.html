@@ -5120,6 +5120,113 @@
     letter-spacing: 0.04em;
   }
 
+  /* —— v0.30 §3 工坊头部重塑 —— */
+  .workshop-account-link {
+    position: absolute; top: 0; right: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border-bottom: 1px dotted var(--rule);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .workshop-account-link:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .workshop-bench {
+    margin-top: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--sepia);
+    letter-spacing: 0.06em;
+  }
+  .workshop-bench .num {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    padding: 0 2px;
+  }
+  .workshop-tools-line {
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+  .workshop-cumulative {
+    margin-top: 16px;
+    padding-top: 10px;
+    border-top: 1px dotted var(--rule);
+  }
+  .workshop-cumulative-toggle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--sepia);
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    border-bottom: 1px dotted var(--rule);
+    transition: color 0.15s;
+  }
+  .workshop-cumulative-toggle:hover { color: var(--vermilion); }
+  .workshop-cumulative-panel {
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--sepia);
+    letter-spacing: 0.08em;
+    line-height: 1.8;
+  }
+  .workshop-cumulative-panel.hidden { display: none; }
+  .workshop-cumulative-panel .num {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    padding: 0 2px;
+  }
+  .workshop-cumulative-note {
+    display: block;
+    margin-top: 6px;
+    font-size: 10.5px;
+    color: var(--sepia-light);
+    letter-spacing: 0.06em;
+  }
+
+  /* —— v0.30 §5 账号页 —— */
+  .account-page { max-width: 640px; margin: 0 auto; padding-top: 12px; }
+  .account-head { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 2px solid var(--ink); }
+  .account-title {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-size: 42px; font-weight: 500; letter-spacing: -0.02em; line-height: 1;
+    margin: 8px 0 12px;
+  }
+  .account-sub { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 16px; }
+  .account-section { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px dotted var(--rule); }
+  .account-section:last-child { border-bottom: none; }
+  .account-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .account-section-title { font-family: 'JetBrains Mono', monospace; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
+  .account-section-action {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; letter-spacing: 0.08em;
+    color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--rule);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .account-section-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .account-row { display: flex; gap: 16px; padding: 10px 0; border-bottom: 1px dotted var(--rule); }
+  .account-row:last-child { border-bottom: none; }
+  .account-label { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia); letter-spacing: 0.08em; min-width: 110px; padding-top: 3px; }
+  .account-value { font-family: 'Newsreader', serif; color: var(--ink); font-size: 15.5px; flex: 1; word-break: break-all; }
+  .account-hint { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia-light); letter-spacing: 0.04em; }
+  .account-sub-text { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 14.5px; line-height: 1.6; }
+  .account-empty { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 14.5px; padding: 4px 0; }
+  .account-studios { margin-top: 4px; }
+  .account-studio-row { padding: 10px 0; border-bottom: 1px dotted var(--rule); font-family: 'Newsreader', serif; color: var(--ink); font-size: 15px; }
+  .account-studio-row:last-child { border-bottom: none; }
+  .account-section-actions { display: flex; gap: 18px; margin-top: 12px; }
+  .account-action {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia);
+    letter-spacing: 0.08em; cursor: pointer; border-bottom: 1px dotted var(--rule);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .account-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
   /* —— B · 做过的索引 chip —— */
   .done-index-list {
     border-top: 1px solid var(--rule);
@@ -6373,7 +6480,7 @@
       <nav class="masthead-nav-primary">
         <button onclick="goHome()">工坊</button>
         <button onclick="showScreen('methods')">方法库</button>
-        <button onclick="navMyWorkshop()">我的工作室</button>
+        <button onclick="navMyWorkshop()">我的工坊</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
       </nav>
@@ -6430,6 +6537,7 @@
   </section>
 
   <section class="screen" id="screen-workshop"><div id="workshop-content"></div></section>
+  <section class="screen" id="screen-account"><div id="account-content"></div></section>
   <section class="screen" id="screen-studio"><div id="studio-content"></div></section>
   <section class="screen" id="screen-project"><div id="project-content"></div></section>
 
@@ -6450,8 +6558,8 @@
 
       <!-- 一段话 elevator -->
       <div class="about-section about-intro">
-        <p>GitHub 是给写代码的人用的工作室。</p>
-        <p>这里是给用 AI 做小东西的人用的工作室。他们做的东西能跑、能玩、能启发别人也动手做，不必懂代码，也不必证明自己"成了程序员"。</p>
+        <p>GitHub 是给写代码的人用的工坊。</p>
+        <p>这里是给用 AI 做小东西的人用的工坊。他们做的东西能跑、能玩、能启发别人也动手做，不必懂代码，也不必证明自己"成了程序员"。</p>
       </div>
 
       <!-- 不做什么 -->
@@ -6497,7 +6605,7 @@
         <p>开发过程本身就公开在 <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 的「Tinker · 捣鼓」项目里，每一次卡住、每一次跑通都能看见。这就是它自己的第一份样品。</p>
 
         <div class="about-cta-row">
-          <button onclick="showScreen('workshop','daodao')" class="about-cta-primary">看 @daodao 的工作室 →</button>
+          <button onclick="showScreen('workshop','daodao')" class="about-cta-primary">看 @daodao 的工坊 →</button>
           <span class="about-cta-secondary" onclick="showScreen('onboard')">还是先去入场仪式做个小东西</span>
         </div>
       </div>
@@ -6568,7 +6676,7 @@
     <div id="onboard-starters"></div>
     <div class="mt-12 pt-8 border-t-2" style="border-color: var(--ink);">
       <p class="serif italic mb-4" style="color: var(--sepia);">做完了?</p>
-      <button onclick="openWorkshopSetup()" class="btn-act-primary">挂上我的产物 · 开张工作室</button>
+      <button onclick="openWorkshopSetup()" class="btn-act-primary">挂上我的产物 · 开张工坊</button>
       <p class="mt-6 text-sm serif italic" style="color: var(--sepia);">
         已经有作品了? <span class="react-action" onclick="openWorkshopSetup()">直接挂上来</span>
       </p>
@@ -6709,7 +6817,7 @@
 <div id="modal-search" class="hidden fixed inset-0 modal-back flex items-start justify-center z-50 p-4" style="padding-top: 80px;">
   <div class="modal-paper w-full" style="max-width: 560px; max-height: 75vh; overflow-y: auto;">
     <h3 class="modal-title">搜索</h3>
-    <p class="modal-sub">找工作室 / 项目 / 进展 — 全平台 substring 匹配</p>
+    <p class="modal-sub">找工坊 / 项目 / 进展 — 全平台 substring 匹配</p>
     <input id="search-input" class="input-bare" placeholder="输入关键词..." autocomplete="off">
     <div id="search-results" class="mt-5"></div>
   </div>
@@ -6782,9 +6890,9 @@
       <h3 class="modal-title">邀请队友进工作室</h3>
       <p class="modal-sub">生成一次性 token · 24h 有效 · server 看不到 token 跟暗号 (e2e)</p>
       <div class="mb-5">
-        <label class="mono text-xs block mb-1" style="color: var(--sepia);">队友的 handle</label>
+        <label class="mono text-xs block mb-1" style="color: var(--sepia);">队友的招牌 (昵称)</label>
         <input id="inv-handle" class="input-bare" placeholder="@maomao · ta 得先注册过 Tinker">
-        <div class="field-hint" style="color: var(--sepia);">不带 @ 也行 · 不知道 handle? 让 ta 先注册自报家门</div>
+        <div class="field-hint" style="color: var(--sepia);">不带 @ 也行 · 不知道 ta 的招牌? 让 ta 先注册自报家门</div>
       </div>
       <div id="inv-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
       <div class="flex justify-end gap-4 mt-6">
@@ -6832,15 +6940,16 @@
   <div class="modal-paper w-full" style="max-width: 480px;">
     <!-- 状态 1: 填邮箱 -->
     <div id="login-state-input">
-      <h3 class="modal-title">进 Tinker 工作室</h3>
+      <h3 class="modal-title">进 Tinker 工坊</h3>
       <p class="modal-sub" id="login-sub">用邮箱 · 我们发个登录链接给你 · 5 分钟内点开就进 · 不用记密码</p>
       <div class="mb-5">
         <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的邮箱</label>
         <input id="login-email" class="input-bare" type="email" placeholder="例如 you@gmail.com" autocomplete="email">
-        <div class="field-hint">新人 / 老人都填同一个框 · 第一次会自动开工作室</div>
+        <div class="field-hint">新人 / 老人都填同一个框 · 第一次会自动开工坊</div>
       </div>
-      <div class="flex justify-end gap-4 mt-6">
+      <div class="flex justify-end gap-4 mt-6 items-center">
         <button onclick="closeModal('modal-login')" class="btn-act" style="border-bottom: none;">取消</button>
+        <span id="login-dev-action" class="hidden react-action serif" style="color: var(--moss); cursor: pointer; font-size: 13px; border-bottom: 1px dotted var(--moss);" onclick="submitLoginEmailDev()" title="仅本地开发 · 生产环境没这个口">本地直接进 (跳过邮件)</span>
         <button id="login-send-btn" onclick="submitLoginEmail()" class="btn-act-primary">发链接到我邮箱 →</button>
       </div>
       <p class="text-xs serif" style="color: var(--sepia); margin-top: 14px; font-style: italic;">
@@ -6868,10 +6977,10 @@
 <!-- WELCOME modal — 第一次登录后 (server 返回 needsWelcome=true) · 确认/改 handle + tagline -->
 <div id="modal-set-handle" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
-    <h3 class="modal-title">开张你的工作室</h3>
-    <p class="modal-sub">handle 已从你邮箱预填 · 不喜欢可以改 · 现在不填一句话也行</p>
+    <h3 class="modal-title">开张你的工坊</h3>
+    <p class="modal-sub">招牌已从你邮箱预填 · 不喜欢可以改 · 现在不填一句话也行</p>
     <div class="mb-4">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">@handle (字母 / 数字 / 下划线 / 中文)</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">招牌 (昵称) · 字母 / 数字 / 下划线 / 中文</label>
       <input id="sh-handle" class="input-bare" placeholder="比如 zhang3 / wangxiaoming">
       <div id="sh-handle-hint" class="mono text-xs" style="margin-top: 4px; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; min-height: 18px;"></div>
     </div>
@@ -6888,16 +6997,16 @@
 <!-- EDIT WORKSHOP modal — 改工作室 tagline -->
 <div id="modal-edit-workshop" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full">
-    <h3 class="modal-title">编辑工作室</h3>
-    <p class="modal-sub">handle 和 tagline 都能改 · 路过的人会看到</p>
+    <h3 class="modal-title">编辑工坊</h3>
+    <p class="modal-sub">招牌和介绍都能改 · 路过的人会看到</p>
     <div class="mb-5">
-      <label class="mono text-xs block mb-1" style="color: var(--sepia);">handle · 你的地址</label>
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">招牌 (昵称) · 你的地址</label>
       <input id="ew-handle" class="input-bare" placeholder="字母 / 数字 / 下划线 / 中文 · 1-20 位">
-      <div class="field-hint" id="ew-handle-hint" style="color: var(--sepia);">改了之后 · 工作室 URL 会变 (旧链接失效) · 别人 @你 用旧名字会变普通文字 · 邮箱和 CLI 钥匙不动</div>
+      <div class="field-hint" id="ew-handle-hint" style="color: var(--sepia);">改了之后 · 工坊 URL 会变 (旧链接失效) · 别人 @你 用旧名字会变普通文字 · 邮箱和 CLI 钥匙不动</div>
     </div>
     <div class="mb-5">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">tagline · 我在做的事</label>
-      <input id="ew-tagline" class="input-bare" placeholder="一句话说明你的工作室">
+      <input id="ew-tagline" class="input-bare" placeholder="一句话说明你的工坊">
     </div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-edit-workshop')" class="btn-act" style="border-bottom: none;">取消</button>
@@ -7168,6 +7277,21 @@ async function apiMe() {
   return data.user;
 }
 
+async function apiDevLogin(email) {
+  const res = await fetch('/api/auth/dev-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ email }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    const err = new Error(data.error || '本地直接进失败');
+    throw err;
+  }
+  return data;
+}
+
 async function apiSendLink(email) {
   const res = await fetch('/api/auth/send-link', {
     method: 'POST', credentials: 'same-origin',
@@ -7317,6 +7441,7 @@ function showScreen(name, ...args) {
   else if (name === 'notifications') renderNotifications();
   else if (name === 'showcase') renderShowcase(args[0]);
   else if (name === 'methods') renderMethodsLibrary(args[0]);
+  else if (name === 'account') renderAccount();
   // about 是静态内容,不需要 render
   // 更新 hash · 让 URL 可分享 + back/forward 工作
   const newHash = buildHash(name, args);
@@ -7338,6 +7463,7 @@ function buildHash(name, args) {
   if (name === 'onboard') return '#/onboard';
   if (name === 'feed') return '#/';
   if (name === 'methods') return args && args[0] ? '#/m/' + encodeURIComponent(args[0]) : '#/m';
+  if (name === 'account') return '#/account';
   // 项目分组视图 · 用短 hash /g · 老链接 /showcase 也兼容 (navigateFromHash 处)
   if (name === 'showcase') return args && args[0] ? '#/g/' + encodeURIComponent(args[0]) : '#/g';
   return '#/';
@@ -7357,6 +7483,10 @@ function navigateFromHash() {
   if (parts[0] === 'g') return showScreen('showcase', parts[1]);       // 新短 hash
   if (parts[0] === 'showcase') return showScreen('showcase', parts[1]); // 老链接兼容
   if (parts[0] === 'm') return showScreen('methods', parts[1]);        // 方法库 (跨用户) · /m/<keyword> 可选预填搜词
+  if (parts[0] === 'account') {
+    if (!currentUser.handle) { openLogin('看账号'); return goHome(); }
+    return showScreen('account');
+  }
   return goHome();
 }
 
@@ -7716,7 +7846,7 @@ function makeMethodEntryEl(e) {
 function renderWorkshop(handle) {
   const user = state.users[handle];
   const root = document.getElementById('workshop-content');
-  if (!user) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这间工作室</p>'; return; }
+  if (!user) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这间工坊</p>'; return; }
   const projects = state.projects.filter(p=>p.owner===handle);
   // v0.69: 工作室分层不再纯按 status · 30 天没动的 active/stuck 也沉到「也在做」
   // spec 5.1 §项目: "30 天没动 → 自动沉到也在做 · 让真实活动决定哪些被看见,不需要用户主动整理"
@@ -7769,16 +7899,36 @@ function renderWorkshop(handle) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([t]) => t);
-  const statsParts = [];
-  if (activeCount > 0) statsParts.push(`在做 <span class="num">${activeCount}</span>`);
-  if (doneCount > 0) statsParts.push(`跑通 <span class="num">${doneCount}</span>`);
-  if (receivedTinkered > 0) statsParts.push(`启发了 <span class="num">${receivedTinkered}</span> 人动手`);
-  if (receivedMethodUsed > 0) statsParts.push(`方法被用 <span class="num">${receivedMethodUsed}</span>`);
-  if (trackingCount > 0) statsParts.push(`跟进过 <span class="num">${trackingCount}</span>`);
-  if (topTools.length > 0) statsParts.push(`常用 <span class="ws-tools">${topTools.join(' · ')}</span>`);
-  const miniStatsHtml = statsParts.length > 0
-    ? `<div class="workshop-mini-stats">${statsParts.join('，')}</div>`
+  // v0.30 §3 工坊头部重塑:工作台叙事 + 常用工具 + 折叠累计
+  const benchCount = recent.length;  // 已在上面算过 in-flight 不含 stale
+  const lastShipAt = projects
+    .flatMap(p => (p.updates || []).filter(u => u.kind === 'ship'))
+    .reduce((max, u) => Math.max(max, u.at || 0), 0);
+  const benchLeft = benchCount > 0
+    ? `工作台上在打磨 <span class="num">${benchCount}</span> 个`
+    : '工作台还空着';
+  const benchRight = lastShipAt > 0
+    ? `最近一次开张 ${shortAgo(lastShipAt)}`
+    : '还没开过张';
+  const benchHtml = `<div class="workshop-bench">${benchLeft} · ${benchRight}</div>`;
+  const toolsHtml = topTools.length > 0
+    ? `<div class="workshop-tools-line">常用 · ${topTools.join(' · ')}</div>`
     : '';
+  const cumulativeParts = [];
+  if (doneCount > 0) cumulativeParts.push(`跑通 <span class="num">${doneCount}</span>`);
+  if (activeCount > 0) cumulativeParts.push(`在做 <span class="num">${activeCount}</span>`);
+  if (receivedTinkered > 0) cumulativeParts.push(`启发了 <span class="num">${receivedTinkered}</span> 人动手`);
+  if (receivedMethodUsed > 0) cumulativeParts.push(`方法被用 <span class="num">${receivedMethodUsed}</span>`);
+  if (trackingCount > 0) cumulativeParts.push(`跟进过 <span class="num">${trackingCount}</span>`);
+  const cumulativeHtml = (isMe && cumulativeParts.length > 0) ? `
+      <div class="workshop-cumulative">
+        <span class="workshop-cumulative-toggle" onclick="toggleWorkshopCumulative(this)">看看复用累计 →</span>
+        <div class="workshop-cumulative-panel hidden">
+          ${cumulativeParts.join(' · ')}
+          <span class="workshop-cumulative-note">这是只有自己看到的</span>
+        </div>
+      </div>
+    ` : '';
 
   const renderPcards = (list, opts = {}) => list.map(p => {
     const ex = findExhibitUpdate(p);
@@ -7840,14 +7990,13 @@ function renderWorkshop(handle) {
   //   · "跟进的"用 .tracking-pcard 视觉降级 · 防虚假繁荣
   //   · CLI 钥匙弱化 · 跟"编辑"拉层级
   root.innerHTML = `
-    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
-      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工作室' : '一间工作室'}</div>
+    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink); position: relative;">
+      ${isMe ? `<a class="workshop-account-link" onclick="showScreen('account')">账号 →</a>` : ''}
+      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工坊' : '一间工坊'}</div>
       <h1 class="workshop-name mb-3">@${handle}</h1>
-      <p class="workshop-tagline">
-        「${escapeHtml(user.tagline)}」
-        ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
-        ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); vertical-align: middle; letter-spacing: 0.05em;">CLI 钥匙</span>` : ''}
-      </p>
+      <p class="workshop-tagline">「${escapeHtml(user.tagline)}」</p>
+      ${benchHtml}
+      ${toolsHtml}
       ${(user.studios && user.studios.length > 0) ? `
         <div class="workshop-affiliation">
           挂靠 →
@@ -7862,7 +8011,7 @@ function renderWorkshop(handle) {
           <a class="workshop-affiliation-link" onclick="openAcceptInvite()">接受邀请</a>
         </div>
       ` : '')}
-      ${isMe ? miniStatsHtml : ''}
+      ${cumulativeHtml}
     </div>
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
@@ -8076,7 +8225,7 @@ function renderProject(owner, slug) {
 
   root.innerHTML = `
     <div class="mb-6">
-      <a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${owner}')">← @${owner} 的工作室</a>
+      <a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${owner}')">← @${owner} 的工坊</a>
     </div>
     <div class="pheader">
       <div class="mb-3 flex items-center gap-3 flex-wrap">
@@ -8739,7 +8888,7 @@ function renderShowcase(focusId) {
               <span class="showcase-owner-edit" onclick="event.stopPropagation(); openShipCeremony('${p.id}')">${kind === 'progress' ? '✦ 升格 · 办仪式' : '改 / 补图'}</span>
               <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">暂不入馆</span>
             ` : ''}
-            <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工作室 →</a>
+            <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工坊 →</a>
             ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : `<span class="showcase-card-cta-empty">待补产物</span>`}
           </div>
         </div>
@@ -8787,7 +8936,7 @@ function renderNotifications() {
     root.innerHTML = `
       <div class="serif py-12 text-center" style="color: var(--sepia);">
         <p style="margin-bottom: 16px;">登录之后才能看到对你项目的反馈</p>
-        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openLogin('开张你的工作室')">开张我的工作室 →</span>
+        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openLogin('开张你的工坊')">开张我的工坊 →</span>
       </div>`;
     return;
   }
@@ -8985,7 +9134,7 @@ function doSearch(q) {
   let html = '';
   if (users.length > 0) {
     html += `<div class="search-result-group">
-      <div class="search-result-label">工作室 (${users.length})</div>
+      <div class="search-result-label">工坊 (${users.length})</div>
       ${users.map(([h, u]) => `
         <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('workshop','${h}');">
           <div><span class="sri-name">@${h}</span></div>
@@ -9141,7 +9290,7 @@ async function submitNewProject() {
     if (isFirstProject) {
       isFirstProject = false;
       showScreen('workshop', currentUser.handle);
-      showToast('工作室开张了 · 「' + name + '」是你的第一个作品');
+      showToast('工坊开张了 · 「' + name + '」是你的第一个作品');
       return;
     }
     showScreen('project', newProject.owner, newProject.slug);
@@ -9563,10 +9712,10 @@ let mspStatus = 'active';
 let mspCtx = null; // projectId
 
 const STATUS_HINTS = {
-  active: '在 feed 主屏被看见 · 在工作室「最近在动」',
+  active: '在 feed 主屏被看见 · 在工坊「最近在动」',
   stuck:  '在 feed 主屏被看见 · 状态显眼 · 别人能来帮',
-  done:   '从 feed 沉下去 · 进工作室「做过的」',
-  paused: '从 feed 沉下去 · 进工作室「也在做」',
+  done:   '从 feed 沉下去 · 进工坊「做过的」',
+  paused: '从 feed 沉下去 · 进工坊「也在做」',
   archive:'完全归档 · 从所有地方移除',
 };
 
@@ -9581,7 +9730,7 @@ function openEditWorkshop() {
 async function submitEditWorkshop() {
   const newHandle = document.getElementById('ew-handle').value.trim();
   const tagline = document.getElementById('ew-tagline').value.trim();
-  if (!newHandle) { showToast('handle 不能空 · 那是你的地址'); return; }
+  if (!newHandle) { showToast('招牌不能空 · 那是你的地址'); return; }
   if (!tagline) { showToast('一句话总不能空着'); return; }
   const oldHandle = currentUser.handle;
   try {
@@ -9707,7 +9856,7 @@ async function submitInvite() {
   const targetHandle = document.getElementById('inv-handle').value.trim().replace(/^@/, '');
   const errBox = document.getElementById('inv-error');
   errBox.classList.add('hidden');
-  if (!targetHandle) { errBox.textContent = '队友 handle 必填'; errBox.classList.remove('hidden'); return; }
+  if (!targetHandle) { errBox.textContent = '队友的招牌必填'; errBox.classList.remove('hidden'); return; }
 
   const secret = studioGetLocalSecret(slug);
   if (!secret) { errBox.textContent = '本地没存暗号 · 走 CLI invite 吧'; errBox.classList.remove('hidden'); return; }
@@ -9848,7 +9997,7 @@ async function confirmRevokeToken(tokenId, labelDesc) {
 // 复制"用 AI 接入"指南到剪贴板 · withToken=true 时用刚生成的钥匙 · 否则空占位
 function copyAiPrompt(el, withToken) {
   const serverUrl = window.location.origin;
-  const handle = currentUser.handle || '你的_handle';
+  const handle = currentUser.handle || '你的_招牌';
   let token;
   if (withToken) {
     token = (document.getElementById('new-token-value') || {}).textContent || '';
@@ -9857,10 +10006,10 @@ function copyAiPrompt(el, withToken) {
       return;
     }
   } else {
-    token = 'tk_这里粘上你在工作室生成的钥匙';
+    token = 'tk_这里粘上你在账号页生成的钥匙';
   }
-  const prompt = `你是 Tinker / 捣鼓(给 vibe coder 的工作室社区)的 AI 助手。
-帮我把 coding 进展按 Tinker 的 voice 发到我的工作室。
+  const prompt = `你是 Tinker / 捣鼓(给 vibe coder 的工坊社区)的 AI 助手。
+帮我把 coding 进展按 Tinker 的 voice 发到我的工坊。
 
 ## 协议
 
@@ -10090,7 +10239,7 @@ async function toggleHidden(projectId, hidden) {
     await apiAction('toggleShowcaseVisibility', { projectId, hidden });
     state = await fetchState();
     renderProject(p.owner, p.slug);
-    showToast(hidden ? '已暂不入馆 · 工作室里还在' : '已重新放回陈列馆');
+    showToast(hidden ? '已暂不入馆 · 工坊里还在' : '已重新放回陈列馆');
   } catch (e) { showToast(e.message); }
 }
 
@@ -10102,7 +10251,7 @@ async function confirmWithdraw(ev, projectId) {
   if (!p) return;
   const sure = confirm(
     '让「' + p.name + '」暂时撤出陈列馆？\n\n' +
-    '项目状态不变 · 工作室里还在 · 时间线进展继续 · 只是不在陈列馆出现。\n' +
+    '项目状态不变 · 工坊里还在 · 时间线进展继续 · 只是不在陈列馆出现。\n' +
     '随时可以再让它入馆 — 历史一切都还在。'
   );
   if (!sure) return;
@@ -10664,7 +10813,7 @@ function openNewProject(isFirst) {
   const submitBtn = document.getElementById('np-submit-btn');
   if (isFirst) {
     if (titleEl) titleEl.textContent = '挂上你刚做的小东西';
-    if (subEl) subEl.textContent = '这就是你工作室的第一个项目 · 你就是创作者了';
+    if (subEl) subEl.textContent = '这就是你工坊的第一个项目 · 你就是创作者了';
     if (cancelBtn) cancelBtn.textContent = '先不挂';
     if (submitBtn) submitBtn.textContent = '开张 →';
   } else {
@@ -10901,15 +11050,15 @@ function refreshMastheadHandle() {
   const el = document.getElementById('masthead-handle-area');
   if (!el) return;
   if (currentUser.handle) {
-    el.innerHTML = `<span style="color: var(--vermilion);">@${currentUser.handle}</span> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
+    el.innerHTML = `<a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="showScreen('account')" title="去账号页">@${currentUser.handle}</a> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
   } else {
-    el.innerHTML = `<span style="color: var(--sepia); font-style: italic;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('开张你的工作室')">开张我的工作室</a>`;
+    el.innerHTML = `<span style="color: var(--sepia); font-style: italic;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('开张你的工坊')">开张我的工坊</a>`;
   }
 }
 
 // 登出 · 调 /api/auth/logout 清 session cookie
 async function logout() {
-  if (!confirm('出去之后回到匿名浏览 · 你的工作室和项目都还在 · 用同样邮箱登回来就能继续 · 真的出去?')) return;
+  if (!confirm('出去之后回到匿名浏览 · 你的工坊和项目都还在 · 用同样邮箱登回来就能继续 · 真的出去?')) return;
   try {
     await apiLogout();
   } catch (e) { /* 容错 */ }
@@ -11008,6 +11157,10 @@ function openLogin(contextDesc) {
   document.getElementById('login-state-input').classList.remove('hidden');
   document.getElementById('login-state-sent').classList.add('hidden');
   document.getElementById('login-email').value = localStorage.getItem('tinker_last_email') || '';
+  // 本地开发时显示"直接进"按钮 · 不用收邮件
+  const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+  const devBtn = document.getElementById('login-dev-action');
+  if (devBtn) devBtn.classList.toggle('hidden', !isLocal);
   document.getElementById('modal-login').classList.remove('hidden');
   setTimeout(() => document.getElementById('login-email').focus(), 80);
 }
@@ -11027,6 +11180,41 @@ async function submitLoginEmail() {
     document.getElementById('login-state-sent').classList.remove('hidden');
     document.getElementById('login-sent-to').textContent = email;
     startResendCooldown();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+// 本地开发直接进 · 跳过 magic link
+async function submitLoginEmailDev() {
+  const email = (document.getElementById('login-email').value || '').trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    showToast('邮箱格式不对');
+    return;
+  }
+  try {
+    localStorage.setItem('tinker_last_email', email);
+    await apiDevLogin(email);
+    closeModal('modal-login');
+    // 重新拉 session + 刷新 UI · 模仿 magic link 跳回主页之后的逻辑
+    const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
+    if (me && me.user) {
+      currentUser.id = me.user.id;
+      currentUser.handle = me.user.handle;
+      currentUser.email = me.user.email;
+    }
+    state = await fetchState();
+    refreshMastheadHandle();
+    // 跑 pending (跟 magic link 后续一致)
+    const p = readPending();
+    if (p) {
+      clearPending();
+      if (p.returnTo && p.returnTo !== location.hash) location.hash = p.returnTo;
+      setTimeout(() => dispatchPending(p), 200);
+    } else {
+      navigateFromHash();
+    }
+    showToast('进来了 (本地直接进 · 没发邮件) · 你好 @' + (currentUser.handle || '?'));
   } catch (e) {
     showToast(e.message);
   }
@@ -11090,7 +11278,7 @@ function debouncedHandleCheck(handle) {
   const hint = document.getElementById('sh-handle-hint');
   if (!handle) { hint.innerHTML = ''; return; }
   if (!/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) {
-    hint.innerHTML = '<span style="color: var(--vermilion);">handle 只能 1-20 字 · 字母/数字/下划线/中文</span>';
+    hint.innerHTML = '<span style="color: var(--vermilion);">招牌只能 1-20 字 · 字母/数字/下划线/中文</span>';
     return;
   }
   hint.innerHTML = '<span style="color: var(--sepia-light);">检查中…</span>';
@@ -11102,7 +11290,7 @@ function debouncedHandleCheck(handle) {
         hint.innerHTML = '<span style="color: var(--moss);">✓ 「' + escapeHtml(handle) + '」可以用</span>';
       } else if (data.suggestions && data.suggestions.length > 0) {
         const pills = data.suggestions.map(s => `<span class="handle-suggest-pill" onclick="pickHandleSuggestion('${escapeHtml(s).replace(/'/g,'&#39;')}')">${escapeHtml(s)}</span>`).join('');
-        hint.innerHTML = '<span style="color: var(--vermilion);">这个 handle 被占了 · 试试:</span> ' + pills;
+        hint.innerHTML = '<span style="color: var(--vermilion);">这个招牌被占了 · 试试:</span> ' + pills;
       } else {
         hint.innerHTML = '<span style="color: var(--vermilion);">' + escapeHtml(data.reason || '不能用') + '</span>';
       }
@@ -11120,8 +11308,8 @@ function pickHandleSuggestion(handle) {
 async function submitWelcome() {
   const handle = (document.getElementById('sh-handle').value || '').trim();
   const tagline = (document.getElementById('sh-tagline').value || '').trim();
-  if (!handle) { showToast('handle 不能空'); return; }
-  if (!/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) { showToast('handle 只能 1-20 字 字母/数字/下划线/中文'); return; }
+  if (!handle) { showToast('招牌不能空'); return; }
+  if (!/^[a-zA-Z0-9_一-龥]{1,20}$/.test(handle)) { showToast('招牌只能 1-20 字 字母/数字/下划线/中文'); return; }
   try {
     const updated = await apiWelcome(handle, tagline);
     currentUser.handle = updated.handle;
@@ -11146,8 +11334,8 @@ async function submitWelcome() {
     const hint = document.getElementById('sh-handle-hint');
     if (e.code === 'HANDLE_TAKEN' && Array.isArray(e.suggestions) && e.suggestions.length > 0 && hint) {
       const pills = e.suggestions.map(s => `<span class="handle-suggest-pill" onclick="pickHandleSuggestion('${escapeHtml(s).replace(/'/g,'&#39;')}')">${escapeHtml(s)}</span>`).join('');
-      hint.innerHTML = '<span style="color: var(--vermilion);">这个 handle 被占了 · 试试:</span> ' + pills;
-      showToast('handle 被占了 · 看下面建议');
+      hint.innerHTML = '<span style="color: var(--vermilion);">这个招牌被占了 · 试试:</span> ' + pills;
+      showToast('招牌被占了 · 看下面建议');
     } else {
       showToast(e.message);
     }
@@ -11159,11 +11347,175 @@ function navMyWorkshop() {
   if (currentUser.handle) {
     showScreen('workshop', currentUser.handle);
   } else {
-    requireLogin('navMyWorkshop', {}, '开张你的工作室');
+    requireLogin('navMyWorkshop', {}, '开张你的工坊');
   }
 }
 function navAddUpdate() {
   requireLogin('openPickProject', {}, '记一笔');
+}
+
+// v0.30 §3 工坊头部 · 累计折叠 chip
+function toggleWorkshopCumulative(toggleEl) {
+  const panel = toggleEl.nextElementSibling;
+  if (!panel) return;
+  const isHidden = panel.classList.contains('hidden');
+  if (isHidden) {
+    panel.classList.remove('hidden');
+    toggleEl.textContent = '看看复用累计 ↓';
+  } else {
+    panel.classList.add('hidden');
+    toggleEl.textContent = '看看复用累计 →';
+  }
+}
+
+// v0.30 §5 账号页
+async function renderAccount() {
+  const root = document.getElementById('account-content');
+  if (!currentUser.handle) {
+    root.innerHTML = '<p class="serif" style="color: var(--sepia);">先登录才能看账号</p>';
+    return;
+  }
+  const u = state && state.users ? state.users[currentUser.handle] : null;
+  if (!u) {
+    root.innerHTML = '<p class="serif" style="color: var(--sepia);">读不到账号信息 · 刷新一下试试</p>';
+    return;
+  }
+  const studios = u.studios || [];
+  const email = currentUser.email || '(读不到)';
+  root.innerHTML = `
+    <div class="account-page">
+      <div class="account-head">
+        <div class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">你的账号</div>
+        <h1 class="account-title">@${escapeHtml(currentUser.handle)}</h1>
+        <p class="account-sub">这间工坊背后的人 · <span class="account-section-action" onclick="showScreen('workshop','${escapeHtml(currentUser.handle)}')">回工坊 →</span></p>
+      </div>
+
+      <div class="account-section">
+        <div class="account-section-head">
+          <span class="account-section-title">基本资料</span>
+          <span class="account-section-action" onclick="openEditWorkshop()">改 →</span>
+        </div>
+        <div class="account-row"><span class="account-label">招牌 (昵称)</span><span class="account-value">@${escapeHtml(currentUser.handle)}</span></div>
+        <div class="account-row"><span class="account-label">一句话介绍</span><span class="account-value">${escapeHtml(u.tagline || '(还没写)')}</span></div>
+        <div class="account-row"><span class="account-label">邮箱</span><span class="account-value">${escapeHtml(email)}</span></div>
+        <div class="account-hint">改邮箱要重发 magic link · 还没接通 · 后续做</div>
+      </div>
+
+      <div class="account-section">
+        <div class="account-section-head">
+          <span class="account-section-title">挂靠的工作室</span>
+        </div>
+        ${studios.length === 0
+          ? `<div class="account-empty">还没挂任何工作室</div>`
+          : `<div class="account-studios">${studios.map(s => `<div class="account-studio-row"><span class="nh" onclick="showScreen('studio','${escapeHtml(s.slug)}')">${escapeHtml(s.name)}</span></div>`).join('')}</div>`}
+        <div class="account-section-actions">
+          <span class="account-action" onclick="openCreateStudio()">+ 建一个</span>
+          <span class="account-action" onclick="openAcceptInvite()">接受邀请</span>
+        </div>
+      </div>
+
+      <div class="account-section">
+        <div class="account-section-head">
+          <span class="account-section-title">CLI 钥匙</span>
+        </div>
+        <p class="account-sub-text">给你跑 tinker CLI / 接 Claude Code / Cursor 等用 · 一把钥匙对应一台机器 · 丢了就撤销重发。</p>
+        <div id="account-tokens-list" style="margin-top: 14px;"><div class="serif" style="color: var(--sepia); font-size: 14px;">读取中...</div></div>
+        <div style="margin-top: 14px;">
+          <input id="account-new-token-label" class="input-bare" placeholder="给这把钥匙起个名 · 比如 我的 MacBook" style="margin-bottom: 10px;">
+          <button class="btn-act-primary" onclick="submitAccountNewToken()">生成新钥匙</button>
+        </div>
+        <div id="account-new-token-revealed" class="hidden" style="margin-top: 14px; padding: 12px; background: var(--paper); border: 1px dashed var(--vermilion); border-radius: 4px;">
+          <div class="mono text-xs" style="color: var(--vermilion); margin-bottom: 6px;">这把钥匙只显示这一次 · 关掉就看不见了</div>
+          <code id="account-new-token-value" style="display: block; padding: 8px; background: white; word-break: break-all; font-family: 'JetBrains Mono', monospace; font-size: 13px;"></code>
+          <span class="react-action" onclick="copyAccountToken(this)" style="margin-top: 8px; display: inline-block;">复制</span>
+        </div>
+      </div>
+
+      <div class="account-section">
+        <div class="account-section-head">
+          <span class="account-section-title">通知偏好</span>
+        </div>
+        <p class="account-sub-text">CLI 端 (tinker) 的静音 / 触发器开关同步还在做 · 目前只在你装了 CLI 的机器上生效 · 用 <span class="mono" style="background: var(--paper); padding: 1px 4px;">tinker mute</span> 或 <span class="mono" style="background: var(--paper); padding: 1px 4px;">tinker hook</span> 管。</p>
+      </div>
+
+      <div class="account-section">
+        <div class="account-section-head">
+          <span class="account-section-title">退出登录</span>
+        </div>
+        <p class="account-sub-text">出去之后回到匿名浏览 · 工坊还在 · 同邮箱登回来就接上。</p>
+        <button class="btn-act" onclick="logout()" style="margin-top: 12px;">出去</button>
+      </div>
+
+      <div class="account-section">
+        <div class="account-section-head">
+          <span class="account-section-title" style="color: var(--vermilion);">删账号</span>
+        </div>
+        <p class="account-sub-text">不可恢复 · 工坊 / 项目 / 进展 / 方法都删 · 别人 @你 的 mention 会变成普通文字。</p>
+        <button class="btn-act" onclick="confirmDeleteAccount()" style="margin-top: 12px; color: var(--vermilion);">想删账号</button>
+      </div>
+    </div>
+  `;
+  refreshAccountTokensList();
+}
+
+async function refreshAccountTokensList() {
+  const root = document.getElementById('account-tokens-list');
+  if (!root) return;
+  try {
+    const tokens = await apiListTokens();
+    if (tokens.length === 0) {
+      root.innerHTML = '<div class="serif" style="color: var(--sepia); font-size: 14px;">还没生成过钥匙 · 下面起个名生成一把就能在 CLI 里用 tinker。</div>';
+      return;
+    }
+    root.innerHTML = '<div class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.22em; margin-bottom: 6px;">现有钥匙 · ' + tokens.length + '</div>' +
+      tokens.map(t => `
+        <div class="api-token-row">
+          <div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-meta">
+              <span class="mono">${escapeHtml(t.prefix)}…</span> ·
+              建于 ${shortAgo(t.created_at)}
+              ${t.last_used_at ? ' · 上次用 ' + shortAgo(t.last_used_at) : ' · 还没用过'}
+            </div>
+          </div>
+          <span class="react-action serif" onclick="confirmRevokeAccountToken('${t.id}', '${escapeHtml(t.label || '没起名的').replace(/'/g,'&#39;')}')" style="color: var(--vermilion); font-size: 13px;">撤销</span>
+        </div>
+      `).join('');
+  } catch (e) {
+    root.innerHTML = '<div class="serif" style="color: var(--vermilion); font-size: 14px;">读不到 token · ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function submitAccountNewToken() {
+  const labelEl = document.getElementById('account-new-token-label');
+  const label = labelEl ? labelEl.value.trim() : '';
+  try {
+    const created = await apiCreateToken(label);
+    document.getElementById('account-new-token-value').textContent = created.token;
+    document.getElementById('account-new-token-revealed').classList.remove('hidden');
+    if (labelEl) labelEl.value = '';
+    await refreshAccountTokensList();
+    showToast('生成了 · 复制下来存好 · 关掉就看不见了');
+  } catch (e) { showToast(e.message); }
+}
+
+async function confirmRevokeAccountToken(tokenId, labelDesc) {
+  if (!confirm('撤销「' + labelDesc + '」? · 用这把钥匙的所有 CLI / agent 会立刻失败 · 不可恢复')) return;
+  try {
+    await apiRevokeToken(tokenId);
+    await refreshAccountTokensList();
+    showToast('撤销了');
+  } catch (e) { showToast(e.message); }
+}
+
+function copyAccountToken(el) {
+  const val = (document.getElementById('account-new-token-value') || {}).textContent || '';
+  if (!val) return;
+  safeCopy(val, '复制了 · 存好 · 关掉就看不见了', '复制失败 · 请手动选中复制');
+}
+
+function confirmDeleteAccount() {
+  alert('删账号还没接通 · 想删的话给 daodao 发邮件 · shanthiserot@mail.com');
 }
 </script>
 </body>
