@@ -6738,7 +6738,7 @@
     <p class="modal-sub">几个人共用一个工作室主页 · 各自项目还是各自挂着 · 工作室页聚合显示</p>
     <div class="mb-5">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">slug · URL 用</label>
-      <input id="cs-slug" class="input-bare" placeholder="小写字母 / 数字 / 横线 · 2-32 位 · 比如 daogu-studio">
+      <input id="cs-slug" class="input-bare" placeholder="小写字母 / 数字 / 横线 · 2-32 位 · 比如 daogu-studio" onblur="normalizeStudioSlug(this)">
       <div class="field-hint" style="color: var(--sepia);">最后 URL 长这样:/s/&lt;slug&gt; · 一旦定下别人就靠这个找你们</div>
     </div>
     <div class="mb-5">
@@ -7127,6 +7127,9 @@
   <span class="bb-sep">·</span>
   <span class="bb-ver">v0.68</span>
 </div>
+
+<!-- v0.20 studio e2e 加密 · 纯 JS sha256 + AES-GCM · 不依赖 crypto.subtle (insecure context 下也能跑) -->
+<script src="lib/studio-crypto.js"></script>
 
 <script>
 /* =========================================
@@ -9587,53 +9590,12 @@ async function submitEditWorkshop() {
 }
 
 // ============ STUDIO (v0.20 webapp 闭环) ============
-// e2e 加密 helper · 跟 cli/lib/bridge.js 等价 (sha256(token/secret) → AES-256-GCM)
-async function studioSha256Hex(s) {
-  const buf = new TextEncoder().encode(s);
-  const hash = await crypto.subtle.digest('SHA-256', buf);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-async function studioDeriveKey(secret) {
-  const buf = new TextEncoder().encode(secret);
-  const hash = await crypto.subtle.digest('SHA-256', buf);
-  return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-function studioBase64FromBuf(buf) {
-  const bytes = new Uint8Array(buf);
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s);
-}
-function studioBufFromBase64(b64) {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-async function studioEncrypt(plaintext, secret) {
-  // 信封格式跟 cli/lib/bridge.js: base64(iv(12) | authTag(16) | ciphertext)
-  // SubtleCrypto AES-GCM 输出已含 authTag 在末尾 16 字节 · 需要拆出来拼成 cli 格式
-  const key = await studioDeriveKey(secret);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ctWithTag = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)));
-  const tag = ctWithTag.slice(ctWithTag.length - 16);
-  const ct = ctWithTag.slice(0, ctWithTag.length - 16);
-  const out = new Uint8Array(iv.length + tag.length + ct.length);
-  out.set(iv, 0); out.set(tag, iv.length); out.set(ct, iv.length + tag.length);
-  return studioBase64FromBuf(out);
-}
-async function studioDecrypt(envelope, secret) {
-  const buf = studioBufFromBase64(envelope);
-  const iv = buf.slice(0, 12);
-  const tag = buf.slice(12, 28);
-  const ct = buf.slice(28);
-  // SubtleCrypto 要求 tag 跟 ct 拼在一起
-  const ctWithTag = new Uint8Array(ct.length + tag.length);
-  ctWithTag.set(ct, 0); ctWithTag.set(tag, ct.length);
-  const key = await studioDeriveKey(secret);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ctWithTag);
-  return new TextDecoder().decode(plain);
-}
+// e2e 加密走 lib/studio-crypto.js 里 bundle 的纯 JS 实现 (sha256 + AES-GCM)
+// 之前用 crypto.subtle · 但 http+IP (insecure context) 下 subtle 是 undefined · 整条链路断
+// 现在的实现跟 cli/lib/bridge.js 信封格式完全一致 (已 round-trip 测过)
+function studioSha256Hex(s) { return window.studioCrypto.sha256Hex(s); }
+function studioEncrypt(p, k) { return window.studioCrypto.encrypt(p, k); }
+function studioDecrypt(c, k) { return window.studioCrypto.decrypt(c, k); }
 
 // localStorage: 持久 owner / accepted 成员的 studio secret · 让 webapp invite 能取
 function studioGetLocalSecret(slug) {
@@ -9646,6 +9608,18 @@ function studioSaveLocalSecret(slug, secret) {
 
 let lastCreatedStudio = null;  // 临时持有刚建好的 {slug, secret} 给 modal-studio-created 用
 let lastInviteToken = null;    // 临时持有刚生成的 token 给 copy 按钮
+
+// 失焦时把 &, 空格, _, 等不合规字符自动转成 - · 让用户少撞校验红字
+function normalizeStudioSlug(el) {
+  const raw = el.value || '';
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')   // 非合规字符全换 -
+    .replace(/-+/g, '-')              // 连续 - 合一
+    .replace(/^-+|-+$/g, '')          // 去掉首尾 -
+    .slice(0, 32);                    // 长度兜底
+  if (cleaned !== raw) el.value = cleaned;
+}
 
 function openCreateStudio() {
   if (!currentUser.handle) { openLogin('建工作室'); return; }
