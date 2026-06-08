@@ -6124,6 +6124,170 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
   try { fs.writeFileSync(cursorFile, String(since)); } catch {}
 }
 
+// =====================================================
+// v0.44 team-knowledge · 缓和版 MVP
+// 用户跑 → LLM 抽近 N 天 bug 模式 → push 标 learning → bridge 广播到工作室
+// 接收方 SessionStart 看 reminder → 自己决定要不要 borrow 拉详情
+// 不主动扫别人代码 · 不弹"你也有问题" · 减少误判跟焦虑
+// =====================================================
+
+// tinker team-knowledge digest [--days N] [-y]
+async function cmdTeamKnowledge(opts) {
+  const sub = (opts.positional || [])[0];
+  if (sub !== 'digest') {
+    log('');
+    log(bold('  tinker team-knowledge · 团队知识沉淀'));
+    log('');
+    log('  ' + vermilion('tinker team-knowledge digest [--days N] [-y]'));
+    log(sepia('     LLM 抽近 N 天 fix commit 的 bug 模式 · 脱敏 · push 标 learning'));
+    log(sepia('     自动广播到 active studio · 队友 SessionStart 看到 reminder'));
+    log('');
+    return;
+  }
+
+  const cfg = mustHaveConfig();
+  if (!cfg.llm || !cfg.llm.apiKey) {
+    err('需要先配 LLM · 跑 tinker llm set');
+    process.exit(1);
+  }
+
+  const days = opts.daysBack || 3;
+  const sinceDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 10);
+
+  // 1. 拉近 N 天 fix 类 commit
+  let commits = [];
+  try {
+    const out = execSync(`git log --since='${sinceDate}' --grep='fix' --pretty=format:'%h %s'`, { encoding: 'utf-8' });
+    commits = out.trim().split('\n').filter(Boolean);
+  } catch {}
+
+  if (commits.length === 0) {
+    err('近 ' + days + ' 天没找到 fix 类 commit · 没料给 LLM 抽 (cwd: ' + process.cwd() + ')');
+    process.exit(1);
+  }
+
+  log('');
+  log(sepia('  找到 ') + bold(commits.length + '') + sepia(' 条 fix commit · 近 ') + days + sepia(' 天'));
+
+  // 2. 拼 prompt
+  const prompt = `你看下面这些"修 bug" 的 commit 摘要 · 帮我抽 3-5 条最值得记下来的 bug 模式 · 让队友看完后能回去检查自己代码有没有类似问题。
+
+要求:
+1. 工艺人工作日志气质 · 不堆 emoji · 不堆破折号 · 不三连排比 · 不用 ## 切段
+2. 每条模式包含: 症状 / 误以为的原因 / 真正原因 / 修法 / 怎么自检
+3. 脱敏严格:不要带具体文件路径 / API key / 公司名 / 内部产品代号 / 用户名
+4. 用"出现在 X 场景下" 描述 · 不暴露 codebase 细节
+5. 500-800 字总体 · 不必长
+
+commit list (近 ${days} 天):
+${commits.join('\n')}
+
+输出直接是 markdown 文本 · 不要加"以下是" 这种 meta 句 · 第一句直接进主题`;
+
+  // 3. 调 DeepSeek (cfg.llm.provider == 'deepseek')
+  log(sepia('  让 LLM 抽模式中...'));
+  let digest;
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + cfg.llm.apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.llm.model || 'deepseek-chat',
+        max_tokens: 2500,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'DeepSeek API ' + res.status);
+    digest = (data.choices[0].message.content || '').trim();
+    try { recordLLMUsage('deepseek', data.usage && data.usage.total_tokens, 'team-knowledge'); } catch {}
+  } catch (e) { err('LLM 调用失败: ' + e.message); process.exit(1); }
+
+  if (!digest || digest.length < 100) {
+    err('LLM 返回空 · 试 --days 5 给更多素材');
+    process.exit(1);
+  }
+
+  // 4. voice check (LLM 默认有 AI 味 · 提示但不拦)
+  try {
+    const vc = require('../lib/voice-check').detectAIVoice(digest);
+    if (vc.score >= 2) {
+      log(sepia('  ⚠ voice 自检 ') + vc.score + sepia(' 项命中:') + vc.list.join(' · '));
+      log(sepia('     LLM 起的可能有 AI 味 · 看预览决定要不要改'));
+    }
+  } catch {}
+
+  log('');
+  log(sepia('  ─── 草稿预览 (前 30 行) ───'));
+  digest.split('\n').slice(0, 30).forEach(line => log('  ' + line));
+  log(sepia('  ─── 共 ') + digest.length + sepia(' 字 ───'));
+  log('');
+
+  // 5. confirm
+  if (!opts.yes) {
+    const { confirm } = require('@inquirer/prompts');
+    const yes = await confirm({
+      message: '发布到当前项目 + 标 [上手指南] + 广播到工作室?',
+      default: true,
+    });
+    if (!yes) { log(sepia('  取消了')); log(''); return; }
+  }
+
+  // 6. push + mark learning
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const repoCfg = loadRepoConfig() || {};
+  let projectId = repoCfg.projectId;
+  if (!projectId) {
+    const candidates = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+    if (candidates.length === 0) { err('没找到 active/stuck/live 项目 · 给一个 cwd 绑定的项目'); process.exit(1); }
+    projectId = candidates[0].id;
+  }
+
+  const r = await apiAction(cfg, 'addUpdate', { projectId, text: digest });
+  const updateId = r.result?.id || r.id;
+  try { await apiAction(cfg, 'markAsLearning', { updateId }); } catch {}
+
+  const project = state.projects.find(p => p.id === projectId);
+  log('');
+  ok('✦ team-knowledge 沉淀 — ' + bold(project?.name || '(项目)'));
+  log(sepia('  update id: ') + updateId);
+  log(sepia('  已标 [上手指南] · 队友可 tinker borrow 拉'));
+
+  // 7. broadcast 到 active studio
+  const bridgeLib = require('../lib/bridge');
+  const activeStudio = bridgeLib.getActiveStudio();
+  if (activeStudio && activeStudio.id) {
+    try {
+      const obj = {
+        v: 1,
+        title: 'team-knowledge: 近 ' + days + ' 天踩坑摘要',
+        body: '我整理了一份近 ' + days + ' 天修过的 bug 模式 · 在 ' + (project?.name || '项目') + ' 项目下 · tinker borrow ' + updateId + ' 拉来看 · 看完检查自己代码有没有类似问题',
+        level: 'info',
+        at: Date.now(),
+        type: 'team-knowledge',
+        updateId,
+        projectName: project?.name,
+      };
+      const payload = bridgeLib.encrypt(JSON.stringify(obj), activeStudio.secret);
+      const sendRes = await safeFetchJson(cfg, '/api/bridge/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ toStudio: activeStudio.id, kind: 'noti', payload }),
+      });
+      if (sendRes && sendRes.ok) {
+        log(sepia('  ✓ 广播到工作室 ') + bold(activeStudio.name));
+        log(sepia('  队友 SessionStart 起 Claude 时自动看到 reminder · 自己决定要不要 borrow'));
+      }
+    } catch (e) {
+      log(sepia('  ⚠ 广播失败 (但 update 已 push):') + e.message);
+    }
+  } else {
+    log(sepia('  (active studio 没 id · 跳过广播)'));
+  }
+  log('');
+}
+
 async function gateVoiceCheck(text, opts = {}) {
   if (opts.force) return { ok: true, forced: true };
   let vc;
@@ -8987,6 +9151,7 @@ async function main() {
       case 'ping': await cmdPing(opts); break;
       case 'send': await cmdSend(opts); break;
       case 'handoff': await cmdHandoff(opts); break;
+      case 'team-knowledge': await cmdTeamKnowledge(opts); break;
       case 'inbox': cmdInbox(opts); break;
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'studio':
