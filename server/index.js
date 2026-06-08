@@ -26,6 +26,7 @@ const db = require('./db');                  // SQLite · 启动时自动跑 mig
 const { buildState } = require('./state');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
+const studios = require('./studios');
 const auth = require('./auth');
 
 // ============================================
@@ -276,7 +277,7 @@ app.get('/api/state', stateLimiter, (req, res) => {
 });
 
 // 方法库 + 踩坑经验 搜索 (v0.12)
-// 不需要登录 · 任何人都能搜公开内容 · 给 tinker borrow / Tinker MCP / webapp 搜索 共用
+// 不需要登录 · 任何人都能搜公开内容 · 给 tinker borrow / webapp 搜索 共用
 // ?q=<关键词>&limit=10&methodsOnly=1&kind=method|experience|all
 // 如果带了登录 (token / cookie session) · 自动把命中前 3 条写进 borrow_log (反馈闭环)
 app.get('/api/method/search', stateLimiter, (req, res) => {
@@ -317,7 +318,7 @@ app.get('/api/tools', stateLimiter, (req, res) => {
   res.json(tools);
 });
 
-// v0.12 自己的最近 update · CLI / MCP / AI agent 用
+// v0.12 自己的最近 update · CLI / AI agent 用
 // ?limit=N&kind=experience|method|ship|stuck|prototype|all
 // 需要登录 (session 或 api token) · 只返自己的
 app.get('/api/me/updates', stateLimiter, auth.requireSession, (req, res) => {
@@ -385,21 +386,106 @@ app.post('/api/bridge/send', actionLimiter, auth.requireSession, (req, res) => {
 });
 
 // 收 · GET ?since=<seq> · 长轮询 (没新消息挂 25s · 期间被唤醒立刻返)
+// 拉的范围:发给我 handle 的 + 全广播 + 我所在所有 studio 的
 app.get('/api/bridge/poll', stateLimiter, auth.requireSession, async (req, res) => {
   try {
     const since = parseInt(req.query.since || '0', 10);
     const handle = req.user.handle;
+    const userId = req.user.id;
     if (!handle) return res.status(400).json({ error: '需要 handle (用户没补完 onboarding?)' });
 
-    let messages = bridge.bridgePoll({ since, handle });
+    let messages = bridge.bridgePoll({ since, handle, userId });
     if (messages.length === 0) {
-      await bridge.waitForMessages(handle, 25000);
-      messages = bridge.bridgePoll({ since, handle });
+      await bridge.waitForMessages({ handle, userId }, 25000);
+      messages = bridge.bridgePoll({ since, handle, userId });
     }
     const lastSeq = messages.length ? messages[messages.length - 1].seq : since;
     res.json({ ok: true, since: lastSeq, messages });
   } catch (e) {
     req.log.warn({ err: e.message }, 'bridge poll rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ============================================
+// studios · 工作室一等公民 (v0.18)
+// ============================================
+
+// 列所有工作室 (公开)
+app.get('/api/studios', stateLimiter, (req, res) => {
+  try {
+    res.json({ ok: true, studios: studios.studiosList() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 看一个工作室聚合页 (公开 · 不要求登录)
+app.get('/api/studios/:slug', stateLimiter, (req, res) => {
+  const s = studios.studioGet({ slug: req.params.slug });
+  if (!s) return res.status(404).json({ error: '工作室不存在' });
+  res.json({ ok: true, studio: s });
+});
+
+// 建工作室 · 自动当 owner
+app.post('/api/studios', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = studios.studioCreate(req.body || {}, { currentUserId: req.user.id });
+    res.json({ ok: true, studio: result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'studio create rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 加入工作室 (客户端先从邀请桥消息里解出 slug + secret · POST 这里登记成员)
+app.post('/api/studios/join', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = studios.studioJoin(req.body || {}, { currentUserId: req.user.id });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'studio join rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 退出
+app.post('/api/studios/:id/leave', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = studios.studioLeave({ studioId: req.params.id }, { currentUserId: req.user.id });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'studio leave rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 我所属的工作室 (登录后用 · 个人主页 / CLI tinker studio list 用)
+app.get('/api/me/studios', stateLimiter, auth.requireSession, (req, res) => {
+  res.json({ ok: true, studios: studios.studiosForUser(req.user.id) });
+});
+
+// owner 邀请别人 · client 传 tokenHash + secretCipher (server 看不到 token 跟 secret)
+app.post('/api/studios/:id/invite', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = studios.studioCreateInvite(
+      { studioId: req.params.id, ...(req.body || {}) },
+      { currentUserId: req.user.id }
+    );
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'studio invite rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 接受邀请 · client 算 tokenHash 提交 · server 验 target = 你 · 返 secretCipher
+app.post('/api/studios/accept', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = studios.studioAcceptInvite(req.body || {}, { currentUserId: req.user.id });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'studio accept rejected');
     res.status(400).json({ error: e.message });
   }
 });

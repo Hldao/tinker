@@ -317,6 +317,18 @@
   .pcard.tracking-pcard { padding: 14px 0; border-bottom: 1px dotted var(--rule); }
   .pcard.tracking-pcard .pcard-name { font-size: 17px; color: var(--ink-soft); }
   .pcard.tracking-pcard:hover .pcard-name { color: var(--vermilion); }
+  /* v0.20 个人工作室页"挂靠"链接 · masthead 下方一行 · 跳工作室聚合页 */
+  .workshop-affiliation { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.08em; margin-top: 10px; text-transform: lowercase; }
+  .workshop-affiliation-link { color: var(--ink-soft); cursor: pointer; border-bottom: 1px dotted var(--rule); transition: color 0.15s, border-color 0.15s; }
+  .workshop-affiliation-link:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  /* v0.18 studio 聚合页 · 成员 chip · 一行多列 · hover 跳个人工作室 */
+  .studio-members-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 8px; }
+  .studio-member-chip { padding: 14px 16px; border: 1px solid var(--rule); cursor: pointer; transition: border-color 0.15s; }
+  .studio-member-chip:hover { border-color: var(--ink); }
+  .studio-member-chip:hover .studio-member-handle { color: var(--vermilion); }
+  .studio-member-handle { font-family: 'Newsreader', serif; font-size: 17px; color: var(--ink); transition: color 0.15s; }
+  .studio-member-role { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); letter-spacing: 0.08em; margin-left: 8px; text-transform: uppercase; }
+  .studio-member-tag { font-family: 'Newsreader', serif; font-size: 13px; color: var(--sepia); margin-top: 4px; line-height: 1.4; }
   /* v0.74 工作室 pcard 内嵌进展 · 项目-进展归属一目了然 · 取代底部独立 timeline */
   .pcard-updates { margin-top: 12px; padding-top: 12px; border-top: 1px dotted var(--rule); display: flex; flex-direction: column; gap: 6px; }
   .pcard-update-entry { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: baseline; }
@@ -6418,6 +6430,7 @@
   </section>
 
   <section class="screen" id="screen-workshop"><div id="workshop-content"></div></section>
+  <section class="screen" id="screen-studio"><div id="studio-content"></div></section>
   <section class="screen" id="screen-project"><div id="project-content"></div></section>
 
   <!-- v0.83 方法库子页 · 跨用户跨项目 · 跟 feed / 陈列馆 同级板块 -->
@@ -6714,6 +6727,102 @@
     </div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-wechat-qr')" class="btn-act-primary">关掉</button>
+    </div>
+  </div>
+</div>
+
+<!-- STUDIO 建工作室 modal · v0.20 -->
+<div id="modal-create-studio" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 520px;">
+    <h3 class="modal-title">建一个工作室</h3>
+    <p class="modal-sub">几个人共用一个工作室主页 · 各自项目还是各自挂着 · 工作室页聚合显示</p>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">slug · URL 用</label>
+      <input id="cs-slug" class="input-bare" placeholder="小写字母 / 数字 / 横线 · 2-32 位 · 比如 daogu-studio">
+      <div class="field-hint" style="color: var(--sepia);">最后 URL 长这样:/s/&lt;slug&gt; · 一旦定下别人就靠这个找你们</div>
+    </div>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">name · 显示名</label>
+      <input id="cs-name" class="input-bare" placeholder="比如 捣鼓工作室">
+    </div>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">tagline · 一句话 (可选)</label>
+      <input id="cs-tagline" class="input-bare" placeholder="你们工作室在做的事 · 一句话">
+    </div>
+    <div id="cs-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-create-studio')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitCreateStudio()" class="btn-act-primary">建好 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- STUDIO 建好后展示 secret 一次性 -->
+<div id="modal-studio-created" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 560px;">
+    <h3 class="modal-title">工作室建好了 · 暗号只显示一次</h3>
+    <p class="modal-sub">这串暗号用来跟队友共享桥 e2e 加密 · 想装 CLI 的话存一下 · 不存也行 (邀请走 token · 不依赖明文 secret)</p>
+    <div class="mb-4 mt-5" style="background: #f6f1e7; padding: 14px 16px; border: 1px dashed var(--rule); font-family: 'JetBrains Mono', monospace; font-size: 13px; word-break: break-all;">
+      <div id="sc-secret"></div>
+    </div>
+    <p class="serif" style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
+      想邀请队友 · 进工作室页点「邀请队友」生成一次性 token · 把 token 发给 ta · 比直接发暗号安全。
+    </p>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="copyStudioSecret()" class="btn-act" style="border-bottom: none;">复制暗号</button>
+      <button onclick="closeStudioCreated()" class="btn-act-primary">去工作室 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- STUDIO 邀请队友 modal -->
+<div id="modal-invite-member" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 520px;">
+    <div id="invite-state-input">
+      <h3 class="modal-title">邀请队友进工作室</h3>
+      <p class="modal-sub">生成一次性 token · 24h 有效 · server 看不到 token 跟暗号 (e2e)</p>
+      <div class="mb-5">
+        <label class="mono text-xs block mb-1" style="color: var(--sepia);">队友的 handle</label>
+        <input id="inv-handle" class="input-bare" placeholder="@maomao · ta 得先注册过 Tinker">
+        <div class="field-hint" style="color: var(--sepia);">不带 @ 也行 · 不知道 handle? 让 ta 先注册自报家门</div>
+      </div>
+      <div id="inv-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
+      <div class="flex justify-end gap-4 mt-6">
+        <button onclick="closeModal('modal-invite-member')" class="btn-act" style="border-bottom: none;">取消</button>
+        <button onclick="submitInvite()" class="btn-act-primary">生成 token →</button>
+      </div>
+    </div>
+    <div id="invite-state-token" class="hidden">
+      <h3 class="modal-title">token 生成了 · 发给队友</h3>
+      <p class="modal-sub">这串发给 <span id="inv-target"></span> · ta 在 /join 输入就能加入 · 或者用 CLI</p>
+      <div class="mb-4 mt-5" style="background: #f6f1e7; padding: 14px 16px; border: 1px dashed var(--rule); font-family: 'JetBrains Mono', monospace; font-size: 14px;">
+        <div id="inv-token"></div>
+      </div>
+      <p class="serif" style="font-size: 13px; color: var(--ink-soft); line-height: 1.6;">
+        CLI 用户跑:<code class="inline-code">tinker studio accept &lt;token&gt;</code><br>
+        浏览器用户:打开 <code class="inline-code">/#/join</code> 输入 token
+      </p>
+      <div class="flex justify-end gap-4 mt-6">
+        <button onclick="copyInviteToken()" class="btn-act" style="border-bottom: none;">复制 token</button>
+        <button onclick="closeModal('modal-invite-member')" class="btn-act-primary">好</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STUDIO 接受邀请 modal · 路由 #/join 触发 -->
+<div id="modal-accept-invite" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
+  <div class="modal-paper w-full" style="max-width: 480px;">
+    <h3 class="modal-title">接受工作室邀请</h3>
+    <p class="modal-sub">把队友发给你的 token 粘进来 · 一次性 · 用过失效</p>
+    <div class="mb-5">
+      <label class="mono text-xs block mb-1" style="color: var(--sepia);">token</label>
+      <input id="ai-token" class="input-bare" placeholder="12 位字符 · 比如 90ca10190a7e">
+    </div>
+    <div id="ai-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
+    <div class="flex justify-end gap-4 mt-6">
+      <button onclick="closeModal('modal-accept-invite')" class="btn-act" style="border-bottom: none;">取消</button>
+      <button onclick="submitAcceptInvite()" class="btn-act-primary">加入 →</button>
     </div>
   </div>
 </div>
@@ -7199,6 +7308,7 @@ function showScreen(name, ...args) {
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (name === 'feed') renderFeed();
   else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
+  else if (name === 'studio') renderStudio(args[0]);
   else if (name === 'project') renderProject(args[0], args[1]);
   else if (name === 'onboard') renderOnboard();
   else if (name === 'notifications') renderNotifications();
@@ -7218,6 +7328,7 @@ function showScreen(name, ...args) {
 // hash 路由 — 让项目页 / 工作室页有可分享 URL
 function buildHash(name, args) {
   if (name === 'workshop') return '#/w/' + encodeURIComponent(args[0] || '');
+  if (name === 'studio') return '#/s/' + encodeURIComponent(args[0] || '');
   if (name === 'project') return '#/p/' + encodeURIComponent(args[0] || '') + '/' + encodeURIComponent(args[1] || '');
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
@@ -7234,6 +7345,8 @@ function navigateFromHash() {
   if (!h || h === '#/' || h === '#') return goHome();  // 入站默认走记忆里的视图
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
+  if (parts[0] === 's' && parts[1]) return showScreen('studio', parts[1]);
+  if (parts[0] === 'join') { goHome(); openAcceptInvite(parts[1] || ''); return; }
   if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
   if (parts[0] === 'notifications') return showScreen('notifications');
   if (parts[0] === 'about') return showScreen('about');
@@ -7732,6 +7845,20 @@ function renderWorkshop(handle) {
         ${isMe ? `<span class="small-action ml-3" onclick="openEditWorkshop()" style="vertical-align: middle;">${ICONS.edit}编辑</span>` : ''}
         ${isMe ? `<span class="small-action ml-3" onclick="openApiTokens()" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); vertical-align: middle; letter-spacing: 0.05em;">CLI 钥匙</span>` : ''}
       </p>
+      ${(user.studios && user.studios.length > 0) ? `
+        <div class="workshop-affiliation">
+          挂靠 →
+          ${user.studios.map(s => `<a class="workshop-affiliation-link" onclick="showScreen('studio','${escapeHtml(s.slug)}')">${escapeHtml(s.name)}</a>`).join('  ·  ')}
+          ${isMe ? `  ·  <a class="workshop-affiliation-link" onclick="openCreateStudio()">+ 再建一个</a>` : ''}
+        </div>
+      ` : (isMe ? `
+        <div class="workshop-affiliation">
+          还没挂任何工作室 ·
+          <a class="workshop-affiliation-link" onclick="openCreateStudio()">建一个</a>
+          或
+          <a class="workshop-affiliation-link" onclick="openAcceptInvite()">接受邀请</a>
+        </div>
+      ` : '')}
       ${isMe ? miniStatsHtml : ''}
     </div>
     <div class="mb-12">
@@ -7828,6 +7955,71 @@ function renderWorkshop(handle) {
         `).join('')}
       </div>
     ` : ''}
+  `;
+}
+
+/* ============ STUDIO (工作室聚合页 · v0.18) ============
+   一个工作室 = 多个成员的工作室合体页 · /s/<slug>
+   server: GET /api/studios/:slug 返回 {members, projects}
+   不进 state · 单页直接 fetch · 简单可靠 */
+async function renderStudio(slug) {
+  const root = document.getElementById('studio-content');
+  root.innerHTML = '<p class="serif" style="color: var(--sepia);">载入工作室…</p>';
+
+  let data;
+  try {
+    const res = await fetch('/api/studios/' + encodeURIComponent(slug), { credentials: 'same-origin' });
+    data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '工作室不存在');
+  } catch (e) {
+    root.innerHTML = `<p class="serif" style="color: var(--sepia);">找不到这间工作室 (${escapeHtml(e.message)})</p>`;
+    return;
+  }
+
+  const s = data.studio;
+  const isMember = s.members.some(m => m.handle === currentUser.handle);
+  const myRow = s.members.find(m => m.handle === currentUser.handle);
+  const isOwner = !!(myRow && myRow.role === 'owner');
+
+  const memberHtml = s.members.map(m => `
+    <div class="studio-member-chip" onclick="showScreen('workshop','${m.handle}')">
+      <span class="studio-member-handle">@${escapeHtml(m.handle)}</span>
+      ${m.role === 'owner' ? '<span class="studio-member-role">owner</span>' : ''}
+      ${m.tagline ? `<div class="studio-member-tag">${escapeHtml(m.tagline)}</div>` : ''}
+    </div>
+  `).join('');
+
+  const projectsHtml = s.projects.length === 0
+    ? '<p class="serif" style="color: var(--sepia);">还没人在这间工作室挂项目</p>'
+    : s.projects.map(p => `
+        <div class="pcard" onclick="showScreen('project','${escapeHtml(p.ownerHandle)}','${escapeHtml(p.slug)}')">
+          <div class="pcard-name">${escapeHtml(p.name)}</div>
+          <div class="pcard-desc">${escapeHtml(p.desc)}</div>
+          <div class="pcard-meta">
+            <span class="${p.status}">— ${statusText(p.status)}</span>
+            &nbsp;·&nbsp; by @${escapeHtml(p.ownerHandle)}
+          </div>
+        </div>
+      `).join('');
+
+  root.innerHTML = `
+    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
+      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMember ? '你的工作室' : '一间工作室'}</div>
+      <h1 class="workshop-name mb-3">${escapeHtml(s.name)}</h1>
+      ${s.tagline ? `<p class="workshop-tagline">「${escapeHtml(s.tagline)}」</p>` : ''}
+      <div class="mono text-xs mt-3" style="color: var(--sepia);">/s/${escapeHtml(s.slug)} · ${s.members.length} 个人</div>
+    </div>
+    <div class="mb-12">
+      <div class="section-label flex items-center justify-between">
+        <span>成员 (${s.members.length})</span>
+        ${isOwner ? `<span class="small-action" onclick="openInviteMember('${escapeHtml(s.slug)}')">+ 邀请队友</span>` : ''}
+      </div>
+      <div class="studio-members-grid">${memberHtml}</div>
+    </div>
+    <div class="mb-12">
+      <div class="section-label"><span>项目 (${s.projects.length})</span></div>
+      ${projectsHtml}
+    </div>
   `;
 }
 
@@ -9392,6 +9584,224 @@ async function submitEditWorkshop() {
     renderWorkshop(currentUser.handle);
     showToast(newHandle !== oldHandle ? `改好了 · 新地址 @${newHandle}` : '改好了');
   } catch (e) { showToast(e.message); }
+}
+
+// ============ STUDIO (v0.20 webapp 闭环) ============
+// e2e 加密 helper · 跟 cli/lib/bridge.js 等价 (sha256(token/secret) → AES-256-GCM)
+async function studioSha256Hex(s) {
+  const buf = new TextEncoder().encode(s);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function studioDeriveKey(secret) {
+  const buf = new TextEncoder().encode(secret);
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+function studioBase64FromBuf(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function studioBufFromBase64(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function studioEncrypt(plaintext, secret) {
+  // 信封格式跟 cli/lib/bridge.js: base64(iv(12) | authTag(16) | ciphertext)
+  // SubtleCrypto AES-GCM 输出已含 authTag 在末尾 16 字节 · 需要拆出来拼成 cli 格式
+  const key = await studioDeriveKey(secret);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ctWithTag = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)));
+  const tag = ctWithTag.slice(ctWithTag.length - 16);
+  const ct = ctWithTag.slice(0, ctWithTag.length - 16);
+  const out = new Uint8Array(iv.length + tag.length + ct.length);
+  out.set(iv, 0); out.set(tag, iv.length); out.set(ct, iv.length + tag.length);
+  return studioBase64FromBuf(out);
+}
+async function studioDecrypt(envelope, secret) {
+  const buf = studioBufFromBase64(envelope);
+  const iv = buf.slice(0, 12);
+  const tag = buf.slice(12, 28);
+  const ct = buf.slice(28);
+  // SubtleCrypto 要求 tag 跟 ct 拼在一起
+  const ctWithTag = new Uint8Array(ct.length + tag.length);
+  ctWithTag.set(ct, 0); ctWithTag.set(tag, ct.length);
+  const key = await studioDeriveKey(secret);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ctWithTag);
+  return new TextDecoder().decode(plain);
+}
+
+// localStorage: 持久 owner / accepted 成员的 studio secret · 让 webapp invite 能取
+function studioGetLocalSecret(slug) {
+  try { return localStorage.getItem('tinker:studio:' + slug + ':secret') || null; }
+  catch { return null; }
+}
+function studioSaveLocalSecret(slug, secret) {
+  try { localStorage.setItem('tinker:studio:' + slug + ':secret', secret); } catch {}
+}
+
+let lastCreatedStudio = null;  // 临时持有刚建好的 {slug, secret} 给 modal-studio-created 用
+let lastInviteToken = null;    // 临时持有刚生成的 token 给 copy 按钮
+
+function openCreateStudio() {
+  if (!currentUser.handle) { openLogin('建工作室'); return; }
+  document.getElementById('cs-slug').value = '';
+  document.getElementById('cs-name').value = '';
+  document.getElementById('cs-tagline').value = '';
+  document.getElementById('cs-error').classList.add('hidden');
+  document.getElementById('modal-create-studio').classList.remove('hidden');
+  setTimeout(() => document.getElementById('cs-slug').focus(), 50);
+}
+
+async function submitCreateStudio() {
+  const slug = document.getElementById('cs-slug').value.trim().toLowerCase();
+  const name = document.getElementById('cs-name').value.trim();
+  const tagline = document.getElementById('cs-tagline').value.trim();
+  const errBox = document.getElementById('cs-error');
+  errBox.classList.add('hidden');
+  if (!/^[a-z0-9-]{2,32}$/.test(slug)) { errBox.textContent = 'slug 必须 2-32 位小写字母数字横线'; errBox.classList.remove('hidden'); return; }
+  if (!name) { errBox.textContent = 'name 必填'; errBox.classList.remove('hidden'); return; }
+
+  // 客户端生成 secret · 算 hash 提交 · server 看不到 secret 原文
+  const secretBytes = crypto.getRandomValues(new Uint8Array(16));
+  const secret = Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const secretHash = await studioSha256Hex(secret);
+
+  try {
+    const res = await fetch('/api/studios', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, name, tagline: tagline || null, secretHash }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '建失败');
+    studioSaveLocalSecret(slug, secret);
+    lastCreatedStudio = { slug, name, secret };
+    closeModal('modal-create-studio');
+    document.getElementById('sc-secret').textContent = secret;
+    document.getElementById('modal-studio-created').classList.remove('hidden');
+    state = await fetchState();
+  } catch (e) {
+    errBox.textContent = e.message;
+    errBox.classList.remove('hidden');
+  }
+}
+
+function copyStudioSecret() {
+  if (!lastCreatedStudio) return;
+  navigator.clipboard.writeText(lastCreatedStudio.secret).then(() => showToast('暗号复制了'));
+}
+function closeStudioCreated() {
+  closeModal('modal-studio-created');
+  if (lastCreatedStudio) {
+    showScreen('studio', lastCreatedStudio.slug);
+    lastCreatedStudio = null;
+  }
+}
+
+function openInviteMember(slug) {
+  if (!studioGetLocalSecret(slug)) {
+    showToast('本地没存这个工作室的暗号 · 浏览器邀请用不了 · 跑 CLI: tinker studio invite');
+    return;
+  }
+  document.getElementById('invite-state-input').classList.remove('hidden');
+  document.getElementById('invite-state-token').classList.add('hidden');
+  document.getElementById('inv-handle').value = '';
+  document.getElementById('inv-error').classList.add('hidden');
+  document.getElementById('modal-invite-member').dataset.slug = slug;
+  document.getElementById('modal-invite-member').classList.remove('hidden');
+  setTimeout(() => document.getElementById('inv-handle').focus(), 50);
+}
+
+async function submitInvite() {
+  const slug = document.getElementById('modal-invite-member').dataset.slug;
+  const targetHandle = document.getElementById('inv-handle').value.trim().replace(/^@/, '');
+  const errBox = document.getElementById('inv-error');
+  errBox.classList.add('hidden');
+  if (!targetHandle) { errBox.textContent = '队友 handle 必填'; errBox.classList.remove('hidden'); return; }
+
+  const secret = studioGetLocalSecret(slug);
+  if (!secret) { errBox.textContent = '本地没存暗号 · 走 CLI invite 吧'; errBox.classList.remove('hidden'); return; }
+
+  // 拉 studio_id
+  let studio;
+  try {
+    const r = await fetch('/api/studios/' + encodeURIComponent(slug), { credentials: 'same-origin' });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || '工作室不存在');
+    studio = d.studio;
+  } catch (e) { errBox.textContent = e.message; errBox.classList.remove('hidden'); return; }
+
+  // 生成 token · 加密 secret
+  const tokenBytes = crypto.getRandomValues(new Uint8Array(6));
+  const token = Array.from(tokenBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const tokenHash = await studioSha256Hex(token);
+  let secretCipher;
+  try { secretCipher = await studioEncrypt(secret, token); }
+  catch (e) { errBox.textContent = '加密失败: ' + e.message; errBox.classList.remove('hidden'); return; }
+
+  try {
+    const res = await fetch('/api/studios/' + studio.id + '/invite', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetHandle, tokenHash, secretCipher }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '邀请失败');
+    lastInviteToken = token;
+    document.getElementById('inv-target').textContent = '@' + targetHandle;
+    document.getElementById('inv-token').textContent = token;
+    document.getElementById('invite-state-input').classList.add('hidden');
+    document.getElementById('invite-state-token').classList.remove('hidden');
+  } catch (e) {
+    errBox.textContent = e.message; errBox.classList.remove('hidden');
+  }
+}
+
+function copyInviteToken() {
+  if (!lastInviteToken) return;
+  navigator.clipboard.writeText(lastInviteToken).then(() => showToast('token 复制了'));
+}
+
+function openAcceptInvite(prefillToken) {
+  if (!currentUser.handle) { openLogin('接受邀请'); return; }
+  document.getElementById('ai-token').value = prefillToken || '';
+  document.getElementById('ai-error').classList.add('hidden');
+  document.getElementById('modal-accept-invite').classList.remove('hidden');
+  setTimeout(() => document.getElementById('ai-token').focus(), 50);
+}
+
+async function submitAcceptInvite() {
+  const token = document.getElementById('ai-token').value.trim();
+  const errBox = document.getElementById('ai-error');
+  errBox.classList.add('hidden');
+  if (!token) { errBox.textContent = 'token 必填'; errBox.classList.remove('hidden'); return; }
+
+  const tokenHash = await studioSha256Hex(token);
+  try {
+    const res = await fetch('/api/studios/accept', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokenHash }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '兑换失败 · token 不对 / 过期 / 不是给你的');
+    // 尝试解 secret 存本地 · 让用户之后能 invite (失败也没关系 · 只是浏览器邀请用不了)
+    try {
+      const secret = await studioDecrypt(data.secretCipher, token);
+      studioSaveLocalSecret(data.slug, secret);
+    } catch {}
+    closeModal('modal-accept-invite');
+    state = await fetchState();
+    showScreen('studio', data.slug);
+    showToast('加入了 — ' + data.name);
+  } catch (e) {
+    errBox.textContent = e.message; errBox.classList.remove('hidden');
+  }
 }
 
 // ============ API tokens ============

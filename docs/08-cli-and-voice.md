@@ -159,34 +159,7 @@ AI 自省 / 配置:
 
 其他:
 - `tinker update` 拉最新代码 + 重装
-- `tinker mcp` 启 MCP server (stdio)
 - 几乎所有命令支持 `--json`，错误统一 `{ ok: false, error, code }` 形态
-
-### MCP server
-
-13 个 tool (任何 MCP 兼容 agent 即开即用):
-
-查询类:
-- `tinker_list_projects` 列我的项目
-- `tinker_get_state` 读 prompt-state 快照
-- `tinker_today_summary` 今日 commit / push / token
-- `tinker_check_triggers` 评估当前 repo 触发器
-- `tinker_get_config` 看配置 (token 只露后 4 位)
-- `tinker_borrow` 搜方法库 (自动带 handle)
-- `tinker_recent_updates` 读最近的 update
-
-动作类:
-- `tinker_push / tinker_ship / tinker_prototype / tinker_stuck` 写入族 (都支持 idempotency_key)
-- `tinker_contribute` 标方法
-- `tinker_mark_experience` 标踩坑经验
-- `tinker_mute` 静音
-- `tinker_resolve_pending` 响应 pending prompt
-
-2 个 resource + 订阅推送:
-- `tinker://triggers/active` prompt-state 快照，5s 轮询加文件 watch
-- `tinker://state/today` 今日 git commit + Tinker push 计数
-- 内容 diff 之后才发 `notifications/resources/updated`
-- subscribe / unsubscribe handler 完整
 
 ### 反馈闭环
 
@@ -202,7 +175,7 @@ AI 自省 / 配置:
 - P0 proactive prompt 框架: 5 类触发器全做完
 - P1 LLM 起草链路: DeepSeek 接通 + voice fingerprint 校验
 - P2 方法库: 搜索 + 标记 + 反馈闭环全闭合
-- P3 编辑器扩展: MCP 已经让任何 MCP 兼容 agent 直接当 first-class tool 用，省掉自己写 VS Code / Cursor extension 那条路
+- P3 编辑器扩展: 任何 AI agent 通过 Bash 跑 `tinker --json` 都能当 first-class tool 用 · 不锁单一客户端 · 省掉写 VS Code / Cursor extension
 
 CLI 已经覆盖了 "写进展 / 看进展 / 起草 / 主动陪伴 / 收尾 / 借方法 / 跟 AI 协作" 全链路。webapp 那边读和社交还在路上，但写归 CLI 的分工很清晰。
 
@@ -295,6 +268,8 @@ C 层种子: server/scripts/mark-aliyun-experience.js 是第一颗。其他 ai-d
 **score 累积模型** 替代单一触发器命中即 prompt 的逻辑。多个弱信号叠加超阈值就触发，比单一关键词更准。
 
 **Phase 5+ LLM 价值判断**。等 sample pool 厚了（10+ 篇），让 LLM 看 commit + diff 跟 fingerprint 对比，判断"这条 commit 像作者过去发过的值得记的吗"。成本高，alpha 期不做。
+
+**v0.20 砍 MCP 那层**。之前有 `cli/lib/mcp-server.js` 暴露 17 个 tinker_* tool 给 MCP 兼容客户端 (Cursor / Claude Desktop)。现在删了。原因:CLI 已经能让 Claude Code 通过 Bash 跑 `tinker --json` 拿结构化输出 · 其它 AI client 大多支持 Bash 或 shell hook · MCP 这层等于 CLI 命令的二次包装 · 每加一个 CLI 命令要 MCP 也跟一个 · 双倍工作 · AI agent 走两条路也容易选错。一条路线最干净。
 
 ## 7. 给未来 AI 的接手指南
 

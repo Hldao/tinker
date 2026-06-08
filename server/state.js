@@ -22,6 +22,21 @@ function buildState({ targetUserId } = {}) {
     usersOut[u.handle] = { name: u.name || u.handle, tagline: u.tagline || '' };
   }
 
+  // v0.20 给每个 user 带上挂靠的工作室 · 让个人页能渲染"挂靠 → /s/xxx"链接
+  // 一次性 join 查 · 不 N+1 (workshop 数量很少)
+  const studioRows = db.prepare(`
+    SELECT sm.user_id, s.slug, s.name, s.tagline AS studioTagline, sm.role
+    FROM studio_members sm
+    JOIN studios s ON s.id = sm.studio_id
+    ORDER BY sm.joined_at ASC
+  `).all();
+  for (const r of studioRows) {
+    const handle = idToHandle[r.user_id];
+    if (!handle || !usersOut[handle]) continue;
+    if (!usersOut[handle].studios) usersOut[handle].studios = [];
+    usersOut[handle].studios.push({ slug: r.slug, name: r.name, tagline: r.studioTagline, role: r.role });
+  }
+
   // 抓所有项目 (包括 archive) · feed 由 webapp getFeedEvents 过滤 · workshop 的"做过的"区要显示 archive
   const projectsRows = db.prepare(`
     SELECT id, owner_id, slug, name, desc, product_link, status, shipped_at, github_link,

@@ -14,14 +14,16 @@
 
 const db = require('./db');
 const crypto = require('crypto');
+const studios = require('./studios');
 
 const KINDS = new Set(['noti', 'file', 'task']);
 const MAX_PAYLOAD = 10 * 1024 * 1024;
 
-// handle → Set<callback> · send 时 notifyWaiters 唤醒
+// 路由 key → Set<callback>
+// key 形式:'handle:<h>' / 'studio:<id>' / '*' (广播)
 const waiters = new Map();
 
-function bridgeSend({ to, kind, payload }, { currentUserId }) {
+function bridgeSend({ to, toStudio, kind, payload }, { currentUserId }) {
   if (!KINDS.has(kind)) throw new Error('unknown kind: ' + kind);
   if (!payload || typeof payload !== 'string') throw new Error('payload required (string)');
   if (payload.length > MAX_PAYLOAD) throw new Error('payload 超 10MB · 大文件拆块');
@@ -29,63 +31,98 @@ function bridgeSend({ to, kind, payload }, { currentUserId }) {
   const fromRow = db.prepare('SELECT handle FROM users WHERE id = ?').get(currentUserId);
   if (!fromRow) throw new Error('发送方 user not found');
 
+  // 工作室维度的消息:必须是该 studio 成员才能往里扔
+  if (toStudio) {
+    if (!studios.isMember(toStudio, currentUserId)) {
+      throw new Error('你不在这个工作室里 · 不能往里发');
+    }
+  }
+
   const id = 'msg-' + crypto.randomBytes(8).toString('hex');
   const createdAt = Date.now();
   const result = db.prepare(`
-    INSERT INTO messages (id, from_handle, to_handle, kind, payload, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, fromRow.handle, to || null, kind, payload, createdAt);
+    INSERT INTO messages (id, from_handle, to_handle, to_studio, kind, payload, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, fromRow.handle, to || null, toStudio || null, kind, payload, createdAt);
 
-  notifyWaiters(to || null);
+  if (toStudio) notifyWaiters('studio:' + toStudio);
+  else if (to) notifyWaiters('handle:' + to);
+  else notifyWaiters('*');
+
   return { id, seq: result.lastInsertRowid, createdAt };
 }
 
-function bridgePoll({ since, handle }) {
-  return db.prepare(`
+// userId 用来算 user 加入的 studio 列表 · 一次拉所有相关消息
+function bridgePoll({ since, handle, userId }) {
+  const studioIds = userId
+    ? db.prepare('SELECT studio_id FROM studio_members WHERE user_id = ?').all(userId).map(r => r.studio_id)
+    : [];
+
+  // 动态拼 studio 占位符 · 没工作室时跳过该分支
+  const studioClause = studioIds.length > 0
+    ? `OR to_studio IN (${studioIds.map(() => '?').join(',')})`
+    : '';
+
+  const sql = `
     SELECT seq, id, from_handle AS fromHandle, to_handle AS toHandle,
-           kind, payload, created_at AS createdAt
+           to_studio AS toStudio, kind, payload, created_at AS createdAt
     FROM messages
-    WHERE seq > ? AND (to_handle = ? OR to_handle IS NULL)
+    WHERE seq > ?
+      AND (to_handle = ? OR (to_handle IS NULL AND to_studio IS NULL) ${studioClause})
     ORDER BY seq ASC
     LIMIT 100
-  `).all(since || 0, handle);
+  `;
+  return db.prepare(sql).all(since || 0, handle, ...studioIds);
 }
 
-// 长轮询挂起 · timeoutMs 内没消息返 'timeout' · 期间被唤醒返 'signal'
-function waitForMessages(handle, timeoutMs = 25000) {
+// 长轮询挂起 · 同时挂在 handle key 跟所有 studio key 上 · 任一被唤醒就 resolve
+function waitForMessages({ handle, userId }, timeoutMs = 25000) {
+  const studioIds = userId
+    ? db.prepare('SELECT studio_id FROM studio_members WHERE user_id = ?').all(userId).map(r => r.studio_id)
+    : [];
+
+  const keys = ['handle:' + handle, '*', ...studioIds.map(id => 'studio:' + id)];
+
   return new Promise((resolve) => {
-    let cb;
+    let done = false;
     const tid = setTimeout(() => {
-      if (cb) removeWaiter(handle, cb);
+      if (done) return;
+      done = true;
+      for (const k of keys) removeWaiter(k, cb);
       resolve('timeout');
     }, timeoutMs);
-    cb = () => { clearTimeout(tid); resolve('signal'); };
-    if (!waiters.has(handle)) waiters.set(handle, new Set());
-    waiters.get(handle).add(cb);
+    const cb = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(tid);
+      for (const k of keys) removeWaiter(k, cb);
+      resolve('signal');
+    };
+    for (const k of keys) {
+      if (!waiters.has(k)) waiters.set(k, new Set());
+      waiters.get(k).add(cb);
+    }
   });
 }
 
-function removeWaiter(handle, cb) {
-  const set = waiters.get(handle);
+function removeWaiter(key, cb) {
+  const set = waiters.get(key);
   if (!set) return;
   set.delete(cb);
-  if (set.size === 0) waiters.delete(handle);
+  if (set.size === 0) waiters.delete(key);
 }
 
-// to_handle === null 是广播 · 唤醒所有 listener
-// 否则只唤醒该 handle 的 listener (广播 listener 也覆盖 · 因为 poll WHERE 已含 IS NULL)
-function notifyWaiters(toHandle) {
-  if (toHandle === null) {
-    for (const [h, set] of waiters) {
+// '*' 唤醒所有 (广播) · 其它 key 只唤醒匹配的
+function notifyWaiters(key) {
+  if (key === '*') {
+    for (const [, set] of waiters) {
       for (const cb of set) cb();
     }
-    waiters.clear();
     return;
   }
-  const set = waiters.get(toHandle);
+  const set = waiters.get(key);
   if (!set) return;
-  for (const cb of set) cb();
-  waiters.delete(toHandle);
+  for (const cb of [...set]) cb();
 }
 
 module.exports = { bridgeSend, bridgePoll, waitForMessages };

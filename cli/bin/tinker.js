@@ -155,6 +155,12 @@ async function safeFetch(cfg, path, init) {
   return res;
 }
 
+// v0.21 helper · cmdStudio / cmdBridge* 用 · 直接拿 JSON body · 不用每个 case 写 res.json()
+async function safeFetchJson(cfg, path, init) {
+  const res = await safeFetch(cfg, path, init);
+  return res.json();
+}
+
 async function apiState(cfg) {
   const res = await safeFetch(cfg, '/api/state', { headers: authHeaders(cfg) });
   return res.json();
@@ -1825,60 +1831,6 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
 }
 
-// v0.14 把 Tinker MCP server 装进 Claude Code · LLM 启动后能看到 14 个 tinker_* 工具
-// 让 LLM 主动调 tinker_borrow / tinker_recent_updates / tinker_today_summary 等
-// 之前 MCP server 写好了但用户没装 · LLM 看不到 · 等于浪费
-async function cmdHookInstallMcp() {
-  const cfgPath = path.join(os.homedir(), '.claude.json');
-  if (!fs.existsSync(cfgPath)) {
-    err('找不到 ~/.claude.json · 先打开过 Claude Code 一次再装');
-    process.exit(1);
-  }
-  let cfg;
-  try { cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')); }
-  catch (e) { err('~/.claude.json 解析失败: ' + e.message); process.exit(1); }
-
-  cfg.mcpServers = cfg.mcpServers || {};
-  const wasInstalled = !!cfg.mcpServers.tinker;
-  cfg.mcpServers.tinker = {
-    command: 'tinker',
-    args: ['mcp'],
-    type: 'stdio',
-  };
-  fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-
-  log('');
-  ok(wasInstalled ? 'Tinker MCP server 配置已更新' : 'Tinker MCP server 装好了');
-  log(sepia('  位置: ') + sepia('~/.claude.json → mcpServers.tinker'));
-  log(sepia('  command: ') + vermilion('tinker mcp') + sepia(' (stdio · 长连接)'));
-  log('');
-  log(sepia('  装好后 LLM 能看到的 14 个工具:'));
-  log(sepia('    · tinker_borrow          搜方法 / 踩坑 / 上手指南 / 决策'));
-  log(sepia('    · tinker_recent_updates  拉作者最近 update'));
-  log(sepia('    · tinker_today_summary   今日 commit / push / token 用量'));
-  log(sepia('    · tinker_check_triggers  评估当前触发器'));
-  log(sepia('    · tinker_push / ship / stuck / prototype / mute · etc'));
-  log('');
-  log(vermilion('  ⚠ 需要重启 Claude Code 才生效'));
-  log(sepia('  关:    ') + vermilion('tinker hook uninstall-mcp'));
-  log('');
-}
-
-async function cmdHookUninstallMcp() {
-  const cfgPath = path.join(os.homedir(), '.claude.json');
-  if (!fs.existsSync(cfgPath)) { log(sepia('  ~/.claude.json 不存在 · 没装')); return; }
-  let cfg;
-  try { cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')); }
-  catch (e) { err('~/.claude.json 解析失败: ' + e.message); return; }
-  if (cfg.mcpServers && cfg.mcpServers.tinker) {
-    delete cfg.mcpServers.tinker;
-    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-    ok('Tinker MCP 移除了 · 重启 Claude Code 生效');
-  } else {
-    log(sepia('  没找到 Tinker MCP 配置 · 没动'));
-  }
-}
-
 // helper · 装一个 Claude Code hook entry (匹配 matcher 或没 matcher 的全局 hook)
 // 已存在我们装的 · 更新;别人的 · 附加;否则新建
 function installClaudeHookEntry(arr, matcher, cmd, kind) {
@@ -2821,7 +2773,7 @@ function spawnDeployWatcher(task) {
   const taskFile = path.join(watchDir, 'task-' + Date.now() + '.json');
   fs.writeFileSync(taskFile, JSON.stringify(task));
   // 调 tinker 自己的 watch 子命令 · 把 taskFile 路径传过去
-  const child = spawn(process.argv[0], [process.argv[1], 'watch', taskFile], {
+  const child = spawn(process.argv[0], [process.argv[1], 'watch-deploy', taskFile], {
     detached: true,
     stdio: 'ignore',
     cwd: process.cwd(),
@@ -4972,9 +4924,13 @@ async function cmdStudio(subcmd, args, opts) {
     log(bold('  tinker studio · 工作室 (你 + 队友 = 一个工作室)'));
     log('');
     log('  ' + vermilion('tinker studio create <slug> --name "..." [--tagline "..."]'));
-    log(sepia('     建工作室 · 自动当 owner · 输出邀请命令'));
+    log(sepia('     建工作室 · 自动当 owner'));
+    log('  ' + vermilion('tinker studio invite <slug> @<handle>'));
+    log(sepia('     给队友生成一次性邀请 token · 24h 有效 · server 看不到 token 跟暗号'));
+    log('  ' + vermilion('tinker studio accept <token>'));
+    log(sepia('     兑换邀请 · 自动写本地暗号'));
     log('  ' + vermilion('tinker studio join <slug> <secret>'));
-    log(sepia('     加入 · slug+secret 从 owner 那里拿'));
+    log(sepia('     直接用 slug+secret 加入 (没收到 invite 时的 fallback)'));
     log('  ' + vermilion('tinker studio list'));
     log(sepia('     看我所属的工作室'));
     log('  ' + vermilion('tinker studio info <slug>'));
@@ -4994,21 +4950,22 @@ async function cmdStudio(subcmd, args, opts) {
       const secret = require('crypto').randomBytes(16).toString('hex');
       const secretHash = sha256Hex(secret);
 
-      const res = await safeFetch(cfg.serverUrl + '/api/studios', {
+      const res = await safeFetchJson(cfg, '/api/studios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
         body: JSON.stringify({ slug, name, tagline, secretHash }),
       });
       if (!res.ok) { err(res.error || '建工作室失败'); process.exit(1); }
 
-      // 本地存暗号 · 后续 bridge / studio 通信都用这个
-      bridgeLib.saveSecret(secret);
+      // 本地存暗号 + 自动 active · 后续 bridge / studio 通信用这个
+      bridgeLib.addStudio({ slug, name, secret, id: res.studio.id });
+      bridgeLib.setActiveStudio(slug);
 
       log('');
       ok(`工作室建好了 — ${bold(name)}`);
       log(sepia('  slug:    ') + vermilion(slug));
       if (tagline) log(sepia('  一句话:  ') + tagline);
-      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.SECRET_FILE));
+      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.STUDIOS_FILE));
       log('');
       log(bold('  邀请队友 · 把下面这行发给 ta (微信/桥/面对面都行):'));
       log('');
@@ -5025,14 +4982,15 @@ async function cmdStudio(subcmd, args, opts) {
       if (!slug || !secret) { err('用法: tinker studio join <slug> <secret>'); process.exit(1); }
 
       const secretHash = sha256Hex(secret);
-      const res = await safeFetch(cfg.serverUrl + '/api/studios/join', {
+      const res = await safeFetchJson(cfg, '/api/studios/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
         body: JSON.stringify({ slug, secretHash }),
       });
       if (!res.ok) { err(res.error || '加入失败'); process.exit(1); }
 
-      bridgeLib.saveSecret(secret);
+      bridgeLib.addStudio({ slug, name: res.name, secret, id: res.id });
+      bridgeLib.setActiveStudio(slug);
 
       log('');
       if (res.alreadyMember) {
@@ -5040,14 +4998,14 @@ async function cmdStudio(subcmd, args, opts) {
       } else {
         ok(`加入了 — ${bold(res.name)}`);
       }
-      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.SECRET_FILE));
+      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.STUDIOS_FILE));
       log(sepia('  现在桥消息能跟工作室所有成员通了'));
       log('');
       return;
     }
 
     case 'list': {
-      const res = await safeFetch(cfg.serverUrl + '/api/me/studios', {
+      const res = await safeFetchJson(cfg, '/api/me/studios', {
         headers: { Authorization: 'Bearer ' + cfg.token },
       });
       if (!res.ok) { err(res.error || '拉取失败'); process.exit(1); }
@@ -5071,7 +5029,7 @@ async function cmdStudio(subcmd, args, opts) {
     case 'info': {
       const slug = args[2];
       if (!slug) { err('用法: tinker studio info <slug>'); process.exit(1); }
-      const res = await safeFetch(cfg.serverUrl + '/api/studios/' + encodeURIComponent(slug));
+      const res = await safeFetchJson(cfg, '/api/studios/' + encodeURIComponent(slug));
       if (!res.ok) { err(res.error || '拉取失败'); process.exit(1); }
       if (opts.json) { outputJson(res); return; }
       const s = res.studio;
@@ -5095,17 +5053,89 @@ async function cmdStudio(subcmd, args, opts) {
     case 'leave': {
       const slug = args[2];
       if (!slug) { err('用法: tinker studio leave <slug>'); process.exit(1); }
-      const getRes = await safeFetch(cfg.serverUrl + '/api/studios/' + encodeURIComponent(slug));
+      const getRes = await safeFetchJson(cfg, '/api/studios/' + encodeURIComponent(slug));
       if (!getRes.ok) { err(getRes.error || '工作室不存在'); process.exit(1); }
       const studioId = getRes.studio.id;
-      const res = await safeFetch(cfg.serverUrl + '/api/studios/' + studioId + '/leave', {
+      const res = await safeFetchJson(cfg, '/api/studios/' + studioId + '/leave', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + cfg.token },
       });
       if (!res.ok) { err(res.error || '退出失败'); process.exit(1); }
       log('');
       ok(`退出了 — ${getRes.studio.name}`);
-      log(sepia('  本地暗号文件还在 · 想清掉: rm ') + bridgeLib.SECRET_FILE);
+      log(sepia('  本地暗号文件还在 · 想清掉: rm ') + bridgeLib.STUDIOS_FILE);
+      log('');
+      return;
+    }
+
+    case 'invite': {
+      // tinker studio invite <slug> @handle
+      const slug = args[2];
+      const targetHandle = (args[3] || '').replace(/^@/, '');
+      if (!slug || !targetHandle) { err('用法: tinker studio invite <slug> @<handle>'); process.exit(1); }
+
+      if (!bridgeLib.hasSecret()) {
+        err('本地没暗号 · 你不是这个工作室的成员? 先 tinker studio join 或 create');
+        process.exit(1);
+      }
+      const secret = bridgeLib.loadSecret();
+
+      // 查 studio_id (server 要)
+      const getRes = await safeFetchJson(cfg, '/api/studios/' + encodeURIComponent(slug));
+      if (!getRes.ok) { err(getRes.error || '工作室不存在'); process.exit(1); }
+      const studioId = getRes.studio.id;
+
+      // e2e: 客户端生成 token + 加密 secret · server 只存 hash + 密文
+      const token = require('crypto').randomBytes(6).toString('hex'); // 12 字符 · 好复制
+      const tokenHash = sha256Hex(token);
+      const secretCipher = bridgeLib.encrypt(secret, token);
+
+      const res = await safeFetchJson(cfg, '/api/studios/' + studioId + '/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ targetHandle, tokenHash, secretCipher }),
+      });
+      if (!res.ok) { err(res.error || '邀请失败'); process.exit(1); }
+
+      log('');
+      ok(`邀请生成了 · 给 @${targetHandle} · 24h 内有效`);
+      log('');
+      log(bold('  把这一行发给 @' + targetHandle + ':'));
+      log('');
+      log('  ' + vermilion(`tinker studio accept ${token}`));
+      log('');
+      log(sepia('  token 一次性 · server 看不到 token 跟 studio 暗号 · 可以放心发'));
+      log('');
+      return;
+    }
+
+    case 'accept': {
+      const token = args[2];
+      if (!token) { err('用法: tinker studio accept <token>'); process.exit(1); }
+      const tokenHash = sha256Hex(token);
+
+      const res = await safeFetchJson(cfg, '/api/studios/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ tokenHash }),
+      });
+      if (!res.ok) { err(res.error || '兑换失败 · token 不对 / 过期 / 不是给你的'); process.exit(1); }
+
+      // 用 token 解 server 返的密文 · 拿到 studio secret
+      let secret;
+      try {
+        secret = bridgeLib.decrypt(res.secretCipher, token);
+      } catch (e) {
+        err('密文解不开 — token 跟 server 存的不一致 · 这不应该发生');
+        process.exit(1);
+      }
+      bridgeLib.addStudio({ slug: res.slug, name: res.name, secret, id: res.studioId });
+      bridgeLib.setActiveStudio(res.slug);
+
+      log('');
+      ok(`加入了 — ${bold(res.name)}`);
+      log(sepia('  本地暗号已存:  ') + vermilion(bridgeLib.STUDIOS_FILE));
+      log(sepia('  看工作室主页: ') + vermilion(cfg.serverUrl + '/#/s/' + res.slug));
       log('');
       return;
     }
@@ -5126,6 +5156,186 @@ function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, '
 //   score <= 1 → 通过
 // 返回 { ok: true } 通过 · { ok: false, reason } 拒绝
 // 注意 helper 是 async (因为 TTY confirm 走 inquirer)
+
+// =====================================================
+// v0.21 bridge user-facing commands · ping / send / watch
+// 走 active studio 暗号 (来自 cmdStudio create/join/accept)
+// 默认广播到 active studio · -t @who 点对点
+// =====================================================
+
+async function cmdPing(opts) {
+  const cfg = mustHaveConfig();
+  const bridgeLib = require('../lib/bridge');
+  const activeStudio = bridgeLib.getActiveStudio();
+  if (!activeStudio) {
+    err('还没加入任何工作室 · 跑 `tinker studio create <slug>` 建一个 · 或 `tinker studio accept <token>` 兑换邀请');
+    process.exit(1);
+  }
+  const secret = activeStudio.secret;
+
+  const to = opts.toHandle || null;
+  const useStudio = !to;
+  const positional = opts.positional || [];
+  const title = (opts.title || positional[1] || '').trim();
+  const noteBody = (opts.body || opts.text || positional[2] || '').trim();
+  const level = (opts.level || 'info').toLowerCase();
+  if (!title) { err('要一句 title · 例: tinker ping "构建挂了" -l urgent'); process.exit(1); }
+  if (!['info', 'ok', 'warn', 'urgent'].includes(level)) { err('level 只支持: info / ok / warn / urgent'); process.exit(1); }
+
+  const obj = { v: 1, title, body: noteBody, level, at: Date.now() };
+  const payload = bridgeLib.encrypt(JSON.stringify(obj), secret);
+  const apiBody = useStudio
+    ? { toStudio: activeStudio.id, kind: 'noti', payload }
+    : { to, kind: 'noti', payload };
+
+  try {
+    const r = await safeFetchJson(cfg, '/api/bridge/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+      body: JSON.stringify(apiBody),
+    });
+    log('');
+    const tag = level === 'urgent' ? '🚨' : level === 'warn' ? '⚠' : level === 'ok' ? '✓' : '🔔';
+    ok(tag + ' ping → ' + (useStudio ? bold(activeStudio.name) + sepia(' (' + activeStudio.slug + ')') : '@' + to));
+    log(sepia('  ' + title));
+    if (noteBody) log(sepia('  ' + noteBody.slice(0, 200)));
+    log(sepia('  seq ') + r.seq + sepia(' · id ') + r.id);
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
+async function cmdSend(opts) {
+  const cfg = mustHaveConfig();
+  const bridgeLib = require('../lib/bridge');
+  const activeStudio = bridgeLib.getActiveStudio();
+  if (!activeStudio) { err('还没加入工作室'); process.exit(1); }
+  const secret = activeStudio.secret;
+
+  const positional = opts.positional || [];
+  const files = positional.slice(1);
+  if (files.length === 0) { err('要给至少一个文件 · 例: tinker send foo.md -t @maomao'); process.exit(1); }
+  const to = opts.toHandle;
+  const useStudio = !to;
+
+  const items = [];
+  let totalSize = 0;
+  for (const f of files) {
+    if (!fs.existsSync(f)) { err('找不到: ' + f); process.exit(1); }
+    const st = fs.statSync(f);
+    if (!st.isFile()) { err('不是文件: ' + f); process.exit(1); }
+    if (st.size > 6 * 1024 * 1024) { err('单文件 6MB 上限: ' + f); process.exit(1); }
+    items.push({ name: path.basename(f), size: st.size, content: fs.readFileSync(f).toString('base64') });
+    totalSize += st.size;
+  }
+  if (totalSize > 6 * 1024 * 1024) { err('合计 6MB 上限'); process.exit(1); }
+
+  const obj = { v: 1, message: opts.text || '', files: items, at: Date.now() };
+  const payload = bridgeLib.encrypt(JSON.stringify(obj), secret);
+  const apiBody = useStudio
+    ? { toStudio: activeStudio.id, kind: 'file', payload }
+    : { to, kind: 'file', payload };
+
+  try {
+    const r = await safeFetchJson(cfg, '/api/bridge/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+      body: JSON.stringify(apiBody),
+    });
+    log('');
+    ok('📎 文件发了 → ' + (useStudio ? bold(activeStudio.name) : '@' + to));
+    log(sepia('  ' + items.length + ' 个文件 · 合计 ' + totalSize + ' 字节'));
+    for (const it of items) log(sepia('    · ') + it.name + sepia(' (' + it.size + ' 字节)'));
+    log(sepia('  seq ') + r.seq);
+    log('');
+  } catch (e) { err(e.message); process.exit(1); }
+}
+
+async function cmdBridgeWatch(opts) {
+  const cfg = mustHaveConfig();
+  const bridgeLib = require('../lib/bridge');
+  const studiosData = bridgeLib.loadStudios();
+  if (!studiosData.studios || studiosData.studios.length === 0) {
+    err('还没加入任何工作室 · 没东西可收');
+    process.exit(1);
+  }
+
+  const inboxDir = path.join(CONFIG_DIR, 'inbox');
+  if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
+  const cursorFile = path.join(inboxDir, '.cursor');
+  let since = 0;
+  try { since = parseInt(fs.readFileSync(cursorFile, 'utf-8').trim(), 10) || 0; } catch {}
+
+  log('');
+  log(sepia('  tinker watch · 长轮询挂上 · Ctrl+C 退出'));
+  log(sepia('  inbox: ') + inboxDir);
+  log(sepia('  起点 seq: ') + since);
+  log(sepia('  studios: ') + studiosData.studios.map(s => s.slug).join(' / '));
+  log('');
+
+  let backoff = 1000;
+  while (true) {
+    try {
+      const resRaw = await fetch(cfg.serverUrl + '/api/bridge/poll?since=' + since, {
+        headers: { Authorization: 'Bearer ' + cfg.token },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(35000) : undefined,
+      });
+      if (!resRaw.ok) {
+        log(sepia('  poll HTTP ' + resRaw.status + ' · 退避 ' + backoff + 'ms'));
+        await new Promise(r => setTimeout(r, backoff));
+        backoff = Math.min(backoff * 2, 30000);
+        continue;
+      }
+      backoff = 1000;
+      const data = await resRaw.json();
+      for (const msg of (data.messages || [])) {
+        const tryDec = bridgeLib.tryDecryptWithAnyStudio(msg.payload);
+        if (tryDec) {
+          try {
+            const obj = JSON.parse(tryDec.plaintext);
+            renderInboxMessage(msg, obj, tryDec.studio, inboxDir);
+          } catch { /* JSON 坏 · 忽略 */ }
+        }
+        since = Math.max(since, msg.seq);
+      }
+      fs.writeFileSync(cursorFile, String(since));
+    } catch (e) {
+      if (e.name === 'AbortError' || (e.message || '').includes('timeout')) continue;
+      log(sepia('  网络错: ' + e.message + ' · 退避 ' + backoff + 'ms'));
+      await new Promise(r => setTimeout(r, backoff));
+      backoff = Math.min(backoff * 2, 30000);
+    }
+  }
+}
+
+function renderInboxMessage(msg, obj, studio, inboxDir) {
+  const ts = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
+  const target = msg.toStudio
+    ? sepia('→ studio:') + studio.slug
+    : msg.toHandle ? sepia('→ @') + msg.toHandle : sepia('(广播)');
+  log('');
+  log(sepia('  ─── ') + ts + sepia(' · @') + msg.fromHandle + ' ' + target + sepia(' · ') + msg.kind + sepia(' · seq ') + msg.seq);
+  if (msg.kind === 'noti') {
+    const lvl = obj.level || 'info';
+    const tag = lvl === 'urgent' ? '🚨' : lvl === 'warn' ? '⚠' : lvl === 'ok' ? '✓' : '🔔';
+    log('  ' + tag + ' ' + bold(obj.title || '(无标题)'));
+    if (obj.body) log(sepia('  ') + obj.body);
+  } else if (msg.kind === 'file') {
+    const files = obj.files || [];
+    log(sepia('  📎 ') + files.length + ' 个文件' + (obj.message ? ' · ' + obj.message : ''));
+    for (const f of files) {
+      const safe = (f.name || 'unnamed').replace(/[^\w.\-一-鿿]/g, '_');
+      const fp = path.join(inboxDir, msg.fromHandle + '_' + msg.seq + '_' + safe);
+      try {
+        fs.writeFileSync(fp, Buffer.from(f.content, 'base64'));
+        log(sepia('    ↓ ') + fp);
+      } catch (e) { log(sepia('    ⚠ ') + e.message); }
+    }
+  } else if (msg.kind === 'task') {
+    log(sepia('  🎯 task (handoff) · v0.23 Phase 2 还在做 · 标题:') + (obj.title || ''));
+  }
+  log('');
+}
+
 async function gateVoiceCheck(text, opts = {}) {
   if (opts.force) return { ok: true, forced: true };
   let vc;
@@ -6474,7 +6684,7 @@ async function cmdContributeFromFile(cfg, opts) {
   log('');
 }
 
-// v0.12 自己最近的 update · 给 CLI / MCP / AI agent 用
+// v0.12 自己最近的 update · 给 CLI / AI agent 用
 // tinker recent [--limit N] [--kind experience|method|ship|stuck|prototype] [--json]
 async function cmdRecent(opts) {
   const cfg = loadConfig();
@@ -6765,7 +6975,7 @@ function cmdMute(args) {
 }
 
 // v0.13 tinker stream <resource> · 长跑 NDJSON 输出
-// CLI 对偶 MCP 资源订阅 · 不依赖任何 AI agent · 任何能读 stdout 的 AI / 脚本都能用
+// 不依赖任何 AI agent · 任何能读 stdout 的 AI / 脚本都能用
 //
 // 资源:
 //   triggers · prompt-state 快照 · 内容变化时推一行
@@ -6947,10 +7157,10 @@ function help() {
   log('  ' + vermilion('tinker bridge auto-ping --disable') + sepia('  停用'));
   log('');
   log(sepia('  ') + vermilion('工作室 · 你跟队友 = 一个工作室'));
-  log('  ' + vermilion('tinker studio create <slug> --name "..."') + sepia('  建工作室 · 自动当 owner · 输出邀请命令'));
-  log('  ' + vermilion('tinker studio join <slug> <secret>') + sepia('        加入 · slug+secret 从 owner 那里拿'));
-  log('  ' + vermilion('tinker studio list') + sepia('                        看我所属的工作室'));
-  log('  ' + vermilion('tinker studio info <slug>') + sepia('                  看工作室聚合页 (成员 + 项目)'));
+  log('  ' + vermilion('tinker studio create <slug> --name "..."') + sepia('  建工作室 · 自动当 owner'));
+  log('  ' + vermilion('tinker studio invite <slug> @<handle>') + sepia('     给队友生成一次性邀请 token · e2e'));
+  log('  ' + vermilion('tinker studio accept <token>') + sepia('              兑换邀请 · 自动写本地暗号'));
+  log('  ' + vermilion('tinker studio list / info <slug> / leave <slug>') + sepia('  其余操作 · 跑 tinker studio help 看全'));
   log('');
   log(sepia('  ') + vermilion('voice · 写作风格学习'));
   log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
@@ -6963,11 +7173,10 @@ function help() {
   log('  ' + vermilion('tinker stream <resource>') + sepia('            长跑 NDJSON 事件流 (triggers / today)'));
   log('  ' + vermilion('tinker maybe-check --text "..."') + sepia('     跨 AI 通用入口 · 非 Claude Code 的 LLM 主动调拿 matcher 命中 reminder'));
   log('  ' + vermilion('tinker pending [--json|--check|--mark-handled <id>|--clear]') + sepia(' 看/处理 post-commit hook 触发的待处理 reminder'));
-  log('  ' + vermilion('tinker mcp') + sepia('                          启 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool'));
   log(sepia('  ') + dim('几乎所有命令支持 --json · 错误统一 { ok: false, error, code } 形态'));
   log('');
   // v0.14 AI agent 反向映射:关键场景 → 调什么命令 · 让 LLM 看 help 就能直接用
-  // CLI 路线对偶 MCP · LLM 通过 Bash 跑 tinker + --json 拿结构化结果 · 不锁单一客户端
+  // CLI 一条路线 · LLM 通过 Bash 跑 tinker + --json 拿结构化结果 · 任何 AI client 都能用
   log(sepia('  ') + vermilion('AI agent 指南 (LLM 看下方关键场景决定调什么)'));
   log(sepia('  ─────────────────────────────────────────────────────────────'));
   log(sepia('  用户聊到某技术/报错/想入门 X        → ') + vermilion('tinker borrow "<关键词>" --json --limit 5'));
@@ -7435,8 +7644,7 @@ function cmdSchema(opts = {}) {
         { flag: '--project <slug>', purpose: '配合 --from-file · 指定项目 (否则当前 repo 绑定 / 交互选)' },
         { flag: '--json', purpose: 'machine-readable 输出' },
       ], jsonOutput: true, example: 'tinker contribute --from-file docs/08.md --section "能力地图"' },
-      { name: 'mcp', purpose: '启动 MCP server (stdio) · 给 Claude Code / Cursor 当 first-class tool', args: [], jsonOutput: false, example: 'tinker mcp' },
-      { name: 'stream', purpose: 'NDJSON 事件流 · CLI 对偶 MCP 订阅 · 任何 AI 通过 stdout 都能拿', args: [
+      { name: 'stream', purpose: 'NDJSON 事件流 · 任何 AI 通过 stdout 都能订阅', args: [
         { arg: '<resource>', purpose: 'triggers / today' },
         { flag: '--once', purpose: '打完当前 snapshot 就退 · 不长跑' },
       ], jsonOutput: true, example: 'tinker stream triggers' },
@@ -7479,9 +7687,7 @@ async function main() {
         else if (args[1] === 'uninstall') cmdHookUninstall();
         else if (args[1] === 'install-claude') await cmdClaudeHookInstall(opts);
         else if (args[1] === 'uninstall-claude') cmdClaudeHookUninstall();
-        else if (args[1] === 'install-mcp') await cmdHookInstallMcp();
-        else if (args[1] === 'uninstall-mcp') await cmdHookUninstallMcp();
-        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude | install-mcp | uninstall-mcp'); process.exit(1); }
+        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude'); process.exit(1); }
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook, json: opts.json }); break;
       case 'resolve': await cmdResolve(args[1], opts); break;
@@ -7563,6 +7769,8 @@ async function main() {
         err('用法: tinker bridge auto-ping [--enable|--disable|--status] [--kinds X,Y] [--to @who]');
         process.exit(1);
 
+      case 'ping': await cmdPing(opts); break;
+      case 'send': await cmdSend(opts); break;
       case 'studio':
         await cmdStudio(args[1], args, opts);
         break;
@@ -7576,15 +7784,9 @@ async function main() {
         await cmdAutopsy(args[1]);
         return;
       case 'schema': cmdSchema(opts); break;
-      case 'mcp':
-        // 启动 MCP server · stdio 模式 · 给 Claude Code / Cursor 等当作 first-class tool
-        // 配置: ~/.claude/mcp.json 加 { mcpServers: { tinker: { command: "tinker", args: ["mcp"] } } }
-        const { startMcpServer } = require('../lib/mcp-server.js');
-        await startMcpServer();
-        return; // 这里不退出 · server 跑到 stdin EOF
-
       case 'stream': await cmdStream(args[1], opts); return; // 长跑 NDJSON 输出 · 不退出
-      case 'watch': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
+      case 'watch': await cmdBridgeWatch(opts); break;  // v0.21 用户面: 长轮询收 bridge 消息
+      case 'watch-deploy': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default:
         if (opts.json) errJson('未知命令: ' + cmd, 'UNKNOWN_COMMAND');
@@ -7605,7 +7807,7 @@ async function main() {
   }
 }
 
-// 导出给 mcp-server.js 复用 · 不重写 API/state/git 逻辑
+// 导出给测试 / 内部 require 复用 · 不重写 API/state/git 逻辑
 module.exports = {
   // 配置
   loadConfig, mustHaveConfig, CONFIG_DIR, CONFIG_FILE,
@@ -7626,9 +7828,9 @@ module.exports = {
   loadPending, savePending, clearPending,
   // sample pool
   savePoolSample,
-  // 幂等性 (给 MCP / AI agent 防重放)
+  // 幂等性 (AI agent 防重放)
   withIdempotency, idemGet, idemSet,
-  // drift 检测的注册表 (MCP 也可暴露)
+  // drift 检测的注册表
   loadReposRegistry, registerRepoForDrift,
   // v0.13 markdown 工具 (单测可见)
   parseMarkdownSections, scanPrivacyRisks,

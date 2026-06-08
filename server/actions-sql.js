@@ -451,7 +451,7 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
     }
   }
 
-  // 给 CLI / MCP 拼直链用 · 一次 join 拿全 (避免客户端二次拉)
+  // 给 CLI 拼直链用 · 一次 join 拿全 (避免客户端二次拉)
   const linkInfo = db.prepare(`
     SELECT p.slug AS project_slug, p.name AS project_name, usr.handle AS owner_handle
     FROM projects p JOIN users usr ON usr.id = p.owner_id WHERE p.id = ?
@@ -785,7 +785,7 @@ function unmarkDecision({ updateId }, { currentUserId }) {
   return { ok: true };
 }
 
-// v0.12 给 CLI / MCP 拉自己最近的 update · 不走 action 路径 · 直接 GET 暴露
+// v0.12 给 CLI 拉自己最近的 update · 不走 action 路径 · 直接 GET 暴露
 // 限定 currentUserId 自己的 · 不暴露别人的
 // kindFilter: 'all' (默认) / 'experience' / 'method' / 'ship' / 'stuck' / 'prototype'
 function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
@@ -1222,7 +1222,7 @@ function markNotifRead({ notifId }, { currentUserId }) {
 
 module.exports = {
   searchMethods, getBorrowsForOwner, // 不走 action 路径 · 直接 GET 暴露
-  listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI / MCP 用)
+  listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI 用)
   // users
   editTagline, renameHandle,
   // projects
