@@ -6096,6 +6096,20 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
             body: obj.body || '',
             level: obj.level || 'info',
           });
+          // v0.47 witness-request 含 context · 落到 ~/.tinker/inbox/witness-<updateId>/context.md
+          if (obj.type === 'witness-request' && obj.context && obj.updateId) {
+            try {
+              const wDir = path.join(INBOX, 'witness-' + obj.updateId);
+              fs.mkdirSync(wDir, { recursive: true });
+              fs.writeFileSync(path.join(wDir, 'context.md'), obj.context);
+              fs.writeFileSync(path.join(wDir, 'meta.json'), JSON.stringify({
+                fromHandle: msg.fromHandle,
+                originalUpdateId: obj.updateId,
+                topic: obj.topic || '',
+                receivedAt: msg.createdAt,
+              }, null, 2));
+            } catch {}
+          }
         }
         // file kind hook 模式不持久化 · 避免大文件落到本地 · 等用户跑 watch 时再处理
       } catch {}
@@ -6388,6 +6402,75 @@ async function cmdWitnessDraft(opts) {
   log('');
 }
 
+// v0.47 抽 Claude Code session jsonl · 拉最近 N 条 user+assistant 对话 + 脱敏
+// Claude Code 按"启动时 cwd"归档 session · 不按当前 cwd · 所以扫全 projects 找 mtime 最新
+function packClaudeTranscript({ maxMessages = 40 } = {}) {
+  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+  if (!fs.existsSync(claudeRoot)) return null;
+
+  // 扫所有 projects/*/*.jsonl · 找 mtime 最新的 (假设是当前活跃 session)
+  let newest = null;
+  try {
+    const projDirs = fs.readdirSync(claudeRoot).filter(d => {
+      try { return fs.statSync(path.join(claudeRoot, d)).isDirectory(); } catch { return false; }
+    });
+    for (const projDir of projDirs) {
+      const fullProj = path.join(claudeRoot, projDir);
+      try {
+        const files = fs.readdirSync(fullProj).filter(f => f.endsWith('.jsonl'));
+        for (const f of files) {
+          const fp = path.join(fullProj, f);
+          try {
+            const m = fs.statSync(fp).mtimeMs;
+            if (!newest || m > newest.mtime) newest = { fp, mtime: m };
+          } catch {}
+        }
+      } catch {}
+    }
+  } catch {}
+  if (!newest) return null;
+
+  let content;
+  try { content = fs.readFileSync(newest.fp, 'utf-8'); } catch { return null; }
+  const lines = content.split('\n').filter(Boolean);
+
+  // 倒序扫 · 取最近 maxMessages 个 user/assistant 消息
+  const messages = [];
+  for (let i = lines.length - 1; i >= 0 && messages.length < maxMessages; i--) {
+    try {
+      const obj = JSON.parse(lines[i]);
+      if (obj.type !== 'user' && obj.type !== 'assistant') continue;
+      const msg = obj.message;
+      if (!msg) continue;
+      let text = '';
+      if (typeof msg.content === 'string') text = msg.content;
+      else if (Array.isArray(msg.content)) {
+        text = msg.content.map(c => {
+          if (c.text) return c.text;
+          if (c.type === 'tool_use') return '[跑了: ' + (c.name || 'tool') + ']';
+          if (c.type === 'tool_result') return '';
+          return '';
+        }).filter(Boolean).join('\n');
+      }
+      if (text.trim()) {
+        // 单条 cap 1500 字 · 太长截断
+        text = text.length > 1500 ? text.slice(0, 1500) + '\n...(截断)' : text;
+        messages.unshift({ type: obj.type, text });
+      }
+    } catch {}
+  }
+  if (messages.length === 0) return null;
+
+  // 脱敏
+  const sanitize = (s) => s
+    .replace(/sk-[a-zA-Z0-9_-]{20,}/g, 'sk-***')
+    .replace(/tk_[a-zA-Z0-9_-]{20,}/g, 'tk_***')
+    .replace(/Bearer\s+[a-zA-Z0-9._-]{20,}/g, 'Bearer ***')
+    .replace(/[a-f0-9]{32,}/gi, (m) => m.slice(0, 4) + '***' + m.slice(-4));
+
+  return messages.map((m, i) => '【' + (m.type === 'user' ? '我' : 'AI') + '】\n' + sanitize(m.text)).join('\n\n---\n\n');
+}
+
 // 发起方落地
 async function cmdWitnessPublish(opts) {
   const cfg = mustHaveConfig();
@@ -6396,6 +6479,24 @@ async function cmdWitnessPublish(opts) {
   if (!content || content.length < 50) {
     err('内容太短 (< 50 字) · 用法: tinker witness publish "<内容>"');
     process.exit(1);
+  }
+  const withContext = !!opts.withContext;
+  let transcript = null;
+  if (withContext) {
+    transcript = packClaudeTranscript({ maxMessages: 40 });
+    if (!transcript) {
+      log(sepia('  ⚠ 找不到当前 cwd 的 Claude session jsonl · 跳过 context'));
+    } else {
+      const sizeKB = (transcript.length / 1024).toFixed(1);
+      log('');
+      log(sepia('  ─── context preview (脱敏后 · 前 800 字) ───'));
+      log(transcript.slice(0, 800) + (transcript.length > 800 ? '\n... 共 ' + sizeKB + 'KB' : ''));
+      log(sepia('  ─── 共 ') + sizeKB + sepia(' KB ───'));
+      log('');
+      const { confirm } = require('@inquirer/prompts');
+      const yes = await confirm({ message: 'context 看起来 OK · 加进 witness 一起广播?', default: true });
+      if (!yes) { transcript = null; log(sepia('  跳过 context · 只发 witness 主体')); }
+    }
   }
 
   // voice check
@@ -6441,6 +6542,7 @@ async function cmdWitnessPublish(opts) {
         type: 'witness-request',
         updateId,
         topic: content.split('\n')[0].slice(0, 80),
+        ...(transcript ? { context: transcript } : {}),  // v0.47 --with-context
       };
       const payload = bridgeLib.encrypt(JSON.stringify(obj), activeStudio.secret);
       await safeFetchJson(cfg, '/api/bridge/send', {
@@ -6539,6 +6641,22 @@ async function cmdWitnessReply(opts) {
   log('');
   log(originalUpdate.text);
   log('');
+
+  // v0.47 读 inbox/witness-<id>/context.md (如果发起方带了 --with-context)
+  const wDir = path.join(CONFIG_DIR, 'inbox', 'witness-' + originalUpdateId);
+  const contextFile = path.join(wDir, 'context.md');
+  if (fs.existsSync(contextFile)) {
+    try {
+      const ctx = fs.readFileSync(contextFile, 'utf-8');
+      log(sepia('  ─── 发起方跟 AI 对话过程上下文 (脱敏 · ' + (ctx.length / 1024).toFixed(1) + 'KB) ───'));
+      log('');
+      log(ctx);
+      log('');
+      log(sepia('  ─── 上下文完 ───'));
+      log('');
+    } catch {}
+  }
+
   log(sepia('  ─── 任务 ───'));
   log('');
   log('请用你自己的 voice 写一份 critique:');
@@ -9032,6 +9150,7 @@ function parseArgs(args) {
     else if (a === '--quiet' || a === '-q') opts.quiet = true;
     else if (a === '--yes' || a === '-y') opts.yes = true;
     else if (a === '--by-claude') opts.byClaude = true;
+    else if (a === '--with-context') opts.withContext = true;
     else if (a === '--force' || a === '-f') opts.force = true;
     else if (a === '--tag') {
       // v0.84 支持多次 · 收集 · contribute 时一并发上
