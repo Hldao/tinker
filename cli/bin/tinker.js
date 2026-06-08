@@ -1663,6 +1663,7 @@ async function fetchRemoteStatus() {
 
     const installedSha = getInstalledSha();
     let behindBy = 0;
+    let recentCommits = [];
     if (installedSha && installedSha !== latestSha) {
       // GitHub compare API · 算 ahead_by (从我方到 latest 多少 commit)
       const cr = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/compare/${installedSha}...${latestSha}`, {
@@ -1671,9 +1672,14 @@ async function fetchRemoteStatus() {
       if (cr.ok) {
         const cd = await cr.json();
         behindBy = cd.ahead_by || 0;
+        // v0.36 顺手存最近 5 个 commit 标题 · 横幅显示给用户看"改了什么" · 决定升不升时有信息看
+        recentCommits = (cd.commits || []).slice(-5).reverse().map(c => {
+          const msg = (c.commit && c.commit.message || '').split('\n')[0];
+          return msg.slice(0, 80);
+        });
       }
     }
-    return { checkedAt: Date.now(), latestSha, latestMsg, latestDate, installedSha, behindBy };
+    return { checkedAt: Date.now(), latestSha, latestMsg, latestDate, installedSha, behindBy, recentCommits };
   } catch {
     return null;
   }
@@ -1691,21 +1697,34 @@ function spawnUpdateCheckAsync() {
   } catch {}
 }
 
-// 从 cache 读 update 状态 · 在合适时机 (≥ 5 commit 落后 或 ≥ 7 天没更新) 显示提示
+// v0.36 阈值从 ≥5 commit 或 ≥7 天 收紧到 ≥1 commit · alpha 期版本变化快 · 落后 5 commit 才提醒太晚
+// 加 dismiss · 看过提醒之后当天不再重复 (避免每次跑命令都弹)
 function showUpdateBannerIfNeeded() {
   let cache;
   try { cache = JSON.parse(fs.readFileSync(UPDATE_CACHE_FILE, 'utf-8')); } catch { return; }
   if (!cache.behindBy || cache.behindBy < 1) return;
-  // 显示阈值: 落后 5+ commit · 或 落后 7+ 天 (latestDate 比 checkedAt 早就是稳定状态 · 不算)
-  const daysOld = cache.latestDate ? Math.floor((Date.now() - new Date(cache.latestDate).getTime()) / 86400000) : 0;
-  const shouldShow = cache.behindBy >= 5 || daysOld >= 7;
-  if (!shouldShow) return;
+  // 当天看过就跳过 · 不每次跑命令都弹
+  const todayKeyStr = todayKey();
+  if (cache.lastShownDate === todayKeyStr) return;
 
   log('');
-  log(sepia('  ── ') + vermilion('CLI 有更新') + sepia(' ──'));
-  log(sepia('  落后 ') + bold(cache.behindBy + ' 个 commit') + sepia(' · 最新: ') + sepia(cache.latestMsg.slice(0, 50)));
-  log(sepia('  跑 ') + vermilion('tinker update') + sepia(' 升级 · 不急'));
+  log(sepia('  ── ') + vermilion('CLI 有更新 · 落后 ') + bold(cache.behindBy + ' 个 commit') + sepia(' ──'));
+  if (Array.isArray(cache.recentCommits) && cache.recentCommits.length > 0) {
+    for (const msg of cache.recentCommits.slice(0, 3)) {
+      log(sepia('    · ') + sepia(msg));
+    }
+    if (cache.recentCommits.length > 3) log(sepia('    · 还有 ' + (cache.recentCommits.length - 3) + ' 条...'));
+  } else if (cache.latestMsg) {
+    log(sepia('    最新: ') + sepia(cache.latestMsg.slice(0, 60)));
+  }
+  log(sepia('  升级跑 ') + vermilion('tinker update') + sepia(' · 不急 · 今天不再提'));
   log('');
+
+  // 标记当天看过 · 不每次都弹
+  try {
+    cache.lastShownDate = todayKeyStr;
+    fs.writeFileSync(UPDATE_CACHE_FILE, JSON.stringify(cache, null, 2));
+  } catch {}
 }
 
 async function cmdUpdate(opts = {}) {
@@ -8857,8 +8876,11 @@ async function main() {
     }
     // 命令跑完 · 如果 cache 显示有更新就在末尾静静提示一行
     // 不在 hook / watch / check (--from-hook) / update 等后台/系统命令里显示
-    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h'].includes(cmd)) {
+    // v0.36 也顺手 spawn 后台刷 cache · 这样普通用户不用 commit 也能定期 (24h TTL) 收到新版提醒
+    // 之前只有 post-commit hook 触发 cmdCheck 时刷 · 不 commit 的用户永远看不到更新
+    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'situation'].includes(cmd)) {
       showUpdateBannerIfNeeded();
+      spawnUpdateCheckAsync();
     }
   } catch (e) {
     if (e.message && (e.message.includes('User force closed') || e.message.includes('ExitPromptError'))) {
