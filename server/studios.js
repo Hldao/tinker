@@ -126,6 +126,66 @@ function studiosForUser(userId) {
   `).all(userId);
 }
 
+// v0.38 工坊页厚卡用 · 每间挂靠工作室 + 成员预览 + 项目计数 + 最近 3 条跨成员动静
+function studiosForUserWithPreview(userId) {
+  const studios = studiosForUser(userId);
+  return studios.map(s => {
+    const members = db.prepare(`
+      SELECT u.handle, u.name, sm.role, sm.joined_at AS joinedAt
+      FROM studio_members sm
+      JOIN users u ON u.id = sm.user_id
+      WHERE sm.studio_id = ?
+      ORDER BY sm.joined_at ASC
+    `).all(s.id);
+
+    const memberIds = db.prepare(
+      'SELECT user_id FROM studio_members WHERE studio_id = ?'
+    ).all(s.id).map(r => r.user_id);
+
+    let projectCount = 0, inFlightCount = 0, doneCount = 0, recentUpdates = [];
+    if (memberIds.length > 0) {
+      const ph = memberIds.map(() => '?').join(',');
+      const counts = db.prepare(`
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN status IN ('active','stuck') THEN 1 ELSE 0 END) AS inFlight,
+          SUM(CASE WHEN status IN ('done','archive') THEN 1 ELSE 0 END) AS done
+        FROM projects WHERE owner_id IN (${ph})
+      `).get(...memberIds);
+      projectCount = counts.total || 0;
+      inFlightCount = counts.inFlight || 0;
+      doneCount = counts.done || 0;
+
+      // 最近 3 条 update · 跨成员 timeline · 过滤掉 isMethod
+      recentUpdates = db.prepare(`
+        SELECT up.id, up.kind, up.at, up.text,
+               p.slug AS projectSlug, p.name AS projectName,
+               u.handle AS ownerHandle
+        FROM updates up
+        JOIN projects p ON p.id = up.project_id
+        JOIN users u ON u.id = p.owner_id
+        WHERE p.owner_id IN (${ph}) AND (up.is_method IS NULL OR up.is_method = 0)
+        ORDER BY up.at DESC
+        LIMIT 3
+      `).all(...memberIds);
+    }
+
+    return {
+      id: s.id,
+      slug: s.slug,
+      name: s.name,
+      tagline: s.tagline,
+      role: s.role,
+      memberCount: members.length,
+      members,
+      projectCount,
+      inFlightCount,
+      doneCount,
+      recentUpdates,
+    };
+  });
+}
+
 // 列所有 studio (列表页)
 function studiosList() {
   return db.prepare(`
@@ -245,6 +305,7 @@ module.exports = {
   studioLeave,
   studioGet,
   studiosForUser,
+  studiosForUserWithPreview,
   studiosList,
   studioCreateInvite,
   studioAcceptInvite,

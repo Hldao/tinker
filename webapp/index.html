@@ -5262,6 +5262,103 @@
     letter-spacing: 0.06em;
   }
 
+  /* —— v0.38 工坊页"我的工作室"厚卡板块 —— */
+  .workshop-studios-section { margin-bottom: 48px; }
+  .workshop-studios-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 18px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--ink);
+  }
+  .workshop-studios-title {
+    font-family: 'Newsreader', serif; font-size: 22px; font-weight: 500; color: var(--ink);
+  }
+  .workshop-studios-action-link {
+    font-family: Newsreader, serif; font-size: 14px;
+    cursor: pointer; color: var(--sepia);
+    border-bottom: 1px dotted var(--rule);
+    transition: color 0.15s, border-color 0.15s;
+    margin-left: 14px;
+  }
+  .workshop-studios-action-link:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .workshop-studio-card {
+    margin-bottom: 22px; padding: 22px 24px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+  }
+  .workshop-studio-card:last-child { margin-bottom: 0; }
+  .workshop-studio-card-name {
+    font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
+    font-size: 24px; font-weight: 500; letter-spacing: -0.01em;
+    color: var(--ink); cursor: pointer;
+  }
+  .workshop-studio-card-name:hover { color: var(--vermilion); }
+  .workshop-studio-card-tagline {
+    font-family: 'Newsreader', serif; color: var(--sepia);
+    font-size: 15px; margin-top: 2px;
+  }
+  .workshop-studio-card-meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    color: var(--sepia); letter-spacing: 0.06em;
+    margin: 12px 0;
+  }
+  .workshop-studio-card-meta .num {
+    color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 500; padding: 0 2px;
+  }
+  .workshop-studio-members {
+    display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 16px;
+  }
+  .workshop-studio-member {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    color: var(--ink-soft); cursor: pointer; padding: 3px 8px;
+    background: var(--bg); border: 1px solid var(--rule); border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .workshop-studio-member:hover { color: var(--vermilion); border-color: var(--vermilion); }
+  .workshop-studio-member-more {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    color: var(--sepia); padding: 3px 4px;
+  }
+  .workshop-studio-recent-head {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--sepia); letter-spacing: 0.12em; text-transform: uppercase;
+    margin-top: 16px; margin-bottom: 6px;
+  }
+  .workshop-studio-recent-empty {
+    font-family: 'Newsreader', serif; color: var(--sepia);
+    font-size: 13.5px; padding: 6px 0;
+  }
+  .workshop-studio-recent-row {
+    display: flex; gap: 12px; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px dotted var(--rule);
+    font-family: 'Newsreader', serif; font-size: 14px;
+    cursor: pointer;
+  }
+  .workshop-studio-recent-row:last-child { border-bottom: none; }
+  .workshop-studio-recent-row:hover .workshop-studio-recent-text { color: var(--vermilion); }
+  .workshop-studio-recent-time {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--sepia); min-width: 70px; flex-shrink: 0; padding-top: 2px;
+  }
+  .workshop-studio-recent-handle {
+    color: var(--ink-soft); flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  .workshop-studio-recent-text { color: var(--ink); flex: 1; transition: color 0.15s; }
+  .workshop-studio-actions {
+    display: flex; gap: 18px; margin-top: 16px;
+    padding-top: 14px; border-top: 1px dotted var(--rule);
+  }
+  .workshop-studio-action {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+    color: var(--sepia); cursor: pointer; letter-spacing: 0.06em;
+    border-bottom: 1px dotted var(--rule);
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .workshop-studio-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .workshop-studio-action.primary { color: var(--ink); border-bottom-color: var(--ink); }
+  .workshop-studio-action.primary:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
   /* —— v0.30 §5 账号页 —— */
   .account-page { max-width: 640px; margin: 0 auto; padding-top: 12px; }
   .account-head { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 2px solid var(--ink); }
@@ -8155,13 +8252,9 @@ function renderWorkshop(handle) {
       <p class="workshop-tagline">「${escapeHtml(user.tagline)}」</p>
       ${benchHtml}
       ${toolsHtml}
-      ${(user.studios && user.studios.length > 0) ? `
-        <div class="workshop-affiliation">
-          挂靠 →
-          ${user.studios.map(s => `<a class="workshop-affiliation-link" onclick="showScreen('studio','${escapeHtml(s.slug)}')">${escapeHtml(s.name)}</a>`).join('  ·  ')}
-          ${isMe ? `  ·  <a class="workshop-affiliation-link" onclick="openCreateStudio()">+ 再建一个</a>` : ''}
-        </div>
-      ` : (isMe ? `
+      ${(user.studios && user.studios.length > 0)
+        ? ''
+        : (isMe ? `
         <div class="workshop-affiliation">
           还没挂任何工作室 ·
           <a class="workshop-affiliation-link" onclick="openCreateStudio()">建一个</a>
@@ -8171,6 +8264,7 @@ function renderWorkshop(handle) {
       ` : '')}
       ${cumulativeHtml}
     </div>
+    <div id="workshop-studios-block"></div>
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
         <span>最近在动 (${recent.length})</span>
@@ -8266,6 +8360,10 @@ function renderWorkshop(handle) {
       </div>
     ` : ''}
   `;
+  // v0.38 有挂靠工作室时 · 异步拉 preview 数据 · 渲染厚卡板块到"最近在动"之前
+  if (user.studios && user.studios.length > 0) {
+    loadAndRenderWorkshopStudios(handle, isMe);
+  }
 }
 
 /* ============ STUDIO (工作室聚合页 · v0.18) ============
@@ -11542,6 +11640,92 @@ function toggleWorkshopCumulative(toggleEl) {
     panel.classList.add('hidden');
     toggleEl.textContent = '看看复用累计 →';
   }
+}
+
+// v0.38 工坊页"我的工作室"厚卡板块 · 异步拉 preview
+async function apiGetStudiosPreview(handle) {
+  const res = await fetch('/api/users/' + encodeURIComponent(handle) + '/studios-preview', { credentials: 'same-origin' });
+  if (!res.ok) throw new Error('读不到工作室预览');
+  return res.json();
+}
+
+const STUDIO_UPDATE_KIND_LABELS = {
+  'ship': '完工', 'stuck': '卡住', 'unstuck': '又动起来',
+  'note': '便签', 'method': '方法', 'decision': '决策', 'feedback': '求反馈',
+};
+
+async function loadAndRenderWorkshopStudios(handle, isMe) {
+  const root = document.getElementById('workshop-studios-block');
+  if (!root) return;
+  root.innerHTML = '<div class="mb-12" style="color: var(--sepia); font-family: Newsreader, serif; font-size: 14px;">拉工作室...</div>';
+  try {
+    const { studios } = await apiGetStudiosPreview(handle);
+    if (!studios || studios.length === 0) { root.innerHTML = ''; return; }
+    const headTitle = isMe ? '我的工作室' : `@${handle} 的工作室`;
+    const headActions = isMe
+      ? `<span>
+          <span class="workshop-studios-action-link" onclick="openCreateStudio()">+ 建一个</span>
+          <span class="workshop-studios-action-link" onclick="openAcceptInvite()">接受邀请</span>
+        </span>`
+      : '';
+    const cards = studios.map(s => renderWorkshopStudioCard(s, isMe)).join('');
+    root.innerHTML = `
+      <div class="workshop-studios-section">
+        <div class="workshop-studios-head">
+          <span class="workshop-studios-title">${escapeHtml(headTitle)} (${studios.length})</span>
+          ${headActions}
+        </div>
+        ${cards}
+      </div>
+    `;
+  } catch (e) {
+    root.innerHTML = '<div class="mb-12" style="color: var(--vermilion); font-family: Newsreader, serif; font-size: 14px;">工作室拉不到 · ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderWorkshopStudioCard(s, isMe) {
+  const MAX_MEMBERS = 8;
+  const visibleMembers = (s.members || []).slice(0, MAX_MEMBERS);
+  const extraMembers = (s.members || []).length - visibleMembers.length;
+  const membersHtml = visibleMembers
+    .map(m => `<span class="workshop-studio-member" onclick="event.stopPropagation(); showScreen('workshop','${escapeHtml(m.handle)}')">@${escapeHtml(m.handle)}</span>`)
+    .join('') + (extraMembers > 0 ? `<span class="workshop-studio-member-more">+ ${extraMembers} 人</span>` : '');
+
+  const recentHtml = (s.recentUpdates && s.recentUpdates.length > 0)
+    ? s.recentUpdates.map(u => {
+        const kindLabel = STUDIO_UPDATE_KIND_LABELS[u.kind] || '';
+        const text = (u.text || '').replace(/\s+/g, ' ').slice(0, 60) + ((u.text || '').length > 60 ? '…' : '');
+        return `
+          <div class="workshop-studio-recent-row" onclick="showScreen('project','${escapeHtml(u.ownerHandle)}','${escapeHtml(u.projectSlug)}'); setTimeout(() => flashAnchor('update-${u.id}'), 50);">
+            <span class="workshop-studio-recent-time">${shortAgo(u.at)}</span>
+            <span class="workshop-studio-recent-handle">@${escapeHtml(u.ownerHandle)}</span>
+            <span class="workshop-studio-recent-text">${escapeHtml(text)}</span>
+            ${kindLabel ? `<span class="workshop-studio-recent-kind">${kindLabel}</span>` : ''}
+          </div>
+        `;
+      }).join('')
+    : '<div class="workshop-studio-recent-empty">还没有人在这间工作室记一笔</div>';
+
+  return `
+    <div class="workshop-studio-card">
+      <div class="workshop-studio-card-head">
+        <span class="workshop-studio-card-name" onclick="showScreen('studio','${escapeHtml(s.slug)}')">${escapeHtml(s.name)}</span>
+        ${s.tagline ? `<div class="workshop-studio-card-tagline">「${escapeHtml(s.tagline)}」</div>` : ''}
+      </div>
+      <div class="workshop-studio-card-meta">
+        <span class="num">${s.memberCount}</span> 人 ·
+        <span class="num">${s.projectCount}</span> 项目
+        ${s.inFlightCount > 0 ? ' (在做 <span class="num">' + s.inFlightCount + '</span>)' : ''}
+      </div>
+      <div class="workshop-studio-members">${membersHtml}</div>
+      <div class="workshop-studio-recent-head">最近动静</div>
+      ${recentHtml}
+      <div class="workshop-studio-actions">
+        <span class="workshop-studio-action primary" onclick="showScreen('studio','${escapeHtml(s.slug)}')">进工作室 →</span>
+        ${isMe ? `<span class="workshop-studio-action" onclick="openInviteMember('${escapeHtml(s.slug)}')">邀请队友</span>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 // v0.30 §5 账号页

@@ -514,6 +514,14 @@ app.get('/api/me/studios', stateLimiter, auth.requireSession, (req, res) => {
   res.json({ ok: true, studios: studios.studiosForUser(req.user.id) });
 });
 
+// v0.38 一个 handle 挂靠的所有工作室 · 带 preview 数据 (成员 / 项目 / 最近 3 条 update)
+// 公开 · 不要求登录 (访客也能看 @daodao 跟谁在做事)
+app.get('/api/users/:handle/studios-preview', stateLimiter, (req, res) => {
+  const user = db.prepare('SELECT id FROM users WHERE handle = ?').get(req.params.handle);
+  if (!user) return res.json({ ok: true, studios: [] });
+  res.json({ ok: true, studios: studios.studiosForUserWithPreview(user.id) });
+});
+
 // owner 邀请别人 · client 传 tokenHash + secretCipher (server 看不到 token 跟 secret)
 app.post('/api/studios/:id/invite', actionLimiter, auth.requireSession, (req, res) => {
   try {
