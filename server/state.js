@@ -188,6 +188,7 @@ function buildState({ targetUserId } = {}) {
       hiddenFromShowcase: !!p.hidden_from_showcase,
       githubLink: p.github_link || undefined,
       timeline: p.timeline || undefined,
+      studioId: p.studio_id || undefined,
       tools: (tools[p.id] || []).map(t => t.tool),
       updates: projectUpdates,
       notes: projectNotes,

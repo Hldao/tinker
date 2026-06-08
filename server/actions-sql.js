@@ -138,12 +138,22 @@ function renameHandle({ handle }, { currentUserId }) {
 // PROJECTS
 // ============================================
 
-function addProject({ name, desc, productLink, status = 'active', tools = [], githubLink }, { currentUserId }) {
+function addProject({ name, desc, productLink, status = 'active', tools = [], githubLink, studioId }, { currentUserId }) {
   if (!name || !name.trim()) throw new Error('项目得有个名字');
   if (!desc || !desc.trim()) throw new Error('描述不能为空');
   // productLink 可选 · 但如果填了必须是合法 URL(微信小程序 / 桌面应用 / 审核中的项目可以暂时空着)
   const link = normalizeUrl((productLink || '').trim());
   if (link && !isValidUrl(link)) throw new Error('如果填了 productLink, 得是 http(s):// 开头的可访问链接');
+
+  // v0.41 studioId 可选 · 给了必须是当前用户所属工作室
+  let resolvedStudioId = null;
+  if (studioId) {
+    const isMember = db.prepare(
+      'SELECT 1 FROM studio_members WHERE studio_id = ? AND user_id = ?'
+    ).get(studioId, currentUserId);
+    if (!isMember) throw new Error('你不是这个工作室的成员 · 没法挂上去');
+    resolvedStudioId = studioId;
+  }
 
   const projectId = 'p-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const slug = makeSlug();
@@ -151,10 +161,10 @@ function addProject({ name, desc, productLink, status = 'active', tools = [], gi
 
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO projects (id, owner_id, slug, name, desc, product_link, status, github_link, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, owner_id, slug, name, desc, product_link, status, github_link, studio_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(projectId, currentUserId, slug, name.trim(), desc.trim(), link || null,
-           status, githubLink || null, now, now);
+           status, githubLink || null, resolvedStudioId, now, now);
 
     const insTool = db.prepare('INSERT INTO project_tools (project_id, tool) VALUES (?, ?)');
     for (const t of (Array.isArray(tools) ? tools : [])) {
@@ -164,6 +174,30 @@ function addProject({ name, desc, productLink, status = 'active', tools = [], gi
   txn();
 
   return getProjectFlat(projectId);
+}
+
+// v0.41 改项目归属 · studioId = null / undefined = 拿回个人作品
+// studioId 是 string = 挂到该工作室 (必须是当前 user 的工作室)
+function changeProjectStudio({ projectId, studioId }, { currentUserId }) {
+  if (!projectId) throw new Error('projectId required');
+
+  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner_id !== currentUserId) throw new Error('只能改自己项目的归属');
+
+  let resolved = null;
+  if (studioId) {
+    const isMember = db.prepare(
+      'SELECT 1 FROM studio_members WHERE studio_id = ? AND user_id = ?'
+    ).get(studioId, currentUserId);
+    if (!isMember) throw new Error('你不是这个工作室的成员 · 没法挂上去');
+    resolved = studioId;
+  }
+
+  db.prepare('UPDATE projects SET studio_id = ?, updated_at = ? WHERE id = ?')
+    .run(resolved, Date.now(), projectId);
+
+  return { projectId, studioId: resolved };
 }
 
 function editProject({ projectId, name, desc, productLink, tools }, { currentUserId }) {
@@ -1275,7 +1309,7 @@ module.exports = {
   // users
   editTagline, renameHandle,
   // projects
-  addProject, editProject, editProjectTimeline, changeProjectStatus, shipProject, exhibitProject,
+  addProject, editProject, editProjectTimeline, changeProjectStudio, changeProjectStatus, shipProject, exhibitProject,
   pinUpdateForShowcase, toggleShowcaseVisibility,
   // updates
   addUpdate, editUpdate, deleteUpdate,

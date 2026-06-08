@@ -101,16 +101,16 @@ function studioGet({ slug }) {
     ORDER BY sm.joined_at ASC
   `).all(studio.id);
 
-  const memberIds = members.map(m => m.id);
-  const placeholders = memberIds.map(() => '?').join(',');
-  const projects = memberIds.length === 0 ? [] : db.prepare(`
+  // v0.41 只显示 studio_id 显式挂上来的项目 · 不再聚合"成员的所有项目"
+  // 个人作品 (studio_id IS NULL) 不会出现在工作室页 · 需要 user 主动 attribute 才上来
+  const projects = db.prepare(`
     SELECT p.id, p.slug, p.name, p.desc, p.status, p.owner_id AS ownerId,
            u.handle AS ownerHandle, p.updated_at AS updatedAt
     FROM projects p
     JOIN users u ON u.id = p.owner_id
-    WHERE p.owner_id IN (${placeholders})
+    WHERE p.studio_id = ?
     ORDER BY p.updated_at DESC
-  `).all(...memberIds);
+  `).all(studio.id);
 
   return { ...studio, members, projects };
 }
