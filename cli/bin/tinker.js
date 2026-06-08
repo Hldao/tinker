@@ -3979,10 +3979,10 @@ function cmdMaybeGoodnight() {
   // 今日已 goodnight 过 → 静默
   const ps = loadPromptState();
   if (ps.lastGoodnightDate === workdayKey()) return;
-  // 时间窗:北京时间晚于 19 点才提收尾 · 或者凌晨 0-4 点的熬夜场景
-  // 白天说"歇会儿/累了"不该当 goodnight 信号 · 白天的 hook 这里直接静默
+  // 时间窗:北京时间 23 点之后或凌晨 0-4 点才提收尾 · 19 点附近是下班 · 不算晚安
+  // 晚饭后说"歇会儿/累了"不该当 goodnight 信号 · 时间没到直接静默
   const hour = beijingHour();
-  if (hour >= 5 && hour < 19) return;
+  if (hour >= 5 && hour < 23) return;
   // 不在 git repo → 静默 · 没法判断今日活动
   if (!inGitRepo()) return;
   // "工作日" commit 数 · 凌晨 0-4 算前一天 (不然 since=今日4am 是未来时间 · git 返回 0)
