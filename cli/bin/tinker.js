@@ -2120,7 +2120,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   // v0.16 词典统一:matcher 词从 MAYBE_KINDS 拿 · 改词只动 MAYBE_KINDS 一处 · DRY
   // 跨 AI 通用入口 `tinker maybe-check --text "..."` 跟这里共用同一份词典
   // tinker maybe-goodnight 走单独的 GOODNIGHT_MATCHER · 自己判断今天值不值得收尾
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, GOODNIGHT_MATCHER, 'tinker maybe-goodnight 2>/dev/null || true', 'goodnight');
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, GOODNIGHT_MATCHER, 'tinker maybe-deep-summary 2>/dev/null || true', 'deep-summary');
 
   // 6 组 maybe-X · 每组 matcher 词从 MAYBE_KINDS 取
   // kind camelCase → shell command kebab-case (cleverFix → clever-fix)
@@ -2142,7 +2142,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('    SessionStart bridge-inbox         · 每次启动 · 看 inbox 有未处理 handoff'));
   log(sepia('    SessionEnd                         · 关 Claude Code / 系统 sleep 时'));
   log(sepia('    UserPromptSubmit pending-check    · 每次用户 prompt · 检查 hook 触发的待处理 reminder'));
-  log(sepia('    UserPromptSubmit goodnight        · 说收工类的话'));
+  log(sepia('    UserPromptSubmit deep-summary     · 说收工类的话 · 建议跑 tinker deep-summary'));
   log(sepia('    UserPromptSubmit stuck            · 说卡住类的话'));
   log(sepia('    UserPromptSubmit breakthrough     · 说顿悟类的话'));
   log(sepia('    UserPromptSubmit decision         · 做工具/方案选择'));
@@ -4052,7 +4052,7 @@ async function cmdGoodnight(opts = {}) {
 
   // 输出
   log('');
-  const titleText = daysBack === 1 ? '晚安 · 今日总结' : daysBack === 7 ? '周总结 · ' + periodLabel : daysBack === 30 ? '月总结 · ' + periodLabel : '总结 · ' + periodLabel;
+  const titleText = daysBack === 1 ? '今日深度总结' : daysBack === 7 ? '周总结 · ' + periodLabel : daysBack === 30 ? '月总结 · ' + periodLabel : '总结 · ' + periodLabel;
   log(sepia('  ── ') + vermilion(titleText) + sepia(' ── ') + sepia(new Intl.DateTimeFormat('zh-CN', { timeZone: TZ_BEIJING, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())));
   log('');
 
@@ -4165,7 +4165,7 @@ async function cmdGoodnight(opts = {}) {
   // 想看就跑 tinker llm usage (单独命令)
 
   if (cfg.llm && cfg.llm.apiKey && (gitCommits.length > 0 || todayUpdates.length > 0) && !opts.narrate) {
-    log(sepia('  让 AI 帮你 narrate 一下? 想要就跑 ') + vermilion('tinker goodnight --narrate'));
+    log(sepia('  让 AI 帮你 narrate 一下? 想要就跑 ') + vermilion('tinker deep-summary --narrate'));
     log('');
   }
 
@@ -4234,7 +4234,7 @@ function cmdMaybeGoodnight() {
   } catch { return; }
   if (commitCount === 0) return;
   // 文案不再陈述 commit 数 · 之前那版读起来像"做了这么多该收尾了" · commit 数不该是收尾信号
-  process.stdout.write(`现在北京时间 ${hour} 点 · 用户刚说了收工类的话 · 看上下文真要收工的话建议跑 tinker goodnight\n`);
+  process.stdout.write(`现在北京时间 ${hour} 点 · 用户刚说了收工类的话 · 看上下文真要收工的话建议跑 tinker deep-summary 看今日总结\n`);
 }
 
 // v0.14 对话内 maybe-X 触发器 · 把 keyword 触发从 commit message 搬到 Claude Code 对话
@@ -8955,7 +8955,8 @@ async function main() {
         else { err('用法: tinker situation backfill [--type design-loop] [--hours 4]'); process.exit(1); }
         break;
       case 'session': await cmdSession(args[1], opts); break;
-      case 'goodnight': case 'recap':
+      // v0.43 主命令名改 deep-summary · goodnight / recap 保留 alias 兼容
+      case 'deep-summary': case 'goodnight': case 'recap':
         await cmdGoodnight({
           narrate: opts.narrate || args.includes('--narrate'),
           json: opts.json,
@@ -8964,7 +8965,7 @@ async function main() {
           daysBack: opts.daysBack,
         });
         break;
-      case 'maybe-goodnight':
+      case 'maybe-deep-summary': case 'maybe-goodnight':
         // 静默触发器 · 给 Claude Code user-prompt-submit-hook 调
         cmdMaybeGoodnight();
         return; // 不走末尾 showUpdateBannerIfNeeded · 保持 stdout 干净
