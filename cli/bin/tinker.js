@@ -1672,15 +1672,45 @@ function savePromptState(s) {
     fs.writeFileSync(PROMPT_STATE_FILE, JSON.stringify(s, null, 2));
   } catch (e) { /* 容错 · 失败不影响 */ }
 }
+// v0.25 Tinker 服务东八区用户 · 所有"今天 / 这周 / 这个月" 一律按北京时间算
+// 不依赖运行机器时区 (阿里云 ECS 跑 UTC / 国外协作者跑 CLI 都能拿到一致结果)
+const TZ_BEIJING = 'Asia/Shanghai';
+
+// 北京时间今天 YYYY-MM-DD · en-CA locale 自然输出 ISO 日期格式
 function todayKey() {
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ_BEIJING, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
 }
-// v0.88 工作日 key · 凌晨 0-4 算前一天的 tail · 给 maybe-goodnight 和 goodnight 标记用
+
+// 北京当前 0-23 小时 (用来判断凌晨)
+function beijingHour() {
+  return parseInt(new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ_BEIJING, hour: 'numeric', hour12: false,
+  }).format(new Date()), 10);
+}
+
+// 北京时间 (今天 + offsetDays) hour:00:00 对应的 UTC epoch ms
+// hour 可以溢出 (28 = 明天 4am · 跟原 setHours(28) 语义一致)
+function beijingDayStart(offsetDays = 0, hour = 0) {
+  const [y, m, d] = todayKey().split('-').map(Number);
+  return Date.UTC(y, m - 1, d + offsetDays, hour - 8, 0, 0);
+}
+
+// git log --since 用的 ISO 字符串 (UTC · git 能正确解析时区)
+function beijingSinceISO(offsetDays = 0, hour = 4) {
+  return new Date(beijingDayStart(offsetDays, hour)).toISOString();
+}
+
+// v0.88 工作日 key · 北京凌晨 0-4 算前一天的 tail · 给 maybe-goodnight 和 goodnight 标记用
 function workdayKey() {
-  const d = new Date();
-  if (d.getHours() < 4) d.setDate(d.getDate() - 1);
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  if (beijingHour() >= 4) return todayKey();
+  // 凌晨 · 拿昨天 (北京) 的 key
+  const [y, m, d] = todayKey().split('-').map(Number);
+  const yesterday = new Date(Date.UTC(y, m - 1, d - 1));
+  return yesterday.getUTCFullYear() + '-' +
+    String(yesterday.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(yesterday.getUTCDate()).padStart(2, '0');
 }
 
 // 记录最近一次 push 到 Tinker 的时间 (按项目) · 给触发器 C "长时间未发" 用
@@ -2149,8 +2179,8 @@ function triggerCrossRepoDrift(state, currentRepoCfg) {
   const regPaths = Object.keys(reg);
   if (regPaths.length < 2) return { fired: false };  // 只有 1 个 repo 没法 drift
   const cwd = process.cwd();
-  const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
-  // 算每个 registered repo 今日 commit 数
+  const since = beijingSinceISO(0, 4);
+  // 算每个 registered repo 今日 commit 数 (北京时间 4am 起)
   const counts = {};
   let total = 0;
   for (const p of regPaths) {
@@ -2609,9 +2639,8 @@ function triggerFirstCommitOfDay(state) {
   // v0.2 #6: 一天只触发一次低优先级 · 避免 first-commit 被后续 cumulative 抢走
   if (state && state.lowFiredTodayKey === todayKey()) return { fired: false };
   try {
-    // "今天" 从凌晨 4 点开始算 · 跟 mute 'today' 的语义对齐 · 熬夜 coder 友好
-    const d = new Date(); d.setHours(4, 0, 0, 0);
-    const since = `${d.toISOString().slice(0, 10)} 04:00`;
+    // "今天" 从北京时间凌晨 4 点开始算 · 跟 mute 'today' 的语义对齐 · 熬夜 coder 友好
+    const since = beijingSinceISO(0, 4);
     const out = execSync(
       `git log --since="${since}" --no-merges --pretty=format:"%h"`,
       { encoding: 'utf-8' }
@@ -3567,12 +3596,7 @@ function getClaudeCodeUsageToday(opts = {}) {
 
   // 默认"今天" 4am 起 · daysBack 支持周/月扫
   const daysBack = opts.daysBack || 1;
-  const dayStart = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - (daysBack - 1));
-    d.setHours(4, 0, 0, 0);
-    return d.getTime();
-  })();
+  const dayStart = beijingDayStart(-(daysBack - 1), 4);
   const now = Date.now();
 
   const byModel = {};
@@ -3691,12 +3715,7 @@ async function cmdGoodnight(opts = {}) {
   let gitStat = null;
   if (inGitRepo()) {
     try {
-      const since = (() => {
-        const d = new Date();
-        d.setDate(d.getDate() - (daysBack - 1));
-        d.setHours(4, 0, 0, 0);
-        return d.toISOString().slice(0, 10) + ' 04:00';
-      })();
+      const since = beijingSinceISO(-(daysBack - 1), 4);
       gitCommits = execSync(`git log --since="${since}" --no-merges --pretty=format:"%h|%s|%ai"`, { encoding: 'utf-8' })
         .trim().split('\n').filter(Boolean).map(l => {
           const [sha, msg, at] = l.split('|');
@@ -3718,7 +3737,7 @@ async function cmdGoodnight(opts = {}) {
   try {
     const state = await apiState(cfg);
     // 范围起始: 当前时间往回 daysBack 天 · 凌晨 4 点
-    const rangeStart = (() => { const d = new Date(); d.setDate(d.getDate() - (daysBack - 1)); d.setHours(4, 0, 0, 0); return d.getTime(); })();
+    const rangeStart = beijingDayStart(-(daysBack - 1), 4);
     for (const p of state.projects) {
       if (p.owner !== cfg.handle) continue;
       for (const u of (p.updates || [])) {
@@ -3777,7 +3796,7 @@ async function cmdGoodnight(opts = {}) {
   // 输出
   log('');
   const titleText = daysBack === 1 ? '晚安 · 今日总结' : daysBack === 7 ? '周总结 · ' + periodLabel : daysBack === 30 ? '月总结 · ' + periodLabel : '总结 · ' + periodLabel;
-  log(sepia('  ── ') + vermilion(titleText) + sepia(' ── ') + sepia(new Date().toLocaleDateString()));
+  log(sepia('  ── ') + vermilion(titleText) + sepia(' ── ') + sepia(new Intl.DateTimeFormat('zh-CN', { timeZone: TZ_BEIJING, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())));
   log('');
 
   log('  ' + bold('Coding'));
@@ -3857,7 +3876,7 @@ async function cmdGoodnight(opts = {}) {
   try {
     const struggleMod = getStruggleModule();
     const ps = loadPromptState();
-    const todayStart = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.getTime(); })();
+    const todayStart = beijingDayStart(0, 4);
     const recent = struggleMod.listDossiers({ limit: 20 })
       .filter(d => d.startedAt >= todayStart);
     const cur = ps.currentStruggle;
@@ -7133,8 +7152,7 @@ function cmdMute(args) {
     else if (m[2] === 'h') { duration = n * 60 * 60 * 1000; label = `${n} 小时`; }
     else if (m[2] === 'd') { duration = n * 24 * 60 * 60 * 1000; label = `${n} 天`; }
   } else if (arg === 'today') {
-    const d = new Date(); d.setHours(28, 0, 0, 0); // 明天凌晨 4:00
-    duration = d.getTime() - now;
+    duration = beijingDayStart(1, 4) - now; // 北京明天凌晨 4:00
     label = '到明早 4 点';
   } else if (arg === 'forever') {
     state.mutedUntil = Number.MAX_SAFE_INTEGER;
@@ -7193,7 +7211,7 @@ async function cmdStream(resource, opts = {}) {
       let gitCommits = 0;
       if (inGitRepo()) {
         try {
-          const since = (() => { const d = new Date(); d.setHours(4, 0, 0, 0); return d.toISOString().slice(0, 10) + ' 04:00'; })();
+          const since = beijingSinceISO(0, 4);
           const out = require('child_process').execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' });
           gitCommits = out.trim().split('\n').filter(Boolean).length;
         } catch {}
@@ -7202,10 +7220,10 @@ async function cmdStream(resource, opts = {}) {
       if (cfg && cfg.serverUrl && cfg.token) {
         try {
           const state = await apiState(cfg);
-          const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+          const todayStart = beijingDayStart(0, 0); // 北京 0am
           for (const p of state.projects || []) {
             for (const u of p.updates || []) {
-              if (u.at >= todayStart.getTime()) tinkerPushed++;
+              if (u.at >= todayStart) tinkerPushed++;
             }
           }
         } catch {}
