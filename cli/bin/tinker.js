@@ -6323,6 +6323,273 @@ ${commits.join('\n')}
   log('');
 }
 
+// =====================================================
+// v0.46 witness · 集体决策推演 · AI 议会式异步协商
+// 发起方广播征求意见 · 接收方 AI 用自己 voice 写 critique · 回 N 份独立角度
+// 决策权仍在发起方 · 但听到了 N 个角度 · 没开会
+// 用现有: bridge.send + decision kind + scenario 字段标 reply parent
+// 不动 server schema
+// =====================================================
+
+// tinker witness <draft|publish|reply|close> ...
+async function cmdWitness(opts) {
+  const positional = opts.positional || [];
+  const sub = positional[0];
+  if (sub === 'draft') return cmdWitnessDraft(opts);
+  if (sub === 'publish') return cmdWitnessPublish(opts);
+  if (sub === 'reply') return cmdWitnessReply(opts);
+  if (sub === 'close') return cmdWitnessClose(opts);
+  log('');
+  log(bold('  tinker witness · 集体决策推演 (AI 议会式异步协商)'));
+  log('');
+  log('  ' + vermilion('tinker witness draft --topic "..." [--by-claude]'));
+  log(sepia('     发起方起草 · CLI 输出脚手架 · 当前 Claude 写内容'));
+  log('  ' + vermilion('tinker witness publish "<content>"'));
+  log(sepia('     发起方落地 · push 标 decision + bridge 广播到 active studio'));
+  log('  ' + vermilion('tinker witness reply <originalUpdateId> [--by-claude]'));
+  log(sepia('     接收方起草 critique · CLI 拉原 update + 输出脚手架'));
+  log('  ' + vermilion('tinker witness reply <originalUpdateId> publish "<content>"'));
+  log(sepia('     接收方落地 critique · push 标 decision + bridge 回原发起方'));
+  log('  ' + vermilion('tinker witness close <originalUpdateId> --decision "<final>"'));
+  log(sepia('     发起方收 N 份 critique 后落定 · 原 update text 末尾追加最终决定'));
+  log('');
+}
+
+// 发起方起草
+async function cmdWitnessDraft(opts) {
+  const topic = (opts.text || opts.title || '').trim();
+  if (!topic) { err('用法: tinker witness draft --topic "X 要不要做"'); process.exit(1); }
+  const byClaude = !!opts.byClaude;
+
+  if (!byClaude) {
+    err('MVP 只支持 --by-claude 模式 · 加这个 flag 重跑');
+    process.exit(1);
+  }
+
+  log('');
+  log(sepia('  ─── witness 起草脚手架 ───'));
+  log('');
+  log('主题: ' + bold(topic));
+  log('');
+  log('请你写一段 50-300 字 · 内容包含:');
+  log('  · 你现在的倾向 (A 还是 B · 还是没决定)');
+  log('  · 你 nagging 的点 (担心 / 不确定 / 需要别人帮你想清的角度)');
+  log('  · 想征求什么角度的意见 (架构 / 用户体验 / 性能 / 哲学 / 其他)');
+  log('');
+  log('要求:');
+  log('  · 工艺人工作日志气质 · 不堆 emoji · 不堆破折号 · 不用 ## 标题切段');
+  log('  · 不商业黑话 (生态 / 赋能 / 抓手 等)');
+  log('  · 一段连贯叙事 · 不分点');
+  log('');
+  log('写完跑 (替换 <content>):');
+  log('  ' + vermilion('tinker witness publish "<content>"'));
+  log('');
+  log(sepia('  publish 会自动 push 标 [决策推演] + bridge 广播到 active studio'));
+  log('');
+}
+
+// 发起方落地
+async function cmdWitnessPublish(opts) {
+  const cfg = mustHaveConfig();
+  const positional = opts.positional || [];
+  const content = (opts.text || positional[1] || '').trim();
+  if (!content || content.length < 50) {
+    err('内容太短 (< 50 字) · 用法: tinker witness publish "<内容>"');
+    process.exit(1);
+  }
+
+  // voice check
+  try {
+    const vc = require('../lib/voice-check').detectAIVoice(content);
+    if (vc.score >= 2) {
+      log(sepia('  ⚠ voice 自检 ') + vc.score + sepia(' 项命中:') + vc.list.join(' · '));
+    }
+  } catch {}
+
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const repoCfg = loadRepoConfig() || {};
+  let projectId = repoCfg.projectId;
+  if (!projectId) {
+    const candidates = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+    if (candidates.length === 0) { err('没找到 active/stuck/live 项目'); process.exit(1); }
+    projectId = candidates[0].id;
+  }
+
+  // 加 marker 在 scenario 字段:'witness-request' (跟 reply 区分)
+  const r = await apiAction(cfg, 'addUpdate', { projectId, text: content, scenario: 'witness-request' });
+  const updateId = r.result?.id || r.id;
+  try { await apiAction(cfg, 'markAsDecision', { updateId }); } catch {}
+
+  const project = state.projects.find(p => p.id === projectId);
+  log('');
+  ok('✦ witness 发起 — ' + bold(project?.name || '(项目)'));
+  log(sepia('  update id: ') + updateId);
+  log(sepia('  已标 [决策推演]'));
+
+  // bridge 广播到 active studio · type='witness-request'
+  const bridgeLib = require('../lib/bridge');
+  const activeStudio = bridgeLib.getActiveStudio();
+  if (activeStudio && activeStudio.id) {
+    try {
+      const obj = {
+        v: 1,
+        title: 'witness: ' + content.split('\n')[0].slice(0, 60),
+        body: '我想征求队友意见 · ' + content.slice(0, 200) + (content.length > 200 ? '...' : '') + ' (tinker borrow ' + updateId + ' 看完整) · 回 critique 跑 tinker witness reply ' + updateId + ' --by-claude',
+        level: 'info',
+        at: Date.now(),
+        type: 'witness-request',
+        updateId,
+        topic: content.split('\n')[0].slice(0, 80),
+      };
+      const payload = bridgeLib.encrypt(JSON.stringify(obj), activeStudio.secret);
+      await safeFetchJson(cfg, '/api/bridge/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+        body: JSON.stringify({ toStudio: activeStudio.id, kind: 'noti', payload }),
+      });
+      log(sepia('  ✓ 广播到 ') + bold(activeStudio.name));
+      log(sepia('  队友 SessionStart 时 reminder 注入 · 她 Claude 决定回不回'));
+    } catch (e) { log(sepia('  ⚠ 广播失败:') + e.message); }
+  }
+  log('');
+}
+
+// 接收方起草 / 落地
+async function cmdWitnessReply(opts) {
+  const cfg = mustHaveConfig();
+  const positional = opts.positional || [];
+  const originalUpdateId = positional[1];
+  if (!originalUpdateId) { err('用法: tinker witness reply <originalUpdateId> [--by-claude | publish "<critique>"]'); process.exit(1); }
+  const sub2 = positional[2];
+
+  // 拉原 update + 原作者
+  const state = await apiState(cfg);
+  let originalProject = null, originalUpdate = null;
+  for (const p of state.projects) {
+    const u = (p.updates || []).find(x => x.id === originalUpdateId);
+    if (u) { originalProject = p; originalUpdate = u; break; }
+  }
+  if (!originalUpdate) { err('找不到原 update: ' + originalUpdateId); process.exit(1); }
+
+  // publish 模式
+  if (sub2 === 'publish') {
+    const content = (opts.text || positional[3] || '').trim();
+    if (!content || content.length < 50) {
+      err('critique 太短 (< 50 字)');
+      process.exit(1);
+    }
+    try {
+      const vc = require('../lib/voice-check').detectAIVoice(content);
+      if (vc.score >= 2) log(sepia('  ⚠ voice ') + vc.score + sepia(':') + vc.list.join(' · '));
+    } catch {}
+
+    const me = cfg.handle;
+    const repoCfg = loadRepoConfig() || {};
+    let projectId = repoCfg.projectId;
+    if (!projectId) {
+      const candidates = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+      if (candidates.length === 0) { err('没找到 active/stuck/live 项目'); process.exit(1); }
+      projectId = candidates[0].id;
+    }
+
+    // critique 自己项目下 · scenario 标 'witness-reply: <originalUpdateId>'
+    const r = await apiAction(cfg, 'addUpdate', { projectId, text: content, scenario: 'witness-reply: ' + originalUpdateId });
+    const replyUpdateId = r.result?.id || r.id;
+    try { await apiAction(cfg, 'markAsDecision', { updateId: replyUpdateId }); } catch {}
+
+    log('');
+    ok('✦ witness critique 发了 → @' + originalProject.owner);
+    log(sepia('  reply update id: ') + replyUpdateId);
+
+    // bridge 回原发起方点对点
+    const bridgeLib = require('../lib/bridge');
+    const activeStudio = bridgeLib.getActiveStudio();
+    if (activeStudio) {
+      try {
+        const obj = {
+          v: 1,
+          title: 'witness reply 从 @' + me,
+          body: '我对你那个 witness (' + originalUpdateId + ') 写了 critique · tinker borrow ' + replyUpdateId + ' 看 · 摘: ' + content.slice(0, 150),
+          level: 'info',
+          at: Date.now(),
+          type: 'witness-reply',
+          replyUpdateId,
+          originalUpdateId,
+        };
+        const payload = bridgeLib.encrypt(JSON.stringify(obj), activeStudio.secret);
+        await safeFetchJson(cfg, '/api/bridge/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+          body: JSON.stringify({ to: originalProject.owner, kind: 'noti', payload }),
+        });
+        log(sepia('  ✓ bridge 回点对点 → @' + originalProject.owner));
+      } catch (e) { log(sepia('  ⚠ bridge 失败:') + e.message); }
+    }
+    log('');
+    return;
+  }
+
+  // 起草模式 (--by-claude)
+  log('');
+  log(sepia('  ─── 原 witness ───'));
+  log('');
+  log('@' + originalProject.owner + sepia(' (项目: ') + originalProject.name + sepia(')'));
+  log('update id: ' + originalUpdateId);
+  log('');
+  log(originalUpdate.text);
+  log('');
+  log(sepia('  ─── 任务 ───'));
+  log('');
+  log('请用你自己的 voice 写一份 critique:');
+  log('  · 看 .tinker/voice-fingerprint.md 拿你主人的口吻');
+  log('  · 100-400 字 · 工艺人工作日志气质');
+  log('  · 站在你最熟的角度 (架构 / UX / 性能 / 哲学 / 其他)');
+  log('  · 给具体观点 + 给为什么 · 不只是"我觉得行"');
+  log('  · 决策权仍是 @' + originalProject.owner + ' · 你提供视角 · 不替他决定');
+  log('  · 不堆 emoji · 不堆破折号 · 不商业黑话');
+  log('');
+  log('写完跑 (替换 <content>):');
+  log('  ' + vermilion('tinker witness reply ' + originalUpdateId + ' publish "<content>"'));
+  log('');
+}
+
+// 发起方落定
+async function cmdWitnessClose(opts) {
+  const cfg = mustHaveConfig();
+  const positional = opts.positional || [];
+  const originalUpdateId = positional[1];
+  if (!originalUpdateId) { err('用法: tinker witness close <originalUpdateId> --decision "<final>"'); process.exit(1); }
+  const finalDecision = (opts.text || '').trim();
+  if (!finalDecision) { err('要给最终决定 · --decision "<内容>"'); process.exit(1); }
+
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  let originalProject = null, originalIdx = -1, originalUpdate = null;
+  for (const p of state.projects) {
+    if (p.owner !== me) continue;
+    const idx = (p.updates || []).findIndex(x => x.id === originalUpdateId);
+    if (idx >= 0) { originalProject = p; originalIdx = idx; originalUpdate = p.updates[idx]; break; }
+  }
+  if (!originalUpdate) { err('找不到你名下的 ' + originalUpdateId + ' (close 只能由发起人跑)'); process.exit(1); }
+
+  // editUpdate 把 final 加在 text 末尾
+  const newText = originalUpdate.text + '\n\n---\n\n最终决定 (' + new Date().toLocaleString('zh-CN', { hour12: false }) + '):\n\n' + finalDecision;
+  try {
+    await apiAction(cfg, 'editUpdate', {
+      projectId: originalProject.id,
+      updateIdx: originalIdx,
+      text: newText,
+    });
+  } catch (e) { err('落定失败: ' + e.message); process.exit(1); }
+
+  log('');
+  ok('✦ witness 落定 — ' + bold(originalProject.name));
+  log(sepia('  原 update ') + originalUpdateId + sepia(' text 末尾追加了"最终决定"段'));
+  log(sepia('  后续有人 borrow 这条 decision · 会看到 N 个角度争论 + 最终落点'));
+  log('');
+}
+
 // v0.45 publish · --by-claude 模式 · Claude 写完内容用这条落地
 // 跳过 LLM 调用 · 直接 push + mark learning + broadcast
 async function cmdTeamKnowledgePublish(opts) {
@@ -9256,6 +9523,7 @@ async function main() {
       case 'send': await cmdSend(opts); break;
       case 'handoff': await cmdHandoff(opts); break;
       case 'team-knowledge': await cmdTeamKnowledge(opts); break;
+      case 'witness': await cmdWitness(opts); break;
       case 'inbox': cmdInbox(opts); break;
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'studio':
