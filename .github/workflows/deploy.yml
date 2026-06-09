@@ -5,6 +5,12 @@ on:
     branches: [main]
   workflow_dispatch:  # 允许手动触发 (在 GitHub Actions 页面点按钮)
 
+# 连续 push 时部署节流 · 同时只跑一次 · 中间累积的 queued 自动被最新的取代
+# 用 cancel-in-progress: false 不打断正在跑的部署 (docker build/restart 半中断风险)
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: 部署到生产服务器
