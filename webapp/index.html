@@ -11922,7 +11922,7 @@ function copyAccountAiInstall(el) {
   if (!tok) return;
   const serverUrl = window.location.origin;
   const text = [
-    '帮我装 Tinker CLI 并用这把钥匙登录。',
+    '帮我装 Tinker CLI 并用这把钥匙登录,然后跑 onboard 配齐协作环境。',
     '',
     '1) 装 CLI (没装过的话):',
     '   git clone https://github.com/Hldao/tinker.git ~/tinker-src',
@@ -11932,9 +11932,12 @@ function copyAccountAiInstall(el) {
     '2) 用钥匙登录:',
     '   tinker login --server ' + serverUrl + ' --token ' + tok,
     '',
-    '3) 验证: tinker recent --limit 3',
-    '   能看到我最近的 update 就成功了。',
+    '3) 一站式配齐 (项目关联 + git hook + Claude Code hook + CLAUDE.md):',
+    '   cd 到我当前在做的项目目录',
+    '   tinker onboard',
+    '   这条会交互式问我"这 repo 关联哪个 Tinker 项目" · 没项目它带我建一个 · 然后装好两套 hook 跟 CLAUDE.md',
     '',
+    '装完后 CLAUDE.md 里有 Tinker 协作约定 · 让你看到 reminder 时知道怎么响应。',
     '钥匙丢了到 Tinker 网页撤销重发就行,不用紧张。',
   ].join('\n');
   safeCopy(text, '复制了 · 粘给你的 AI · 让 ta 装', '复制失败 · 请手动选中复制');
