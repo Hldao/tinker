@@ -487,9 +487,6 @@
   /* v0.78 scenario 块 · 衬线字 · 比卡片 markdown 显眼 · 让用户判断要不要展开 */
   .tl-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.55; color: var(--ink-soft); margin-bottom: 12px; padding: 10px 14px; background: rgba(120, 113, 108, 0.06); border-left: 3px solid var(--moss); border-radius: 2px; }
   .tl-scenario-label { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; text-transform: uppercase; margin-right: 8px; }
-  .tl-method-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; cursor: pointer; color: var(--ink-soft); }
-  .tl-method-toggle:hover { color: var(--moss); }
-  .tl-method-toggle.active { color: var(--moss); }
   .tl-entry-ship .tl-time { color: var(--vermilion); }
   .tl-entry-ship .tl-text { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 96; font-size: 18px; line-height: 1.55; }
 
@@ -8567,7 +8564,6 @@ function renderProject(owner, slug) {
                 ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
                 <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
-                  <span class="small-action tl-method-toggle ${u.isMethod ? 'active' : ''}" onclick="toggleMethodFlag('${u.id}', ${u.isMethod ? 'true' : 'false'})">${u.isMethod ? '不存了' : '存一笔'}</span>
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
                   <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
                 ` : ''}
@@ -10840,28 +10836,6 @@ function toggleMethodLibrary() {
   const isOpen = content.style.display !== 'none';
   content.style.display = isOpen ? 'none' : 'block';
   if (arrow) arrow.textContent = isOpen ? '展开 ↓' : '收起 ↑';
-}
-
-// v0.76 双轨制 · 作者自标 = 私人书签 ("存一笔" · 不承诺公共价值)
-// 公共认证 = 被 3+ 人 "用了·跑通了" 后系统升格 (前端动态算 usedByList.length)
-// 之前文案 "标方法 · 别人 borrow 时能搜到" 暗示了公共承诺 · AI 装大佬轻量版 · 已降级
-async function toggleMethodFlag(updateId, isCurrentlyMethod) {
-  try {
-    if (isCurrentlyMethod) {
-      await apiAction('unmarkMethod', { updateId });
-      showToast('不存了 · 撤回了');
-    } else {
-      await apiAction('markAsMethod', { updateId });
-      showToast('存下了 · 以后可以在你的底稿里翻到');
-    }
-    // 重新渲染当前项目页 · 简单方式: 找到这条 update 所属项目重新 render
-    for (const p of state.projects) {
-      if ((p.updates || []).some(u => u.id === updateId)) {
-        renderProject(p.owner, p.slug);
-        break;
-      }
-    }
-  } catch (e) { showToast(e.message); }
 }
 
 function openPickProject() {
