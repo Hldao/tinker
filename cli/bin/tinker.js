@@ -1303,6 +1303,10 @@ async function cmdStuck(opts) {
   stuckText = (stuckText || '').trim();
   if (!stuckText) { err('得说一下卡在哪 · 不然别人没法帮上忙'); process.exit(1); }
 
+  // voice 守门 · 卡住文字进队友视野 · 跟 push 同等严
+  const stuckGate = await gateVoiceCheck(stuckText, { profile: 'for_humans_team', force: opts.force });
+  if (!stuckGate.ok) process.exit(1);
+
   // server 端要求 commit 文字本身没规定 prefix · 这里加 "卡在 " 让时间线读起来一致
   if (!stuckText.startsWith('卡')) stuckText = '卡在 ' + stuckText;
 
@@ -6026,6 +6030,10 @@ function renderInviteMessage(msg, obj, inboxDir) {
 
 // tinker handoff -m "..." [-t @who] [--situation <id>]
 async function cmdHandoff(opts) {
+  // v0.48 子命令分发 · reply 走 cmdHandoffReply (接力方做完回稿)
+  const positional = opts.positional || [];
+  if (positional[0] === 'reply') return cmdHandoffReply(opts);
+
   const cfg = mustHaveConfig();
   const bridgeLib = require('../lib/bridge');
   const dossierLib = require('../lib/dossier');
@@ -6040,6 +6048,10 @@ async function cmdHandoff(opts) {
     err('要给接力说明 · 例:tinker handoff -m "图片压缩做一半 · 剩 webp 转换"');
     process.exit(1);
   }
+  // voice 守门 · 接力说明是给队友 (人) 看的 · 严查
+  // dossier 里 situation/diff/fingerprint 是 AI 给 AI 看的 · 那部分不查
+  const gate = await gateVoiceCheck(message, { profile: 'for_humans_team', force: opts.force });
+  if (!gate.ok) process.exit(1);
   const to = opts.toHandle || null;
   const useStudio = !to;
 
@@ -6075,6 +6087,129 @@ async function cmdHandoff(opts) {
     log('');
     appendOutbox({ kind: 'handoff', to: to || null, toStudio: useStudio ? activeStudio.slug : null, message, situationId, dossierBytes: plain.length, msgId: r.id, seq: r.seq });
   } catch (e) { err(e.message); process.exit(1); }
+}
+
+// =====================================================
+// v0.48 handoff reply · 接力方做完回稿给原发起方
+// 跟 witness reply 同构 · 但走 inbox/<msgId> 上下文 · 而不是 update id
+// 低粒度: 只传"接到哪步 + 留了什么给原发起方" · 不回包 diff/state
+// =====================================================
+async function cmdHandoffReply(opts) {
+  const cfg = mustHaveConfig();
+  const positional = opts.positional || [];
+  const msgId = positional[1];
+  if (!msgId) { err('用法: tinker handoff reply <msgId> [--by-claude | publish "<content>"]'); process.exit(1); }
+
+  const dossierLib = require('../lib/dossier');
+  const inboxItemDir = path.join(dossierLib.INBOX_DIR, msgId);
+  if (!fs.existsSync(inboxItemDir)) { err('找不到 inbox 项: ' + msgId); process.exit(1); }
+
+  // 拿原 fromHandle · unpackDossier 落的 from.txt
+  let fromHandle = opts.toHandle || null;
+  const fromFile = path.join(inboxItemDir, 'from.txt');
+  if (!fromHandle && fs.existsSync(fromFile)) {
+    try { fromHandle = fs.readFileSync(fromFile, 'utf-8').trim(); } catch {}
+  }
+  if (!fromHandle) {
+    err('inbox 项里没找到 from.txt · 老消息没记录原发起方 · 加 --to @<handle> 显式指定');
+    process.exit(1);
+  }
+
+  // 读原 dossier 拿 message 跟 cwd
+  let originalMessage = '';
+  let originalCwd = '';
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(inboxItemDir, 'dossier.json'), 'utf-8'));
+    originalMessage = d.message || '';
+    originalCwd = d.cwd || '';
+  } catch {}
+
+  const sub2 = positional[2];
+
+  // publish 模式
+  if (sub2 === 'publish') {
+    const content = (opts.text || positional[3] || '').trim();
+    if (!content || content.length < 30) {
+      err('回稿太短 (< 30 字) · 至少说一句:接到哪步 + 留了什么给原发起方');
+      process.exit(1);
+    }
+    // voice 守门 · 回稿给原发起方(人)读
+    const gate = await gateVoiceCheck(content, { profile: 'for_humans_team', force: opts.force });
+    if (!gate.ok) process.exit(1);
+
+    // 自己项目下落一条 update · scenario 标 handoff-reply
+    const me = cfg.handle;
+    const state = await apiState(cfg);
+    const repoCfg = loadRepoConfig() || {};
+    let projectId = repoCfg.projectId;
+    if (!projectId) {
+      const candidates = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+      if (candidates.length === 0) { err('没找到 active/stuck/live 项目 · 先建一个 · tinker project new'); process.exit(1); }
+      projectId = candidates[0].id;
+    }
+    const r = await apiAction(cfg, 'addUpdate', { projectId, text: content, scenario: 'handoff-reply: ' + msgId });
+    const replyUpdateId = r.result?.id || r.id;
+
+    // bridge 回原发起方点对点
+    const bridgeLib = require('../lib/bridge');
+    const activeStudio = bridgeLib.getActiveStudio();
+    let bridgeOk = false;
+    if (activeStudio) {
+      try {
+        const obj = {
+          v: 1,
+          title: 'handoff reply 从 @' + me,
+          body: '我对你那个 handoff (' + msgId + ') 回稿了 · tinker borrow ' + replyUpdateId + ' 看 · 摘: ' + content.slice(0, 150),
+          level: 'info',
+          at: Date.now(),
+          type: 'handoff-reply',
+          replyUpdateId,
+          originalMsgId: msgId,
+        };
+        const payload = bridgeLib.encrypt(JSON.stringify(obj), activeStudio.secret);
+        const sendRes = await safeFetchJson(cfg, '/api/bridge/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+          body: JSON.stringify({ to: fromHandle, kind: 'noti', payload }),
+        });
+        bridgeOk = true;
+        appendOutbox({ kind: 'handoff-reply', to: fromHandle, toStudio: null, message: content, replyUpdateId, originalMsgId: msgId, msgId: sendRes.id, seq: sendRes.seq });
+      } catch (e) { log(sepia('  ⚠ bridge 回投递失败: ') + e.message); }
+    }
+
+    // 顺手标 inbox 已处理 · 回稿 = 处理完
+    try { dossierLib.markInboxDone(msgId); } catch {}
+
+    log('');
+    ok('🎯 handoff reply 发了 → @' + fromHandle);
+    log(sepia('  reply update id: ') + replyUpdateId);
+    if (bridgeOk) log(sepia('  ✓ bridge 回点对点 → @') + fromHandle);
+    log(sepia('  ✓ inbox 标已处理: ') + msgId);
+    log('');
+    return;
+  }
+
+  // 起草模式 (默认 / --by-claude)
+  log('');
+  log(sepia('  ─── 原 handoff ───'));
+  log('');
+  log('from: @' + fromHandle);
+  log('msg id: ' + msgId);
+  if (originalCwd) log('原 cwd: ' + originalCwd);
+  log('');
+  log(originalMessage || '(原 handoff 没写说明)');
+  log('');
+  log(sepia('  ─── 任务 ───'));
+  log('');
+  log('请用你 voice 写一段 50-150 字回稿:');
+  log('  · 接到了哪步 (做完了 / 在做 / 看了一遍)');
+  log('  · 留了什么给 @' + fromHandle + ' (问题 / 修法 / 自己的判断)');
+  log('  · 工艺人日志气质 · 不堆 emoji · 不堆破折号 · 不商业黑话');
+  log('  · 不用 ## 标题切段 · 一段连贯叙事');
+  log('');
+  log('写完跑 (替换 <content>):');
+  log('  ' + vermilion('tinker handoff reply ' + msgId + ' publish "<content>"'));
+  log('');
 }
 
 // =====================================================
@@ -6165,7 +6300,9 @@ async function cmdBridgeCheckInbox() {
     if (recentNotis.length > 0) {
       lines.push('收到 ' + recentNotis.length + ' 条新通知 · 用户离开期间队友发的');
       for (const n of recentNotis.slice(0, 5)) {
-        const tag = n.level === 'urgent' ? '🚨' : n.level === 'warn' ? '⚠' : n.level === 'ok' ? '✓' : '🔔';
+        // v0.48 handoff-reply 用 ↩ 区分 · 是你之前发出的 handoff 收到了接力方回稿
+        const tag = n.type === 'handoff-reply' ? '↩'
+          : n.level === 'urgent' ? '🚨' : n.level === 'warn' ? '⚠' : n.level === 'ok' ? '✓' : '🔔';
         lines.push('  ' + tag + ' @' + n.fromHandle + ': ' + (n.title || '(无标题)'));
         if (n.body) lines.push('    ' + n.body.slice(0, 200));
       }
@@ -6245,6 +6382,7 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
             title: obj.title || '',
             body: obj.body || '',
             level: obj.level || 'info',
+            type: obj.type || null,
           });
           // v0.47 witness-request 含 context · 落到 ~/.tinker/inbox/witness-<updateId>/context.md
           if (obj.type === 'witness-request' && obj.context && obj.updateId) {
@@ -6540,6 +6678,7 @@ async function cmdWitness(opts) {
   if (sub === 'publish') return cmdWitnessPublish(opts);
   if (sub === 'reply') return cmdWitnessReply(opts);
   if (sub === 'close') return cmdWitnessClose(opts);
+  if (sub === 'self') return cmdWitnessSelf(opts);
   log('');
   log(bold('  tinker witness · 集体决策推演 (AI 议会式异步协商)'));
   log('');
@@ -6690,13 +6829,9 @@ async function cmdWitnessPublish(opts) {
     }
   }
 
-  // voice check
-  try {
-    const vc = require('../lib/voice-check').detectAIVoice(content);
-    if (vc.score >= 2) {
-      log(sepia('  ⚠ voice 自检 ') + vc.score + sepia(' 项命中:') + vc.list.join(' · '));
-    }
-  } catch {}
+  // voice 守门 · witness 主体给所有队友 (人) 读 · 严查
+  const witnessGate = await gateVoiceCheck(content, { profile: 'for_humans_team', force: opts.force });
+  if (!witnessGate.ok) process.exit(1);
 
   const state = await apiState(cfg);
   const me = cfg.handle;
@@ -6773,10 +6908,9 @@ async function cmdWitnessReply(opts) {
       err('critique 太短 (< 50 字)');
       process.exit(1);
     }
-    try {
-      const vc = require('../lib/voice-check').detectAIVoice(content);
-      if (vc.score >= 2) log(sepia('  ⚠ voice ') + vc.score + sepia(':') + vc.list.join(' · '));
-    } catch {}
+    // voice 守门 · critique 是给 witness 发起方(人)读的 · 严查
+    const critiqueGate = await gateVoiceCheck(content, { profile: 'for_humans_team', force: opts.force });
+    if (!critiqueGate.ok) process.exit(1);
 
     const me = cfg.handle;
     const repoCfg = loadRepoConfig() || {};
@@ -6900,6 +7034,124 @@ async function cmdWitnessClose(opts) {
   log('');
 }
 
+// =====================================================
+// v0.48 witness self · 自我 witness · 没工作室也能用
+// 个人创作者也是 voice 持有者 · 过去三个月的自己就是 senior
+// CLI 只摆素材 (近 90 天相关 update) · 不调 LLM 概括 · 让接手的 Claude 自己用 voice fingerprint 说话
+// =====================================================
+async function cmdWitnessSelf(opts) {
+  const cfg = mustHaveConfig();
+  const positional = opts.positional || [];
+  const sub2 = positional[1]; // 'publish' 或 undefined
+
+  // publish 模式
+  if (sub2 === 'publish') {
+    const content = (opts.text || positional[2] || '').trim();
+    if (!content || content.length < 50) {
+      err('内容太短 (< 50 字) · 用法: tinker witness self publish "<content>" [--topic "..."]');
+      process.exit(1);
+    }
+    // voice 守门 · 给自己看的 · 仍要符合自己 voice
+    const gate = await gateVoiceCheck(content, { profile: 'for_humans_team', force: opts.force });
+    if (!gate.ok) process.exit(1);
+
+    const me = cfg.handle;
+    const state = await apiState(cfg);
+    const repoCfg = loadRepoConfig() || {};
+    let projectId = repoCfg.projectId;
+    if (!projectId) {
+      const candidates = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+      if (candidates.length === 0) { err('没找到 active/stuck/live 项目 · 先建一个 · tinker project new'); process.exit(1); }
+      projectId = candidates[0].id;
+    }
+
+    const topic = (opts.title || opts.topic || '').trim() || '自我 witness';
+    const r = await apiAction(cfg, 'addUpdate', {
+      projectId,
+      text: content,
+      scenario: 'self-witness: ' + topic.slice(0, 60),
+    });
+    const wId = r.result?.id || r.id;
+    try { await apiAction(cfg, 'markAsDecision', { updateId: wId }); } catch {}
+
+    log('');
+    ok('✦ 自我 witness 落地 → 自己项目下');
+    log(sepia('  update id: ') + wId);
+    log(sepia('  scenario:  self-witness: ') + topic.slice(0, 60));
+    log(sepia('  没发 bridge · 这是写给自己的'));
+    log('');
+    log(sepia('  落定决策: ') + vermilion('tinker witness close ' + wId + ' --decision "<final>"'));
+    log('');
+    return;
+  }
+
+  // 起草模式 (默认 / --by-claude)
+  const topic = (opts.text || opts.title || opts.topic || '').trim();
+  if (!topic) { err('用法: tinker witness self --topic "X 要不要做" [--by-claude]'); process.exit(1); }
+
+  const me = cfg.handle;
+  const state = await apiState(cfg);
+
+  // 拉自己近 90 天的 update
+  const ninetyDaysAgo = Date.now() - 90 * 24 * 3600 * 1000;
+  const myUpdates = [];
+  for (const p of state.projects) {
+    if (p.owner !== me) continue;
+    for (const u of (p.updates || [])) {
+      if (!u.at || u.at < ninetyDaysAgo) continue;
+      myUpdates.push({ ...u, projectName: p.name });
+    }
+  }
+
+  // 按 topic 关键词筛选 · 简单关键词重叠 · 不调 LLM 避免概括失真
+  const tokens = topic.toLowerCase().split(/[\s,，。·]+/).filter(t => t.length >= 2);
+  const scored = myUpdates.map(u => {
+    const text = (u.text || '').toLowerCase();
+    let score = 0;
+    for (const t of tokens) {
+      if (text.includes(t)) score += 1;
+    }
+    if (u.isDecision) score += 0.5;
+    if (u.isMethod) score += 0.3;
+    return { u, score };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 8);
+
+  log('');
+  log(sepia('  ─── 自我 witness 起草脚手架 ───'));
+  log('');
+  log('主题: ' + bold(topic));
+  log('');
+
+  if (scored.length === 0) {
+    log(sepia('  近 90 天没找到跟这个主题关键词相关的 update · 也可以直接写'));
+    log('');
+  } else {
+    log(sepia('  ─── 过去 90 天你聊过的相关决策点 (' + scored.length + ' 条) ───'));
+    log('');
+    for (const { u } of scored) {
+      const ts = new Date(u.at).toLocaleString('zh-CN', { hour12: false, dateStyle: 'short' });
+      const tag = u.isDecision ? sepia(' [决策]') : u.isMethod ? sepia(' [方法]') : '';
+      log(sepia('  · ') + ts + ' ' + sepia(u.projectName) + tag);
+      log('    ' + (u.text || '').slice(0, 200).replace(/\n/g, ' '));
+      log(sepia('    id: ') + u.id);
+      log('');
+    }
+  }
+
+  log(sepia('  ─── 任务 (给接手的 Claude) ───'));
+  log('');
+  log('请用作者 voice (.tinker/voice-fingerprint.md) 站在「过去三个月的我」视角写一份 critique:');
+  log('  · 像翻自己日记给现在的自己提个醒 · 不是评审');
+  log('  · 100-300 字 · 工艺人日志气质');
+  log('  · 有相关 update 就引一两条出来说"上次类似的事我是怎么想的"');
+  log('  · 给一个具体视角或问题 · 帮现在的我想清 · 不替我决定');
+  log('  · 不堆 emoji · 不堆破折号 · 不商业黑话');
+  log('');
+  log('写完跑 (替换 <content>):');
+  log('  ' + vermilion('tinker witness self publish "<content>" --topic "' + topic + '"'));
+  log('');
+}
+
 // v0.45 publish · --by-claude 模式 · Claude 写完内容用这条落地
 // 跳过 LLM 调用 · 直接 push + mark learning + broadcast
 async function cmdTeamKnowledgePublish(opts) {
@@ -6912,14 +7164,9 @@ async function cmdTeamKnowledgePublish(opts) {
     process.exit(1);
   }
 
-  // voice check
-  try {
-    const vc = require('../lib/voice-check').detectAIVoice(digest);
-    if (vc.score >= 2) {
-      log(sepia('  ⚠ voice 自检 ') + vc.score + sepia(' 项命中:') + vc.list.join(' · '));
-      log(sepia('     如果是 Claude 直接写的 · 检查下有没有改干净'));
-    }
-  } catch {}
+  // voice 守门 · team-knowledge digest 给队友 (人) 看 · 严查
+  const tkGate = await gateVoiceCheck(digest, { profile: 'for_humans_team', force: opts.force });
+  if (!tkGate.ok) process.exit(1);
 
   const state = await apiState(cfg);
   const me = cfg.handle;
@@ -6968,15 +7215,104 @@ async function cmdTeamKnowledgePublish(opts) {
   log('');
 }
 
+// 守门决策落档 · 留给后续看哪些 profile 的 false positive 多 / 阈值要不要调
+// 现在不调阈值 · 先攒数据 · alpha 跑一两个月之后回头复盘
+function recordVoiceDecision(d) {
+  try {
+    const file = path.join(CONFIG_DIR, 'voice-decisions.jsonl');
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    const line = JSON.stringify({
+      at: new Date().toISOString(),
+      profile: d.profile || 'unknown',
+      score: d.score,
+      hits: d.hits,
+      action: d.action,
+    }) + '\n';
+    fs.appendFileSync(file, line);
+  } catch {}
+}
+
+// voice 守门 profile · 按"目标读者"分级 (不是按"功能类型"分)
+// 产品视角:Tinker 服务两类用户 · vibe coder 本人 (人) + 他的 AI (AI)
+// 同一条命令的不同部分可能服务不同读者 (handoff -m 给人 / dossier 给 AI)
+// 调用方按"这段文字给谁看"选 profile
+const VOICE_PROFILES = {
+  for_humans_public: { warn: 2, block: 3 }, // 公开 feed · push / ship · 严查
+  for_humans_team:   { warn: 2, block: 3 }, // 队友 + 他的 AI 一起读 · handoff -m / witness / stuck · 严查 (数据多了再调)
+  for_ai:            { warn: 99, block: 99 }, // AI 给 AI · 技术词清晰反而是优势
+  internal:          { warn: 99, block: 99 }, // 不发出去 · 测试 / debug
+};
+function resolveVoiceProfile(name) {
+  return VOICE_PROFILES[name] || VOICE_PROFILES.for_humans_public;
+}
+
+// 命令 → profile 声明表 · 集中维护 · 新加命令必须在这登记
+// 不在表里 + 吃了 -m 文字 = 安全网报警 · 见 warnIfVoiceProfileMissing
+// 加新命令的顺序:
+//   1) 实现 cmdXxx · 想清楚文字给谁看 (人/AI/不发)
+//   2) 在 cmd 内调 gateVoiceCheck(text, { profile: '...' })
+//   3) 在这表里登记一笔 · 跟 cmd 实际用的 profile 对上
+const VOICE_PROFILE_REGISTRY = {
+  // 给人看 · 公开 feed
+  push:             'for_humans_public',
+  ship:             'for_humans_public',
+  resolve:          'for_humans_public',
+  contribute:       'for_humans_public',
+  'edit-update':    'for_humans_public',
+  'edit-ship':      'for_humans_public',
+
+  // 给人看 · 队友 (含队友 AI 配合读)
+  handoff:          'for_humans_team',
+  stuck:            'for_humans_team',
+  'team-knowledge': 'for_humans_team',
+  witness:          'for_humans_team',
+  note:             'for_humans_team',
+
+  // AI 给 AI · 不查 · 但显式登记 · 不让安全网误报
+  ping:             'for_ai',
+  send:             'for_ai',
+
+  // 内部 · 不发文字 · 起草 / 校验类
+  draft:            'internal',
+  'maybe-check':    'internal',
+  scenario:         'internal',
+};
+
+function warnIfVoiceProfileMissing(cmd, opts) {
+  // 没吃文字 · 不关 voice 的事
+  if (!opts || (!opts.text && !opts.body)) return;
+  // 已登记 · OK
+  if (cmd in VOICE_PROFILE_REGISTRY) return;
+  // hook / json / 非 TTY 静默 (避免污染机器读的输出)
+  if (opts.json || opts.fromHook || opts.fromClaude) return;
+  process.stderr.write(
+    "\n⚠ voice 守门安全网:命令 '" + cmd + "' 带了 -m 文字 · 但没在 VOICE_PROFILE_REGISTRY 登记\n" +
+    "  默认按不查处理 · 这条文字会原样发出去\n" +
+    "  修法:在 cli/bin/tinker.js 的 VOICE_PROFILE_REGISTRY 加一行 · 选 for_humans_public/team / for_ai / internal\n\n"
+  );
+}
+
 async function gateVoiceCheck(text, opts = {}) {
-  if (opts.force) return { ok: true, forced: true };
+  const profileName = opts.profile || 'for_humans_public';
+  const profile = resolveVoiceProfile(opts.profile);
   let vc;
   try { vc = require('../lib/voice-check').detectAIVoice(text); }
   catch { return { ok: true }; }  // 模块缺失就静默通过 · 别因为守门挂掉主流程
-  if (!vc || vc.score <= 1) return { ok: true };
+  // force 强发 · 也要留底 (这些是"保安误报了"的候选样本 · 后续调阈值看)
+  if (opts.force) {
+    if (vc && vc.score >= profile.warn) {
+      recordVoiceDecision({ profile: profileName, score: vc.score, hits: vc.list, action: 'forced' });
+    }
+    return { ok: true, forced: true };
+  }
+  if (!vc || vc.score < profile.warn) {
+    recordVoiceDecision({ profile: profileName, score: vc ? vc.score : 0, hits: vc ? vc.list : [], action: 'pass' });
+    return { ok: true };
+  }
   const hits = (vc.list || []).join(' / ');
-  // score >= 3 强拒
-  if (vc.score >= 3) {
+  recordVoiceDecision({ profile: profileName, score: vc.score, hits: vc.list, action: vc.score >= profile.block ? 'block' : 'warn' });
+  // 强拒
+  if (vc.score >= profile.block) {
     if (opts.json) return { ok: false, reason: 'voice 守门拒绝 · 命中 ' + vc.score + ' 条 AI 直出模式 (' + hits + ') · 加 --force 强发', code: 'VOICE_GATE_BLOCK' };
     log('');
     err('voice 守门拒绝 · 这段读着像 AI 直出 (命中 ' + vc.score + ' 条: ' + hits + ')');
@@ -9202,6 +9538,19 @@ function help() {
   log('  ' + vermilion('tinker studio accept <token>') + sepia('              兑换邀请 · 自动写本地暗号'));
   log('  ' + vermilion('tinker studio list / info <slug> / leave <slug>') + sepia('  其余操作 · 跑 tinker studio help 看全'));
   log('');
+  log(sepia('  ') + vermilion('接力 · 队友 AI 异步往返'));
+  log('  ' + vermilion('tinker handoff -m "..." [-t @<who>]') + sepia('   把当前现场打包加密发给队友 · 带 git diff + voice + situation'));
+  log('  ' + vermilion('tinker handoff reply <msgId> [--by-claude]') + sepia('  接力方回稿给原发起方 (接到哪步 · 留了什么)'));
+  log('  ' + vermilion('tinker handoff reply <msgId> publish "<content>"') + sepia(' 落地回稿 + bridge 回投递 + 自动标 inbox 完成'));
+  log('  ' + vermilion('tinker inbox') + sepia('                        看收到的 handoff task · tinker inbox <id> 看详情 · tinker inbox done <id> 标完工'));
+  log('');
+  log(sepia('  ') + vermilion('witness · 决策推演 (异步 AI review)'));
+  log('  ' + vermilion('tinker witness draft --topic "..." --by-claude') + sepia('  起草脚手架 · Claude 写内容'));
+  log('  ' + vermilion('tinker witness publish "<content>" [--with-context]') + sepia('  落地 + 广播到 active studio'));
+  log('  ' + vermilion('tinker witness reply <updateId> --by-claude') + sepia('  接收方写 critique'));
+  log('  ' + vermilion('tinker witness close <updateId> --decision "..."') + sepia('   发起方落定最终决策'));
+  log('  ' + vermilion('tinker witness self --topic "..." --by-claude') + sepia('   自我 witness · 过去三个月的你当 reviewer · 不发 bridge'));
+  log('');
   log(sepia('  ') + vermilion('voice · 写作风格学习'));
   log('  ' + vermilion('tinker voice analyze') + sepia('               用 pool 样本生成 fingerprint'));
   log('  ' + vermilion('tinker voice teach --from-claude') + sepia('    从 Claude Code 对话历史抽样本'));
@@ -9313,6 +9662,8 @@ function parseArgs(args) {
     else if (a.startsWith('--scenario=')) opts.scenario = a.slice('--scenario='.length);
     else if (a === '--title') opts.title = args[++i];
     else if (a.startsWith('--title=')) opts.title = a.slice('--title='.length);
+    else if (a === '--topic') opts.topic = args[++i];
+    else if (a.startsWith('--topic=')) opts.topic = a.slice('--topic='.length);
     else if (a === '--tool') {
       const v = args[++i];
       if (v) { opts.tools = opts.tools || []; opts.tools.push(v); }
@@ -9724,6 +10075,9 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   const opts = parseArgs(args.slice(1));
+  // voice 守门挂载安全网 · 见 VOICE_PROFILE_REGISTRY
+  // 命令吃了 -m 文字 + 没在表里声明 profile · 直接 stderr 报警 · 不让"忘挂"静默
+  warnIfVoiceProfileMissing(cmd, opts);
   try {
     switch (cmd) {
       case 'login': await cmdLogin(opts); break;

@@ -130,6 +130,11 @@ function unpackDossier({ msgId, fromHandle, dossier }) {
 
   fs.writeFileSync(path.join(targetDir, 'dossier.json'), JSON.stringify(dossier, null, 2));
 
+  // v0.48 fromHandle 单独落一份 · reply 命令拿来知道回稿给谁
+  if (fromHandle) {
+    try { fs.writeFileSync(path.join(targetDir, 'from.txt'), String(fromHandle)); } catch {}
+  }
+
   if (dossier.situation) {
     fs.writeFileSync(path.join(targetDir, 'situation.json'), JSON.stringify(dossier.situation, null, 2));
   }
