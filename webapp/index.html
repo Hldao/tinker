@@ -591,6 +591,28 @@
   .note-image-frame:hover { border-color: var(--vermilion); }
   .note-image-frame img { display: block; max-width: 100%; max-height: 160px; height: auto; }
 
+  /* 加密占位卡 · 当 update 误用 image 槽塞 bridge 密文时显示
+     场景:caption='CC-ENC' 或 src 拉到非图片 mime · img 不渲染 · 改放这张牌
+     不报错 · 也不假装是真图 · 像信封口上写了一行"这是密信" */
+  .img-encrypted-placeholder {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border: 1px dashed var(--sepia-light);
+    background: rgba(0,0,0,0.015);
+    color: var(--sepia);
+    font-family: 'Newsreader', serif;
+    font-size: 14px;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 480px;
+  }
+  .img-encrypted-placeholder .lock { font-size: 18px; opacity: 0.7; flex-shrink: 0; }
+  .img-encrypted-placeholder .body { flex: 1; }
+  .img-encrypted-placeholder .body .title { color: var(--ink); font-weight: 500; }
+  .img-encrypted-placeholder .body .hint { font-size: 12px; color: var(--sepia); margin-top: 2px; }
+
   /* "去试试" 大 CTA — 让访问者面对作品有清晰行动入口 */
   .try-cta {
     display: inline-flex;
@@ -7684,6 +7706,44 @@ function projectById(id){ return state.projects.find(p=>p.id===id); }
 function statusText(s){ return {active:'在做',stuck:'卡住',done:'跑通了',paused:'暂停',archive:'归档',live:'上线'}[s]||s; }
 function escapeHtml(s){ if(!s)return''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// 加密占位识别 · 历史上有人借 update.images 槽塞 bridge 密文 (caption='CC-ENC')
+// 这种 image 拉到的是 application/octet-stream · img 渲染空白 · 看着像坏图
+// 命中时改渲染占位卡 · 不打 img · 也不闹错
+function isEncryptedImageSlot(img) {
+  if (!img) return false;
+  const cap = (img.caption || '').trim().toUpperCase();
+  return cap === 'CC-ENC' || cap.startsWith('CC-ENC:');
+}
+function renderEncryptedPlaceholder(opts) {
+  const small = opts && opts.small;
+  return `
+    <div class="img-encrypted-placeholder" ${small ? 'style="margin-top:0; padding: 8px 10px; font-size: 12px; max-width: 280px;"' : ''}>
+      <span class="lock">🔐</span>
+      <div class="body">
+        <div class="title">加密内容 · 跳过即可</div>
+        <div class="hint">这条挂的是给特定工作室的密文 · 不公开显示</div>
+      </div>
+    </div>
+  `;
+}
+// img 加载失败时的兜底 · 找最近的"figure 容器"(feed-figure / tl-figure / note-images / showcase-card-figure)
+// 整个替换成占位卡 · 否则空白 img + caption 看着像坏图
+window.__handleEncImgError = function(imgEl) {
+  const containers = ['.feed-figure', '.tl-figure', '.note-image-frame', '.showcase-card-figure'];
+  let target = imgEl;
+  for (const sel of containers) {
+    const c = imgEl.closest(sel);
+    if (c) { target = c; break; }
+  }
+  // 已经在替换流程中 · 防多次触发
+  if (target.dataset && target.dataset.encReplaced === '1') return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderEncryptedPlaceholder();
+  const placeholder = wrap.firstElementChild;
+  placeholder.dataset.encReplaced = '1';
+  target.replaceWith(placeholder);
+};
+
 // v0.32 timeline markdown 轻量渲染 · 行级处理 · 不引外部 md 库
 // YYYY-MM-DD 开头的行 → timeline-node 样式
 // 其他非空行 → 总结段 (一段或多段)
@@ -7793,8 +7853,14 @@ function renderRichText(text) {
   const paragraphs = String(text).split(/\n{2,}/);
   return paragraphs.map(para => {
     let s = escapeHtml(para);
-    // URL 自动链接 (放最前 · 在 markdown 之前 · 让 URL 里的 *` 之类不被误判)
-    // 尾巴上的 .,;:!?)] 不算 URL 一部分 · 算句末标点
+    // inline code 先抽走 · 占位符隔离 · 避免 URL 正则把反引号字符当 URL 一部分吞掉
+    // (历史踩坑: `http://IP` 这种写法会让 URL 吃反引号 · 后续 code 正则跨段配对 · 整段炸)
+    const codes = [];
+    s = s.replace(/`([^`\n]+?)`/g, (m, c) => {
+      codes.push(c);
+      return `\x00C${codes.length - 1}\x00`;
+    });
+    // URL 自动链接 · 尾巴上的 .,;:!?)] 不算 URL 一部分 · 算句末标点
     s = s.replace(/(https?:\/\/[^\s<>"]+)/g, (match) => {
       let url = match, suffix = '';
       const m = match.match(/^(.+?)([.,;:!?\)\]]+)$/);
@@ -7802,13 +7868,14 @@ function renderRichText(text) {
       return `<a href="${url}" target="_blank" rel="noopener" class="inline-link" onclick="event.stopPropagation()">${url}</a>${suffix}`;
     });
     s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
-    s = s.replace(/`([^`\n]+?)`/g, '<code class="inline-code">$1</code>');
     s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
       if (state.users && state.users[username]) {
         return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${username}')">@${username}</span>`;
       }
       return match;
     });
+    // 还原 inline code
+    s = s.replace(/\x00C(\d+)\x00/g, (m, i) => `<code class="inline-code">${codes[+i]}</code>`);
     s = s.replace(/\n/g, '<br>');
     return `<p>${s}</p>`;
   }).join('');
@@ -8010,14 +8077,14 @@ function makeEntryEl(e) {
       </div>
       ${seeking && e.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(e.feedbackAsk)}</div>` : ''}
       <div class="entry-text">${renderRichText(e.text)}</div>
-      ${firstImg ? `
+      ${firstImg ? (isEncryptedImageSlot(firstImg) ? renderEncryptedPlaceholder() : `
         <div class="feed-figure">
           <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(firstImg.src).replace(/"/g,'&quot;')}, ${JSON.stringify(firstImg.caption||'').replace(/"/g,'&quot;')})">
-            <img src="${firstImg.src}" alt="${escapeHtml(firstImg.caption||'')}">
+            <img src="${firstImg.src}" alt="${escapeHtml(firstImg.caption||'')}" onerror="window.__handleEncImgError(this)">
           </div>
           ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
         </div>
-      ` : ''}
+      `) : ''}
       <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};">
         <span>${e.tools.slice(0,3).join('、')}</span>
         ${e.status === 'done' ? `<span class="entry-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${e.projectId}')">✦ 在陈列馆</span>` : ''}
@@ -8509,12 +8576,13 @@ function renderProject(owner, slug) {
       const renderUpdateEntry = (u) => {
         const uIdx = indexOf.get(u.id);
         const imagesHtml = (u.images && u.images.length > 0) ? u.images.map((img) => {
+          if (isEncryptedImageSlot(img)) return renderEncryptedPlaceholder();
           figureIdx++;
           const safeSrc = img.src.replace(/'/g, "\\'");
           return `
             <figure class="tl-figure">
               <div class="tl-figure-frame" onclick="zoomImage('${safeSrc}', '${escapeHtml(img.caption||'')}')">
-                <img src="${img.src}" alt="${escapeHtml(img.caption||'')}">
+                <img src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
               </div>
               <figcaption class="tl-figure-caption"><span class="label">图 ${figureIdx}</span>${escapeHtml(img.caption || '')}</figcaption>
             </figure>
@@ -8694,9 +8762,9 @@ function renderProject(owner, slug) {
           <div class="note-text">"${renderMentions(n.text)}"</div>
           ${n.images && n.images.length > 0 ? `
             <div class="note-images">
-              ${n.images.map(img => `
+              ${n.images.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder({small: true}) : `
                 <div class="note-image-frame" onclick="zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
-                  <img src="${img.src}" alt="${escapeHtml(img.caption||'')}">
+                  <img src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
                 </div>
               `).join('')}
             </div>
@@ -9004,13 +9072,17 @@ function renderShowcase(focusId) {
     // 上馆 / 近动 时间
     const shipAt = p.shippedAt || (exhibitUpdate && exhibitUpdate.at) || rep.at || 0;
 
-    // 封面图: 代表 update 的图 > 项目任何 update 的图
+    // 封面图: 代表 update 的图 > 项目任何 update 的图 · 跳过加密占位 (不当封面)
+    const firstRealImage = (imgs) => (imgs || []).find(i => !isEncryptedImageSlot(i)) || null;
     let coverImage = null;
-    if (rep.images && rep.images.length > 0) {
-      coverImage = rep.images[0];
+    const repCover = firstRealImage(rep.images);
+    if (repCover) {
+      coverImage = repCover;
     } else {
-      const upWithImg = (p.updates || []).find(u => u.images && u.images.length > 0);
-      if (upWithImg) coverImage = upWithImg.images[0];
+      for (const u of (p.updates || [])) {
+        const c = firstRealImage(u.images);
+        if (c) { coverImage = c; break; }
+      }
     }
     items.push({ p, reflection, shipAt, shipUpdateId: rep.id, kind, coverImage });
   });
@@ -9098,7 +9170,7 @@ function renderShowcase(focusId) {
         </div>
         ${coverImage ? `
         <div class="showcase-card-figure" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(coverImage.src).replace(/"/g,'&quot;')}, ${JSON.stringify(coverImage.caption||'').replace(/"/g,'&quot;')})">
-          <img src="${coverImage.src}" alt="${escapeHtml(coverImage.caption || '')}">
+          <img src="${coverImage.src}" alt="${escapeHtml(coverImage.caption || '')}" onerror="window.__handleEncImgError(this)">
         </div>` : ''}
         ${p.desc ? `<div class="showcase-card-desc">${escapeHtml(p.desc)}</div>` : ''}
         ${reflection ? `<blockquote class="showcase-card-reflection" style="border-left-color: ${cfg.badgeColor};">
@@ -11747,8 +11819,8 @@ async function renderAccount() {
           <div class="mono text-xs" style="color: var(--vermilion); margin-bottom: 6px;">这把钥匙只显示这一次 · 关掉就看不见了</div>
           <code id="account-new-token-value" style="display: block; padding: 8px; background: white; word-break: break-all; font-family: 'JetBrains Mono', monospace; font-size: 13px;"></code>
           <div style="margin-top: 8px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
-            <span class="react-action" onclick="copyAccountToken(this)">复制钥匙</span>
             <span class="react-action" onclick="copyAccountAiInstall(this)" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">复制 AI 安装指令</span>
+            <span class="react-action" onclick="copyAccountToken(this)" style="color: var(--ink-soft); font-size: 12px;" title="单独复制 tk_xxx · 已装过 CLI 想换钥匙时用">只要钥匙</span>
           </div>
           <p class="account-sub-text" style="margin-top: 10px; font-size: 11.5px; line-height: 1.55;">把"AI 安装指令"整段粘到 Claude Code / Cursor / 其他 AI,一气帮你装好,不用手敲命令。粘给信任的 AI 就行,钥匙丢了随时撤销重发。</p>
         </div>
