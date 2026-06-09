@@ -393,12 +393,23 @@ app.get('/api/me/updates', stateLimiter, auth.requireSession, (req, res) => {
 // 图片单独 endpoint · 不塞 /api/state 主响应里 (那个一拉就 1.5MB)
 // images.src 是 "data:image/<mime>;base64,<bytes>" · 这里拆出来发二进制 + 1 年永久缓存
 // id 由作者上传时随机生成 · 内容 immutable · 浏览器 / CDN 都能放心缓存
+//
+// v0.50+ 守门: 历史存量里有 mime=application/octet-stream 的脏行 (借 image slot 塞 bridge 密文)
+// 浏览器拿到 octet-stream 渲染成空白 img · 公开 feed 看着像坏图
+// 拿到非 image/* mime 直接 415 · 让 webapp 走 onerror 占位卡片分支
+const SERVE_IMAGE_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'image/svg+xml', 'image/avif', 'image/heic', 'image/heif',
+]);
 app.get('/api/image/:id', (req, res) => {
   const row = db.prepare('SELECT src FROM images WHERE id = ?').get(req.params.id);
   if (!row || !row.src) return res.status(404).send('not found');
   const m = row.src.match(/^data:([^;]+);base64,(.+)$/);
   if (!m) return res.status(500).send('image format error');
-  const mime = m[1];
+  const mime = m[1].toLowerCase();
+  if (!SERVE_IMAGE_MIMES.has(mime)) {
+    return res.status(415).send('not an image (mime=' + mime + ')');
+  }
   const buf = Buffer.from(m[2], 'base64');
   res.setHeader('Content-Type', mime);
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');

@@ -103,6 +103,30 @@ test('addUpdate: 加进展 + at 时间戳', () => {
   assert.ok(u.at >= before);
 });
 
+test('addUpdate: images 字段守门 · 非 image mime 拒绝', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
+  // bridge 密文借 image 槽传是历史踩坑 · 现在 server 端拒掉
+  assert.throws(() => a.addUpdate({
+    projectId: p.id, text: '🔐 加密提问',
+    images: [{ src: 'data:application/octet-stream;base64,AAAA', caption: 'CC-ENC' }],
+  }, { currentUserId: daodao }), /只收真图片/);
+  // images 表应该没脏数据进来 (上面 throw 已经在 txn 里回滚)
+  const dirtyCount = db.prepare(
+    "SELECT count(*) AS c FROM images WHERE src LIKE 'data:application/octet-stream%'"
+  ).get().c;
+  assert.equal(dirtyCount, 0);
+  // 真图片放过 · 走到 update_images link
+  const u = a.addUpdate({
+    projectId: p.id, text: '正常图',
+    images: [{ src: 'data:image/png;base64,iVBORw0KGgo=', caption: '截图' }],
+  }, { currentUserId: daodao });
+  const linkCount = db.prepare(
+    'SELECT count(*) AS c FROM update_images WHERE update_id = ?'
+  ).get(u.id).c;
+  assert.equal(linkCount, 1);
+});
+
 test('addUpdate: 非 owner 拒绝', () => {
   const { daodao, alice } = setupBasic();
   const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });

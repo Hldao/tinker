@@ -28,6 +28,14 @@ function normalizeUrl(s) {
 //   - data:image/... → 新上传 · INSERT 新 image 行 · 返回新 id
 //   - /api/image/{id} → 引用已有图 · 不 INSERT · 复用 id (avoid 重复存)
 // 返回 image_id (供 update_images / note_images 的 FK 引用) · 或 null 跳过
+//
+// 历史教训 (v0.50 后续): 有人借 update.images 当公开传输通道塞 bridge 密文
+// (data:application/octet-stream;base64,...) · 浏览器渲染成空白图 · 公开 feed 看着像坏图
+// 守门:data URL 的 mime 必须是真图片类型 · 非图直接 throw · 别让脏数据进库
+const ALLOWED_IMAGE_MIMES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'image/svg+xml', 'image/avif', 'image/heic', 'image/heif',
+]);
 function resolveImageId(img) {
   if (!img || !img.src) return null;
   const src = String(img.src);
@@ -39,6 +47,12 @@ function resolveImageId(img) {
   }
   // 新上传 · 必须是 data URL · 否则跳过
   if (!src.startsWith('data:')) return null;
+  // mime 守门 · 必须是真图片
+  const mimeMatch = src.match(/^data:([^;,]+)[;,]/);
+  const mime = mimeMatch ? mimeMatch[1].toLowerCase() : null;
+  if (!mime || !ALLOWED_IMAGE_MIMES.has(mime)) {
+    throw new Error('images 字段只收真图片 · 收到 mime=' + (mime || '未知') + ' · 加密内容请走 bridge · 不要借 update.images 当传输通道');
+  }
   const imgId = 'i-' + Date.now() + Math.random().toString(36).slice(2, 8);
   db.prepare('INSERT INTO images (id, src, caption, created_at) VALUES (?, ?, ?, ?)')
     .run(imgId, src, img.caption || null, Date.now());
