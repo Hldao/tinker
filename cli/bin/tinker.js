@@ -814,7 +814,151 @@ async function cmdLogin(opts = {}) {
 
   saveConfig(cfg);
   ok('配置保存到 ' + sepia(CONFIG_FILE));
-  log(dim('  下一步: ') + vermilion('tinker draft') + sepia(' 起草 · ') + vermilion('tinker push <draft.md>') + sepia(' 发布'));
+  log('');
+  log(sepia('  下一步: ') + vermilion('tinker onboard') + sepia(' 一站式配齐 (项目 / git hook / claude hook / CLAUDE.md)'));
+  log('');
+}
+
+// =====================================================
+// v0.51 onboard · 新用户装好 CLI + login 之后一站式配齐
+// 串起: 配置检查 → repo 关联 Tinker 项目 → git hook → claude hook → 当前 repo CLAUDE.md
+// CLAUDE.md 是 Tinker 协作的真正大脑 · 没这份 hook 注入 reminder 也没人响应
+// =====================================================
+async function cmdOnboard(opts = {}) {
+  const cfg = loadConfig();
+  if (!cfg || !cfg.token || !cfg.handle) {
+    err('还没登录 · 先跑 tinker login --server <url> --token tk_xxx');
+    log(sepia('  或者交互式: ') + vermilion('tinker login'));
+    process.exit(1);
+  }
+
+  log('');
+  log(vermilion('  tinker onboard') + sepia(' · 一站式配齐 Tinker 协作环境'));
+  log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+  log('');
+
+  // [1/5] 登录
+  log(bold('  [1/5]') + ' 登录');
+  ok('  已登录 @' + cfg.handle + sepia(' · server: ') + cfg.serverUrl);
+  log('');
+
+  // [2/5] 当前 repo 是否关联 Tinker 项目
+  log(bold('  [2/5]') + ' 当前 repo 关联 Tinker 项目');
+  const isRepo = inGitRepo();
+  let repoCfg = null;
+  if (!isRepo) {
+    log(sepia('  当前目录不是 git 仓库 · 跳过 repo 关联跟 git hook · 后面只装 claude hook + CLAUDE.md'));
+    log('');
+  } else {
+    repoCfg = loadRepoConfig();
+    if (repoCfg) {
+      ok('  已关联: ' + bold(repoCfg.projectName));
+    } else {
+      const state = await apiState(cfg);
+      const mine = (state.projects || []).filter(p => p.owner === cfg.handle);
+      const { select, input } = require('@inquirer/prompts');
+
+      let projectIdToBind = null;
+      let projectName = null;
+      if (mine.length === 0) {
+        log(sepia('  你在 Tinker 还没建过项目 · 现在建一个吧'));
+        const name = await input({ message: '项目名 (中文/英文都行)', validate: v => v.trim().length > 0 || '不能空' });
+        const desc = await input({ message: '一句话说做啥', validate: v => v.trim().length > 0 || '不能空' });
+        const r = await apiAction(cfg, 'addProject', { name: name.trim(), desc: desc.trim(), productLink: '', tools: [] });
+        const newProj = r && r.result;
+        if (!newProj || !newProj.id) { err('建项目失败'); process.exit(1); }
+        projectIdToBind = newProj.id;
+        projectName = newProj.name;
+      } else {
+        const choices = mine.map(p => ({ name: p.name + sepia('  ' + (p.desc || '').slice(0, 40)), value: p.id }));
+        choices.push({ name: sepia('+ 建一个新项目'), value: '__new__' });
+        const picked = await select({ message: '这个 repo 对应哪个 Tinker 项目?', choices });
+        if (picked === '__new__') {
+          const name = await input({ message: '项目名', validate: v => v.trim().length > 0 || '不能空' });
+          const desc = await input({ message: '一句话说做啥', validate: v => v.trim().length > 0 || '不能空' });
+          const r = await apiAction(cfg, 'addProject', { name: name.trim(), desc: desc.trim(), productLink: '', tools: [] });
+          const newProj = r && r.result;
+          if (!newProj || !newProj.id) { err('建项目失败'); process.exit(1); }
+          projectIdToBind = newProj.id;
+          projectName = newProj.name;
+        } else {
+          const p = mine.find(x => x.id === picked);
+          projectIdToBind = p.id;
+          projectName = p.name;
+        }
+      }
+      repoCfg = { projectId: projectIdToBind, projectName, installedAt: Date.now() };
+      saveRepoConfig(repoCfg);
+      registerRepoForDrift(process.cwd(), repoCfg);
+      ok('  绑定: ' + bold(projectName));
+    }
+    log('');
+
+    // [3/5] git hooks
+    log(bold('  [3/5]') + ' git hooks (post-commit / post-push / post-checkout)');
+    try {
+      const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
+      installSingleGitHook(gitDir, 'post-commit', HOOK_BLOCK);
+      installSingleGitHook(gitDir, 'post-push', POST_PUSH_BLOCK);
+      installSingleGitHook(gitDir, 'post-checkout', POST_CHECKOUT_BLOCK);
+      ok('  三件套装好 · commit 后跑触发器评估');
+    } catch (e) {
+      err('  装 git hook 失败: ' + e.message);
+    }
+    log('');
+  }
+
+  // [4/5] Claude Code hooks
+  log(bold('  [4/5]') + ' Claude Code hooks');
+  try {
+    await cmdClaudeHookInstall({ clean: true });
+  } catch (e) {
+    err('  装 claude hook 失败: ' + e.message);
+  }
+
+  // [5/5] CLAUDE.md
+  log(bold('  [5/5]') + ' CLAUDE.md (告诉 AI 看到 reminder 怎么响应)');
+  const claudeMdPath = path.join(process.cwd(), 'CLAUDE.md');
+  const tmpl = require('../lib/claude-md-template');
+  const wantReplace = !!opts.update;
+  if (fs.existsSync(claudeMdPath)) {
+    const existing = fs.readFileSync(claudeMdPath, 'utf-8');
+    if (existing.includes(tmpl.BEGIN_MARKER)) {
+      // 替换已有 Tinker 段
+      const escapedBegin = tmpl.BEGIN_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedEnd = tmpl.END_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(escapedBegin + '[\\s\\S]*?' + escapedEnd, 'g');
+      const newContent = existing.replace(re, tmpl.TEMPLATE.trim());
+      fs.writeFileSync(claudeMdPath, newContent);
+      ok('  已刷新 CLAUDE.md 里的 Tinker 段 (BEGIN/END 之间)');
+    } else if (wantReplace) {
+      // --update 但没有 BEGIN/END 标记 · 不动用户已有内容 · append 到末尾
+      const newContent = existing.trimEnd() + '\n\n' + tmpl.TEMPLATE;
+      fs.writeFileSync(claudeMdPath, newContent);
+      ok('  追加 Tinker 协作约定段到 CLAUDE.md 末尾');
+    } else {
+      log(sepia('  CLAUDE.md 已存在 · 没找到 Tinker 标记块 · 追加到末尾'));
+      const newContent = existing.trimEnd() + '\n\n' + tmpl.TEMPLATE;
+      fs.writeFileSync(claudeMdPath, newContent);
+      ok('  追加完成');
+    }
+  } else {
+    fs.writeFileSync(claudeMdPath, tmpl.TEMPLATE);
+    ok('  建了 ' + sepia(claudeMdPath));
+  }
+  log('');
+
+  log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'));
+  log('');
+  ok('Tinker 协作环境配齐了');
+  log('');
+  log(sepia('  试一下:'));
+  log('    ' + vermilion('tinker push -m "今天装好了 tinker"') + sepia('  · 发第一条进展'));
+  log('    ' + vermilion('tinker --help') + sepia('                       · 看全命令'));
+  log('    ' + vermilion('tinker borrow "<关键词>"') + sepia('             · 搜方法库'));
+  log('');
+  log(sepia('  以后想刷新 CLAUDE.md 里的 Tinker 段: ') + vermilion('tinker onboard --update'));
+  log('');
 }
 
 async function cmdConfig(opts = {}) {
@@ -9464,6 +9608,8 @@ function help() {
   log('');
   log(sepia('  ') + vermilion('一次性'));
   log('  ' + vermilion('tinker login') + sepia('                       配置 server + 钥匙 + LLM'));
+  log('  ' + vermilion('tinker onboard') + sepia('                     一站式配齐 · 项目 / git hook / claude hook / CLAUDE.md (login 之后跑这一条)'));
+  log('  ' + vermilion('tinker onboard --update') + sepia('             刷新 CLAUDE.md 里的 Tinker 协作约定段'));
   log('');
   log(sepia('  ') + vermilion('日常 · 半自动'));
   log('  ' + vermilion('tinker draft') + sepia('                       LLM 看 git 历史 · 起草 1-3 条候选到 .tinker/drafts/'));
@@ -9664,6 +9810,7 @@ function parseArgs(args) {
     else if (a.startsWith('--title=')) opts.title = a.slice('--title='.length);
     else if (a === '--topic') opts.topic = args[++i];
     else if (a.startsWith('--topic=')) opts.topic = a.slice('--topic='.length);
+    else if (a === '--update') opts.update = true;
     else if (a === '--tool') {
       const v = args[++i];
       if (v) { opts.tools = opts.tools || []; opts.tools.push(v); }
@@ -10081,6 +10228,7 @@ async function main() {
   try {
     switch (cmd) {
       case 'login': await cmdLogin(opts); break;
+      case 'onboard': await cmdOnboard(opts); break;
       case 'config': await cmdConfig(opts); break;
       case 'projects': case 'ls': await cmdProjects(opts); break;
       case 'push': await cmdPush(opts); break;
