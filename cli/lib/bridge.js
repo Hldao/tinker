@@ -13,6 +13,7 @@
 //   - 旧 ~/.tinker/bridge-secret 自动迁移成 legacy studio (避免老用户掉线)
 
 const crypto = require('crypto');
+const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -134,6 +135,14 @@ function hashSecret(secret) {
   return crypto.createHash('sha256').update(secret).digest('hex');
 }
 
+// v0.54 压缩信封 · git diff 这种文本 gzip 能压到两三成
+// 老信封 = iv(12)|authTag(16)|ciphertext · 头 12 字节是随机 iv
+// 新信封 = MAGIC(4)|flags(1)|iv(12)|authTag(16)|ciphertext · flags bit0=gzip
+// decrypt 靠开头 MAGIC 区分新老 · 老信封头 4 字节恰好等于 MAGIC 的概率 2^-32 · 可忽略
+//   (即便撞上 · 后面按新格式解 GCM auth 也会失败抛错 · 上游当解不开处理)
+const ENV_MAGIC = Buffer.from('TBZ1', 'ascii');
+const FLAG_GZIP = 0x01;
+
 function encrypt(plaintext, secret) {
   const key = deriveKey(secret);
   const iv = crypto.randomBytes(12);
@@ -143,9 +152,39 @@ function encrypt(plaintext, secret) {
   return Buffer.concat([iv, authTag, ciphertext]).toString('base64');
 }
 
+// 压缩版 · 先 gzip 再加密 · 压完没变小 (短消息 / 已压数据) 就退回不压 · 省得白搭头
+// handoff 这种大 payload 用它 · ping/回执这种短消息没必要 · 还是用 encrypt
+function encryptCompressed(plaintext, secret) {
+  const key = deriveKey(secret);
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  let flags = 0;
+  let data = Buffer.from(plaintext, 'utf-8');
+  const gz = zlib.gzipSync(data);
+  if (gz.length < data.length) { data = gz; flags |= FLAG_GZIP; }
+  const ciphertext = Buffer.concat([cipher.update(data), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([ENV_MAGIC, Buffer.from([flags]), iv, authTag, ciphertext]).toString('base64');
+}
+
 function decrypt(envelope, secret) {
   const key = deriveKey(secret);
   const buf = Buffer.from(envelope, 'base64');
+
+  // 新格式 · 带 MAGIC 头
+  if (buf.length >= 5 + 28 && buf.subarray(0, 4).equals(ENV_MAGIC)) {
+    const flags = buf[4];
+    const iv = buf.subarray(5, 17);
+    const authTag = buf.subarray(17, 33);
+    const ciphertext = buf.subarray(33);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    let out = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    if (flags & FLAG_GZIP) out = zlib.gunzipSync(out);
+    return out.toString('utf-8');
+  }
+
+  // 老格式 · iv|authTag|ciphertext
   if (buf.length < 28) throw new Error('信封太短');
   const iv = buf.subarray(0, 12);
   const authTag = buf.subarray(12, 28);
@@ -175,7 +214,7 @@ module.exports = {
   // 旧 API (active studio 透明转发)
   hasSecret, loadSecret,
   // 加密
-  encrypt, decrypt, hashSecret, tryDecryptWithAnyStudio,
+  encrypt, encryptCompressed, decrypt, hashSecret, tryDecryptWithAnyStudio,
   // 路径常量
   STUDIOS_FILE, LEGACY_SECRET_FILE,
 };

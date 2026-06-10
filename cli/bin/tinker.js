@@ -6073,7 +6073,7 @@ async function cmdBridgeWatch(opts) {
         if (tryDec) {
           try {
             const obj = JSON.parse(tryDec.plaintext);
-            renderInboxMessage(msg, obj, tryDec.studio, inboxDir);
+            await renderInboxMessage(msg, obj, tryDec.studio, inboxDir, cfg);
           } catch { /* JSON 坏 · 忽略 */ }
         } else {
           // v0.29 fallback: 邀请走明文 base64 (没暗号可解 · 这是设计)
@@ -6097,7 +6097,7 @@ async function cmdBridgeWatch(opts) {
   }
 }
 
-function renderInboxMessage(msg, obj, studio, inboxDir) {
+async function renderInboxMessage(msg, obj, studio, inboxDir, cfg) {
   const ts = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
   const target = msg.toStudio
     ? sepia('→ studio:') + studio.slug
@@ -6122,16 +6122,24 @@ function renderInboxMessage(msg, obj, studio, inboxDir) {
     }
   } else if (msg.kind === 'task') {
     // v0.22 handoff · 落地 dossier 到 ~/.tinker/inbox/<msgId>/
+    let unpackError = null;
     try {
       const dossierLib = require('../lib/dossier');
-      const targetDir = dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj });
+      const targetDir = dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj, studioSlug: studio.slug });
       log(sepia('  🎯 ') + bold('handoff 接力包') + sepia(' · ') + (obj.message || '(无说明)').slice(0, 80));
       log(sepia('     落地: ') + targetDir);
-      log(sepia('     看 README: ') + vermilion('cat ' + path.join(targetDir, 'README.md')));
+      log(sepia('     扫一眼 (人): ') + vermilion('cat ' + path.join(targetDir, 'BRIEF.md')));
+      log(sepia('     接的话 (AI): ') + vermilion('cat ' + path.join(targetDir, 'README.md')) + sepia(' · 原料在 context/'));
       log(sepia('     处理完: ') + vermilion('tinker inbox done ' + msg.id));
     } catch (e) {
+      unpackError = e.message;
       log(sepia('  ⚠ handoff 解包失败:') + e.message);
     }
+    // v0.52 自动回执/退信给发起方 · 失败静默 (回执丢了不挡收件)
+    try {
+      await sendHandoffReceipt({ cfg, msgId: msg.id, fromHandle: msg.fromHandle, studio, dossier: obj, unpackError });
+      if (!unpackError) log(sepia('     ✓ 回执发回 @') + msg.fromHandle);
+    } catch {}
   }
   log('');
 }
@@ -6165,6 +6173,80 @@ function renderInviteMessage(msg, obj, inboxDir) {
     log(sepia('  ⚠ 落地 invite 失败:') + e.message);
   }
   log('');
+}
+
+// =====================================================
+// v0.55 handoff 重料 blob 存取 · Phase 2 懒取
+// =====================================================
+
+// 上传重料 blob · 已存在 (去重命中) server 返 existed=true · 跳过实际写
+async function uploadHandoffBlob(cfg, { studioId, hash, payload }) {
+  return safeFetchJson(cfg, '/api/bridge/blob', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+    body: JSON.stringify({ studioId, hash, payload, bytes: Buffer.from(payload, 'base64').length }),
+  });
+}
+
+// 取重料 blob · 返 { payload } · 404 抛错
+async function fetchHandoffBlob(cfg, { studioId, hash }) {
+  const url = '/api/bridge/blob/' + encodeURIComponent(hash) + '?studioId=' + encodeURIComponent(studioId);
+  return safeFetchJson(cfg, url, {
+    headers: { Authorization: 'Bearer ' + cfg.token },
+  });
+}
+
+// =====================================================
+// v0.52 handoff 回执 · 邮件系统的送达回执/退信
+// 接收方拆包时自动回发起方一条 noti · 发起方不用干等 ·
+// 下次起 session 就知道包到没到 / 拆没拆开 / 起点 sha 对方认不认识
+// 深度验收 (临时工作树重放 diff) 走 tinker inbox verify · 这里只报拆包 + 快验
+// =====================================================
+async function sendHandoffReceipt({ cfg, msgId, fromHandle, studio, dossier, unpackError }) {
+  if (!cfg || !cfg.token || !fromHandle || !studio) return;
+  const itemDir = path.join(CONFIG_DIR, 'inbox', msgId);
+  const guard = path.join(itemDir, 'RECEIPT-SENT');
+  if (fs.existsSync(guard)) return;  // 重拆 (retry / 重复 poll) 不重发
+
+  const bridgeLib = require('../lib/bridge');
+  let title, body, level;
+  if (unpackError) {
+    title = '退信 · 你的 handoff 在 @' + cfg.handle + ' 这边拆包失败';
+    body = '包 ' + msgId + ' 收到了但落地失败: ' + String(unpackError).slice(0, 150) + ' · 看是不是要重新打包发';
+    level = 'warn';
+  } else {
+    const dossierLib = require('../lib/dossier');
+    let quick = {};
+    try { quick = dossierLib.quickVerifyDossier(dossier); } catch {}
+    // 人话 body · 起点对不对得上换成普通话 · sha / 字节这些机器细节进 facts 字段
+    const startLine = quick.shaKnown === true ? '起点跟我这边对得上'
+      : quick.shaKnown === false ? '起点我这边还没有 (含未推 commit 时正常)'
+      : '';
+    title = '回执 · 你的 handoff 在 @' + cfg.handle + ' 这边拆开了';
+    body = '包到了 · ' + dossierLib.describePayload(dossier) + '。' + (startLine ? startLine + ' · ' : '')
+      + '要确认能不能落地 · 我跑一遍 tinker inbox verify 再回你。';
+    level = 'ok';
+  }
+
+  const obj = {
+    v: 1, title, body, level, at: Date.now(), type: 'handoff-receipt', originalMsgId: msgId,
+    // 机器细节单独放 · 给 AI 看 · 人那层不被这些占着
+    facts: unpackError ? null : {
+      diffBytes: dossier.diff ? dossier.diff.length : 0,
+      hasSituation: !!dossier.situation,
+      hasVoice: !!dossier.voiceFingerprint,
+    },
+  };
+  const payload = bridgeLib.encrypt(JSON.stringify(obj), studio.secret);
+  await safeFetchJson(cfg, '/api/bridge/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+    body: JSON.stringify({ to: fromHandle, kind: 'noti', payload }),
+  });
+  try {
+    fs.mkdirSync(itemDir, { recursive: true });
+    fs.writeFileSync(guard, String(Date.now()));
+  } catch {}
 }
 
 // =====================================================
@@ -6210,8 +6292,29 @@ async function cmdHandoff(opts) {
     err('dossier 太大 (' + plain.length + ' 字节) · server 限 10MB · 试 --no-diff (TODO) 或缩小工作树');
     process.exit(1);
   }
-  const payload = bridgeLib.encrypt(plain, activeStudio.secret);
 
+  // v0.55 拆信封懒取 · 重料拆出去存 blob · bridge 只发轻信封
+  // 没重料 / legacy studio 没 id (blob 命名空间靠 studio id) → 退回整包 inline (v1)
+  const canSplit = !!activeStudio.id;
+  const { light, heavyPlain, blobRef } = canSplit
+    ? dossierLib.prepareHandoff(dossier)
+    : { light: { ...dossier, v: 1 }, heavyPlain: null, blobRef: null };
+
+  // 先传重料 blob · 传成功了才发轻信封 (不然接收方拿到 ref 取不到东西)
+  let blobExisted = null;
+  if (blobRef && heavyPlain) {
+    try {
+      const blobPayload = bridgeLib.encryptCompressed(heavyPlain, activeStudio.secret);
+      const up = await uploadHandoffBlob(cfg, { studioId: activeStudio.id, hash: blobRef.hash, payload: blobPayload });
+      blobExisted = !!up.existed;
+    } catch (e) {
+      err('重料 blob 上传失败 · 没发信封 (省得对方取不到): ' + e.message);
+      process.exit(1);
+    }
+  }
+
+  const lightPlain = JSON.stringify(light);
+  const payload = bridgeLib.encryptCompressed(lightPlain, activeStudio.secret);
   const apiBody = useStudio
     ? { toStudio: activeStudio.id, kind: 'task', payload }
     : { to, kind: 'task', payload };
@@ -6227,9 +6330,16 @@ async function cmdHandoff(opts) {
     log(sepia('  说明:    ') + message);
     log(sepia('  situation: ') + (situationId || sepia('(无)')));
     log(sepia('  dossier:  ') + plain.length + ' 字节 (含 ' + (dossier.diff ? 'git diff' : '无 diff') + ' / ' + (dossier.voiceFingerprint ? 'voice fingerprint' : '无 voice') + ')');
+    if (blobRef) {
+      log(sepia('  轻信封:   ') + Buffer.from(payload, 'base64').length + ' 字节上线 (重料拆走 · 接了才取)');
+      log(sepia('  重料 blob: ') + (blobExisted ? '已存在 · 去重跳过上传' : blobRef.plainBytes + ' 字节 · 已存 server'));
+    } else {
+      const wireBytes = Buffer.from(payload, 'base64').length;
+      log(sepia('  压缩后:   ') + wireBytes + ' 字节上线 (没重料可拆 · 整包发)');
+    }
     log(sepia('  seq ') + r.seq);
     log('');
-    appendOutbox({ kind: 'handoff', to: to || null, toStudio: useStudio ? activeStudio.slug : null, message, situationId, dossierBytes: plain.length, msgId: r.id, seq: r.seq });
+    appendOutbox({ kind: 'handoff', to: to || null, toStudio: useStudio ? activeStudio.slug : null, message, situationId, dossierBytes: plain.length, blobHash: blobRef ? blobRef.hash : null, blobExisted, msgId: r.id, seq: r.seq });
   } catch (e) { err(e.message); process.exit(1); }
 }
 
@@ -6362,10 +6472,22 @@ async function cmdHandoffReply(opts) {
 
 // tinker inbox [<id>] · 列表 / 看详情
 // tinker inbox done <id> · 标已处理
-function cmdInbox(opts) {
+// tinker inbox fetch <id> · 把懒取的重料取回 context/
+// tinker inbox verify <id> [--repo <path>] · 验收接力包 + 回执发起方
+async function cmdInbox(opts) {
   const dossierLib = require('../lib/dossier');
   const sub = (opts.positional || [])[0];
   const arg = (opts.positional || [])[1];
+
+  if (sub === 'verify') {
+    await cmdInboxVerify(arg, opts);
+    return;
+  }
+
+  if (sub === 'fetch') {
+    await cmdInboxFetch(arg, opts);
+    return;
+  }
 
   if (sub === 'done') {
     if (!arg) { err('要给 task id · 例:tinker inbox done msg-xxx'); process.exit(1); }
@@ -6375,13 +6497,20 @@ function cmdInbox(opts) {
     return;
   }
 
-  // 看单个 (id 当 sub 传)
+  // 看单个 (id 当 sub 传) · 默认给人看 BRIEF · README 是 AI 工作文档 · 单独提示
   if (sub && sub !== 'list') {
-    const readmePath = path.join(dossierLib.INBOX_DIR, sub, 'README.md');
-    if (!fs.existsSync(readmePath)) { err('找不到 inbox 项: ' + sub); process.exit(1); }
+    const itemDir = path.join(dossierLib.INBOX_DIR, sub);
+    const briefPath = path.join(itemDir, 'BRIEF.md');
+    const readmePath = path.join(itemDir, 'README.md');
+    // 老包没 BRIEF · 退回 README
+    const showPath = fs.existsSync(briefPath) ? briefPath : readmePath;
+    if (!fs.existsSync(showPath)) { err('找不到 inbox 项: ' + sub); process.exit(1); }
     log('');
-    log(fs.readFileSync(readmePath, 'utf-8'));
-    log('');
+    log(fs.readFileSync(showPath, 'utf-8'));
+    if (fs.existsSync(briefPath) && fs.existsSync(readmePath)) {
+      log(sepia('  接的话让 AI 读: ') + vermilion('cat ' + readmePath) + sepia(' · 原料在 context/'));
+      log('');
+    }
     return;
   }
 
@@ -6401,8 +6530,170 @@ function cmdInbox(opts) {
     log('');
   }
   log(sepia('  看一个:    ') + vermilion('tinker inbox <id>'));
+  log(sepia('  取重料:    ') + vermilion('tinker inbox fetch <id>') + sepia('   (重料是懒取的 · 接了才下载到 context/)'));
+  log(sepia('  验收一个:  ') + vermilion('tinker inbox verify <id>') + sepia('  (在本地 clone 里跑 · 没取会自动取 · 结果自动回执发起方)'));
   log(sepia('  标处理完:  ') + vermilion('tinker inbox done <id>'));
   log('');
+}
+
+// v0.55 确保懒取的重料已落地 · 没 BLOB-PENDING 标记就是已经有了 (v1 包 / 已 fetch)
+// 返回 { had, fetched } · had=true 表示本来就有 · fetched=true 表示这次取了
+// quiet=true 时不打印 · 给 verify 内部静默调用
+async function ensureBlobFetched(msgId, { quiet } = {}) {
+  const dossierLib = require('../lib/dossier');
+  const bridgeLib = require('../lib/bridge');
+  const itemDir = path.join(dossierLib.INBOX_DIR, msgId);
+  const pendingFile = path.join(itemDir, 'BLOB-PENDING.json');
+  if (!fs.existsSync(pendingFile)) return { had: true, fetched: false };
+
+  let marker;
+  try { marker = JSON.parse(fs.readFileSync(pendingFile, 'utf-8')); }
+  catch (e) { throw new Error('BLOB-PENDING.json 坏了: ' + e.message); }
+
+  // 找解这个 blob 的 studio · 拆包时记的 studioSlug 优先 · 没有退到 active
+  let studio = null;
+  if (marker.studioSlug) {
+    studio = bridgeLib.loadStudios().studios.find(s => s.slug === marker.studioSlug) || null;
+  }
+  if (!studio) studio = bridgeLib.getActiveStudio();
+  if (!studio || !studio.id) throw new Error('找不到对应工作室 (或没 studio id) · 取不了重料');
+
+  const cfg = mustHaveConfig();
+  const res = await fetchHandoffBlob(cfg, { studioId: studio.id, hash: marker.hash });
+  const heavyPlain = bridgeLib.decrypt(res.payload, studio.secret);
+  const heavy = JSON.parse(heavyPlain);
+
+  // 落 context/ + 合回 dossier.json (给 verify / reply 用完整结构)
+  const contextDir = path.join(itemDir, 'context');
+  dossierLib.writeContextFiles(contextDir, heavy);
+  try {
+    const light = JSON.parse(fs.readFileSync(path.join(itemDir, 'dossier.json'), 'utf-8'));
+    const full = dossierLib.mergeHeavyIntoDossier(light, heavy);
+    fs.writeFileSync(path.join(itemDir, 'dossier.json'), JSON.stringify(full, null, 2));
+  } catch {}
+  fs.unlinkSync(pendingFile);
+
+  if (!quiet) {
+    log(sepia('  ✓ 重料取回 context/ · ') + Math.round(heavyPlain.length / 1024) + 'kb');
+  }
+  return { had: false, fetched: true, heavy };
+}
+
+// tinker inbox fetch <id> · 显式把懒取的重料取回 context/
+async function cmdInboxFetch(msgId, opts) {
+  if (!msgId) { err('要给 task id · 例:tinker inbox fetch msg-xxx'); process.exit(1); }
+  const dossierLib = require('../lib/dossier');
+  const itemDir = path.join(dossierLib.INBOX_DIR, msgId);
+  if (!fs.existsSync(path.join(itemDir, 'dossier.json'))) { err('找不到 inbox 项: ' + msgId); process.exit(1); }
+  log('');
+  try {
+    const r = await ensureBlobFetched(msgId, { quiet: false });
+    if (r.had && !r.fetched) {
+      log(sepia('  这个包不用取 · 重料已经在 context/ 里了 (老包 / 已 fetch)'));
+    } else {
+      const ctx = path.join(itemDir, 'context');
+      const files = fs.existsSync(ctx) ? fs.readdirSync(ctx) : [];
+      log(sepia('  context/ 现在有: ') + (files.join(' · ') || '(空)'));
+    }
+  } catch (e) { err('取重料失败: ' + e.message); process.exit(1); }
+  log('');
+}
+
+// v0.52 验收接力包 · 邮件回执的深验那一半
+// 临时工作树上重放 diff (不碰当前工作树) · 验完自动回执/退信给发起方
+async function cmdInboxVerify(msgId, opts) {
+  if (!msgId) { err('要给 task id · 例:tinker inbox verify msg-xxx [--repo <本地 clone 路径>]'); process.exit(1); }
+  const dossierLib = require('../lib/dossier');
+  const itemDir = path.join(dossierLib.INBOX_DIR, msgId);
+  const dossierFile = path.join(itemDir, 'dossier.json');
+  if (!fs.existsSync(dossierFile)) { err('找不到 inbox 项: ' + msgId); process.exit(1); }
+
+  // v0.55 懒取 · diff 还在 server 就先取回来 · verify 要靠 diff 重放
+  try {
+    const r = await ensureBlobFetched(msgId, { quiet: true });
+    if (r.fetched) log(sepia('  (重料是懒取的 · 已先取回 context/)'));
+  } catch (e) { err('取重料失败 · 没法验: ' + e.message); process.exit(1); }
+
+  let dossier;
+  try { dossier = JSON.parse(fs.readFileSync(dossierFile, 'utf-8')); }
+  catch (e) { err('dossier.json 读不了: ' + e.message); process.exit(1); }
+
+  // 找仓库:--repo 显式给 > 当前目录 / 包里 cwd 里 remote 对得上的那个
+  let repoPath = opts.repo || null;
+  if (!repoPath) {
+    try { repoPath = dossierLib.quickVerifyDossier(dossier).repoPath; } catch {}
+  }
+  if (!repoPath) {
+    err('找不到对应的本地 clone · cd 到 clone 里跑 · 或加 --repo <路径>');
+    if (dossier.repo && dossier.repo.url) log(sepia('  包里的 remote: ') + dossier.repo.url);
+    process.exit(1);
+  }
+
+  log('');
+  log(sepia('  验收接力包 ') + bold(msgId) + sepia(' · 仓库 ') + repoPath);
+  const result = dossierLib.verifyDossier({ dossier, repoPath });
+  log('');
+  for (const c of result.checks) {
+    log('  ' + (c.ok ? '✓' : vermilion('✗')) + ' ' + c.name + (c.note ? sepia(' · ' + c.note) : ''));
+  }
+  log('');
+  if (result.verdict) ok('验收过了 · 这个包在你这边能落地');
+  else err('验收没过: ' + (result.reason || '看上面哪条 ✗'));
+
+  try {
+    fs.writeFileSync(path.join(itemDir, 'VERIFY.json'), JSON.stringify({ at: Date.now(), repoPath, ...result }, null, 2));
+  } catch {}
+
+  // 回执/退信发起方 · 用拆包时那把暗号 (studio.txt) · 没记录就退到 active studio
+  // 老包没 from.txt · --to @<handle> 显式指定 (跟 handoff reply 一个路子)
+  let fromHandle = opts.toHandle || null;
+  if (!fromHandle) {
+    try { fromHandle = fs.readFileSync(path.join(itemDir, 'from.txt'), 'utf-8').trim(); } catch {}
+  }
+  const bridgeLib = require('../lib/bridge');
+  let studio = null;
+  try {
+    const slug = fs.readFileSync(path.join(itemDir, 'studio.txt'), 'utf-8').trim();
+    studio = bridgeLib.loadStudios().studios.find(s => s.slug === slug) || null;
+  } catch {}
+  if (!studio) studio = bridgeLib.getActiveStudio();
+  const cfg = loadConfig();
+
+  if (!fromHandle || !studio || !cfg || !cfg.token) {
+    log(sepia('  (没法回执:缺 from.txt / 工作室暗号 / 登录态 · 验收结果只留在本地 VERIFY.json)'));
+    log('');
+    if (!result.verdict) process.exitCode = 1;
+    return;
+  }
+
+  const failedNames = result.checks.filter(c => !c.ok).map(c => c.name).join(' / ');
+  const obj = {
+    v: 1,
+    type: 'handoff-receipt',
+    title: result.verdict
+      ? '验收回执 · 你的 handoff 在 @' + cfg.handle + ' 这边能落地'
+      : '退信 · 你的 handoff 在 @' + cfg.handle + ' 这边验收没过',
+    body: '包 ' + msgId + (result.verdict
+      ? ' · diff 在临时工作树上重放成功 · 随时能接'
+      : ' · ' + (result.reason || failedNames) + ' · 看是不是要重新打包发'),
+    level: result.verdict ? 'ok' : 'warn',
+    at: Date.now(),
+    originalMsgId: msgId,
+  };
+  try {
+    const payload = bridgeLib.encrypt(JSON.stringify(obj), studio.secret);
+    const r = await safeFetchJson(cfg, '/api/bridge/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token },
+      body: JSON.stringify({ to: fromHandle, kind: 'noti', payload }),
+    });
+    log(sepia('  ✓ ' + (result.verdict ? '验收回执' : '退信') + '发回 @') + fromHandle);
+    appendOutbox({ kind: 'handoff-receipt', to: fromHandle, toStudio: null, verdict: result.verdict, originalMsgId: msgId, msgId: r.id, seq: r.seq });
+  } catch (e) {
+    log(sepia('  ⚠ 回执投递失败: ') + e.message);
+  }
+  log('');
+  if (!result.verdict) process.exitCode = 1;
 }
 
 // 给 SessionStart hook 跑 · 有 PENDING task 则 stdout 注入 reminder
@@ -6445,7 +6736,9 @@ async function cmdBridgeCheckInbox() {
       lines.push('收到 ' + recentNotis.length + ' 条新通知 · 用户离开期间队友发的');
       for (const n of recentNotis.slice(0, 5)) {
         // v0.48 handoff-reply 用 ↩ 区分 · 是你之前发出的 handoff 收到了接力方回稿
+        // v0.52 handoff-receipt 用 📬 · 你发的包对方拆开了 (或退信)
         const tag = n.type === 'handoff-reply' ? '↩'
+          : n.type === 'handoff-receipt' ? '📬'
           : n.level === 'urgent' ? '🚨' : n.level === 'warn' ? '⚠' : n.level === 'ok' ? '✓' : '🔔';
         lines.push('  ' + tag + ' @' + n.fromHandle + ': ' + (n.title || '(无标题)'));
         if (n.body) lines.push('    ' + n.body.slice(0, 200));
@@ -6465,14 +6758,15 @@ async function cmdBridgeCheckInbox() {
       lines.push('用户确认要加入: Bash 跑 tinker studio accept <token>');
     }
 
-    // handoff task (整包接力)
+    // handoff task (整包接力) · 先给用户看 BRIEF 那句 · 用户要接你再钻 README + context/
     if (items.length > 0) {
       lines.push('收到 ' + items.length + ' 个未处理的 handoff 接力 · 队友把现场打包发过来了');
       for (const it of items.slice(0, 3)) {
         lines.push('  · ' + it.id + ' · ' + (it.message || '').slice(0, 80));
-        lines.push('    cat ' + path.join(dossierLib.INBOX_DIR, it.id, 'README.md') + ' 看完整接力说明');
+        lines.push('    先跟用户说这一句 · 要接再 cat ' + path.join(dossierLib.INBOX_DIR, it.id, 'README.md') + ' (AI 工作文档 · 原料在 context/)');
       }
       if (items.length > 3) lines.push('  ... 还有 ' + (items.length - 3) + ' 个 · tinker inbox 看全部');
+      lines.push('别急着读 context/ 里的 diff · 用户确认要接再钻 · 省得白占上下文');
       lines.push('处理完跑 tinker inbox done <id> 标完工');
     }
 
@@ -6519,7 +6813,10 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
       try {
         const obj = JSON.parse(tryDec.plaintext);
         if (msg.kind === 'task') {
-          try { dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj }); } catch {}
+          let unpackError = null;
+          try { dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj, studioSlug: tryDec.studio.slug }); } catch (e) { unpackError = e.message; }
+          // v0.52 自动回执/退信 · hook 短命 · 失败静默不挡 SessionStart
+          try { await sendHandoffReceipt({ cfg, msgId: msg.id, fromHandle: msg.fromHandle, studio: tryDec.studio, dossier: obj, unpackError }); } catch {}
         } else if (msg.kind === 'noti') {
           recentNotis.push({
             fromHandle: msg.fromHandle,
@@ -9689,6 +9986,8 @@ function help() {
   log('  ' + vermilion('tinker handoff reply <msgId> [--by-claude]') + sepia('  接力方回稿给原发起方 (接到哪步 · 留了什么)'));
   log('  ' + vermilion('tinker handoff reply <msgId> publish "<content>"') + sepia(' 落地回稿 + bridge 回投递 + 自动标 inbox 完成'));
   log('  ' + vermilion('tinker inbox') + sepia('                        看收到的 handoff task · tinker inbox <id> 看详情 · tinker inbox done <id> 标完工'));
+  log('  ' + vermilion('tinker inbox fetch <id>') + sepia('             取回懒取的重料到 context/ (接了才下载 · verify 会自动取)'));
+  log('  ' + vermilion('tinker inbox verify <id> [--repo <path>]') + sepia('  验收接力包 · 临时工作树重放 diff · 验完自动回执/退信给发起方'));
   log('');
   log(sepia('  ') + vermilion('witness · 决策推演 (异步 AI review)'));
   log('  ' + vermilion('tinker witness draft --topic "..." --by-claude') + sepia('  起草脚手架 · Claude 写内容'));
@@ -9859,6 +10158,8 @@ function parseArgs(args) {
     }
     else if (a === '--from-file') opts.fromFile = args[++i];
     else if (a.startsWith('--from-file=')) opts.fromFile = a.slice('--from-file='.length);
+    else if (a === '--repo') opts.repo = args[++i];
+    else if (a.startsWith('--repo=')) opts.repo = a.slice('--repo='.length);
     else if (a === '--auto') opts.auto = true;
     else if (a === '--once') opts.once = true;
     else if (a === '--section') {
@@ -10339,7 +10640,7 @@ async function main() {
       case 'handoff': await cmdHandoff(opts); break;
       case 'team-knowledge': await cmdTeamKnowledge(opts); break;
       case 'witness': await cmdWitness(opts); break;
-      case 'inbox': cmdInbox(opts); break;
+      case 'inbox': await cmdInbox(opts); break;
       case 'outbox': cmdOutbox(opts); break;  // v0.49 我发出去的私信
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'studio':

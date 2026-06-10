@@ -47,6 +47,13 @@
 > 风格基准: 工艺人日志 / 报纸刊头 / vermilion + cream paper + Newsreader + Fraunces
 > Build badge: webapp 右下角小角标 `ui · v0.58` (hover 显示完整 patch 历史)
 
+### [bridge] handoff 闭环 + 传输分层 (v0.52 → v0.55)
+> Owner: bridge 线
+- **v0.52** 送达回执 / 退信 · 接收方拆包时自动回发起方一条 noti (拆开了 / 拆失败退信) · 发起方下次起 session 看到包到没到 · 不用干等。深验命令 `tinker inbox verify <id>` 在临时工作树上重放 diff (不碰当前工作树) · 验完自动回执 · 验不过退信
+- **v0.53** handoff 包两类读者分层 · 顶层 `BRIEF.md` 给人扫一眼决定接不接 · `README.md` 是 AI 工作文档 · 重料全收进 `context/` 子目录 · SessionStart reminder 提示"别急着读 diff · 接了再钻" · 省接收方上下文。回执 body 也改人话 · sha/字节这些机器细节挪进 facts 字段
+- **v0.54** 压缩信封 · handoff payload gzip 后再加密 · git diff 普遍压到两三成 · 信封带 4 字节 magic + flags 版本位区分新老 · 老消息走老路不动。修了一个 diff 截断误判 (includes 嗅字符串会自匹配源码 · 改成打包时记 diffTruncated 标志位)
+- **v0.55** 拆信封懒取 (Phase 2) · bridge task 只发轻信封 (说明 + repo + blobRef) · 重料 (diff/situation/voice) 加密压缩后存 server blob 库 · 接收方点了"接"才 `tinker inbox fetch` / `verify` 拉回来 · 53kb 包压成 463 字节轻信封上线。blob 按 sha256(明文) 内容寻址 + studio 命名空间 · 同工作室内容相同自动去重。server 加 `bridge_blobs` 表 (migration 060) + `/api/bridge/blob` 存取路由 · 沿用 messages 那套"只存密文不解密"
+
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
 - **v0.28** 收一档 + 4 处精度细节 (TIGHTENED) · 行高 1.7→1.6 · 圆点 hover · prompt-box hover · tabular-nums

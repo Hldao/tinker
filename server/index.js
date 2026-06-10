@@ -26,6 +26,7 @@ const db = require('./db');                  // SQLite · 启动时自动跑 mig
 const { buildState } = require('./state');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
+const blobs = require('./blobs');
 const studios = require('./studios');
 const auth = require('./auth');
 const prefs = require('./prefs');
@@ -467,6 +468,33 @@ app.get('/api/bridge/poll', stateLimiter, auth.requireSession, async (req, res) 
     res.json({ ok: true, since: lastSeq, messages });
   } catch (e) {
     req.log.warn({ err: e.message }, 'bridge poll rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// blob · handoff 重料的内容寻址存取 (Phase 2 懒取)
+// 存 · POST { studioId, hash (sha256 明文), payload (密文 base64), bytes }
+app.post('/api/bridge/blob', actionLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = blobs.blobPut(req.body || {}, { currentUserId: req.user.id });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'bridge blob put rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 取 · GET /api/bridge/blob/:hash?studioId=...
+app.get('/api/bridge/blob/:hash', stateLimiter, auth.requireSession, (req, res) => {
+  try {
+    const result = blobs.blobGet(
+      { studioId: req.query.studioId, hash: req.params.hash },
+      { currentUserId: req.user.id }
+    );
+    if (!result) return res.status(404).json({ error: 'blob 不存在 (可能被清了 · 让发起方重发)' });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'bridge blob get rejected');
     res.status(400).json({ error: e.message });
   }
 });

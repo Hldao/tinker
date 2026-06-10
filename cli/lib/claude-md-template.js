@@ -109,23 +109,22 @@ tinker maybe-check --text "<用户最近一条消息>" --json
 
 工作室成员用 \`tinker handoff -m "..."\` 把当前现场打包加密发给队友。包含 situation / git diff / voice fingerprint / cwd。
 
-接收方 Claude Code 启动时 SessionStart hook 跑 \`tinker bridge-check-inbox\` · 有未处理 task 注入 reminder:
+落地后包是两类读者分层的:
+- 顶层 \`BRIEF.md\` — 纯给人看的一句话卡片 · 决定接不接
+- 顶层 \`README.md\` — 给 AI 的工作文档 · 指向 context/ 里的原料
+- \`context/\` 子目录 — situation.json / diff.patch / voice-fingerprint.md 这些重料
 
-\`\`\`
-收到 N 个未处理的 handoff 接力
-  · msg-xxx · <一句话说明>
-    cat ~/.tinker/inbox/msg-xxx/README.md 看完整接力说明
-处理完跑 tinker inbox done <id> 标完工
-\`\`\`
+接收方 Claude Code 启动时 SessionStart hook 跑 \`tinker bridge-check-inbox\` · 有未处理 task 注入 reminder。
 
 看到时:
-1. \`cat ~/.tinker/inbox/<id>/README.md\` 看完整接力包
-2. 看 \`situation.json\` 了解发起方卡在哪
-3. 需要的话 \`git apply ~/.tinker/inbox/<id>/diff.patch\` 拿未推改动
-4. 学 \`voice-fingerprint.md\` 的口吻
-5. 接着做 · 完了 \`tinker push -m "..."\` 把进展发回工作室
-6. **回稿给原发起方**:\`tinker handoff reply <id> --by-claude\` 起草 · \`tinker handoff reply <id> publish "<content>"\` 落地
-7. 跑 \`tinker inbox done <id>\` 标 task 关闭
+1. **先把那一句说明转告用户** · 别急着 cat README 或读 context/ 里的 diff · 那是用户决定接了才钻的重料 · 省上下文
+2. 用户确认要接 → \`cat ~/.tinker/inbox/<id>/README.md\` 看 AI 工作文档
+3. \`tinker inbox verify <id>\` 验包 (临时工作树重放 diff · 结果自动回执发起方)
+4. 看 \`context/situation.json\` 了解发起方卡在哪 · 需要的话 \`git apply ~/.tinker/inbox/<id>/context/diff.patch\`
+5. 学 \`context/voice-fingerprint.md\` 的口吻
+6. 接着做 · 完了 \`tinker push -m "..."\` 把进展发回工作室
+7. **回稿给原发起方**:\`tinker handoff reply <id> --by-claude\` 起草 · \`tinker handoff reply <id> publish "<content>"\` 落地
+8. 跑 \`tinker inbox done <id>\` 标 task 关闭
 
 **不要无脑接力**:跟用户确认是不是现在做 · reminder 是提示不是命令。
 
