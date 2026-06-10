@@ -54,6 +54,10 @@
 - **v0.54** 压缩信封 · handoff payload gzip 后再加密 · git diff 普遍压到两三成 · 信封带 4 字节 magic + flags 版本位区分新老 · 老消息走老路不动。修了一个 diff 截断误判 (includes 嗅字符串会自匹配源码 · 改成打包时记 diffTruncated 标志位)
 - **v0.55** 拆信封懒取 (Phase 2) · bridge task 只发轻信封 (说明 + repo + blobRef) · 重料 (diff/situation/voice) 加密压缩后存 server blob 库 · 接收方点了"接"才 `tinker inbox fetch` / `verify` 拉回来 · 53kb 包压成 463 字节轻信封上线。blob 按 sha256(明文) 内容寻址 + studio 命名空间 · 同工作室内容相同自动去重。server 加 `bridge_blobs` 表 (migration 060) + `/api/bridge/blob` 存取路由 · 沿用 messages 那套"只存密文不解密"
 
+### [cli] 触发器 / 发布路径打磨 (v0.56)
+> Owner: bridge 线
+- **v0.56** AI 模式 ui-push 接上 before/after 对比图 · deploy watcher 本就是 detached 后台进程 · 不要 TTY · 原"alpha 不支持"只是保守。截图省着用: before 在 UI session 开始时已抓 (复用) · resolve 时只多 1 次 after 抓取 · 跟交互模式同成本 (microlink 免费档约 50 次/天 · 心里有数)。顺手补两个一致性: ui-push 走 voice 守门 (之前漏了) + 要求 `-m` 文本; `tinker push <草稿>` 认 `--yes` 跳确认 (跟 experience 草稿路径对齐 · 给 AI / 非交互场景用)
+
 ### [ui] 累积 patch 段 (CSS-only 优先)
 - **v0.27** 节奏放松基底 (PACED) · 已 collapse 入 v0.28
 - **v0.28** 收一档 + 4 处精度细节 (TIGHTENED) · 行高 1.7→1.6 · 圆点 hover · prompt-box hover · tabular-nums

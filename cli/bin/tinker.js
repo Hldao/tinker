@@ -1296,7 +1296,6 @@ async function cmdPushFromDraft(cfg, opts) {
   }
 
   // 确认
-  const { confirm } = require('@inquirer/prompts');
   const p = mine.find(x => x.id === projectId);
   log('');
   selected.forEach(i => {
@@ -1305,8 +1304,12 @@ async function cmdPushFromDraft(cfg, opts) {
     log('    ' + preview + (candidates[i].text.length > 80 ? '…' : ''));
   });
   log('');
-  const yes = await confirm({ message: '发到「' + p.name + '」?', default: true });
-  if (!yes) { log(sepia('  取消了')); return; }
+  // --yes 跳过确认 (跟 experience 草稿路径一致 · 给 AI / 非交互场景用)
+  if (!opts.yes) {
+    const { confirm } = require('@inquirer/prompts');
+    const yes = await confirm({ message: '发到「' + p.name + '」?', default: true });
+    if (!yes) { log(sepia('  取消了')); return; }
+  }
 
   let posted = 0;
   for (const i of selected) {
@@ -7881,7 +7884,7 @@ async function cmdResolve(choice, opts) {
   }
 
   // 文本类动作:需要 -m "..."
-  const needsText = ['push', 'push-brand-self', 'push-brand-meta', 'push-decision', 'ship', 'prototype', 'stuck', 'stuck-quiet'];
+  const needsText = ['push', 'push-brand-self', 'push-brand-meta', 'push-decision', 'ship', 'prototype', 'stuck', 'stuck-quiet', 'ui-push'];
   if (needsText.includes(choice) && !text) {
     err('这个动作需要文本: tinker resolve ' + choice + ' -m "一句话"');
     process.exit(1);
@@ -7942,13 +7945,39 @@ async function cmdResolve(choice, opts) {
       state.mutedUntil = now + 30 * 60 * 1000;
       ok('暂停 30 分钟 · 出去走走');
     } else if (choice === 'ui-push') {
-      // UI session 的对比图流程比较复杂 · alpha 期 AI 模式先不支持
-      // 降级成普通 push · 不贴对比图
+      // v0.56 AI 模式也支持 before/after 对比图
+      // deploy watcher 是 detached 后台进程 · 不需要 TTY · 原来"alpha 不支持"只是保守
+      // 截图省着用: before 在 session 开始时已抓过 (复用) · 这里只多 1 次 after 抓取
       const cfg = mustHaveConfig();
-      await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
+      const gate = await gateVoiceCheck(text, opts);
+      if (!gate.ok) {
+        if (opts.json) return errJson(gate.reason || 'voice 守门拦了', gate.code || 'VOICE_GATE_BLOCK');
+        process.exit(1);
+      }
+      const pushResult = await apiAction(cfg, 'addUpdate', { projectId: pending.projectId, text });
+      const updateId = pushResult && (pushResult.result?.id || pushResult.id);
       state.lastPushAtByProject = state.lastPushAtByProject || {};
       state.lastPushAtByProject[pending.projectId] = now;
-      ok('发出去了 · (AI 模式暂不支持对比图)');
+      savePoolSample(pending, 'ui-push', text, cfg.handle);
+      saveRejectDiffIfChanged(pending, 'ui-push', text);
+
+      // before 快照在 UI session 开始时抓的 · 在 prompt-state 里 · 复用 · 不重抓
+      const beforePath = state.uiSession && state.uiSession.beforeSnapshotPath;
+      state.uiSession = null;  // 清掉 · 下一波 UI 启动新 session
+      if (updateId && beforePath && fs.existsSync(beforePath)) {
+        spawnDeployWatcher({
+          updateId,
+          projectId: pending.projectId,
+          text,
+          beforeSnapshotPath: beforePath,
+          serverUrl: cfg.serverUrl,
+          token: cfg.token,
+          startedAt: Date.now(),
+        });
+        ok('发出去了 · 后台等 deploy 完会自动贴 before/after 对比图 (只多花 1 次截图额度)');
+      } else {
+        ok('发出去了 · (没找到 before 快照 · 这次不贴对比图)');
+      }
     } else {
       err('未知 choice: ' + choice);
       process.exit(1);
