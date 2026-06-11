@@ -1433,6 +1433,50 @@ function resolveNote({ projectId, noteId, noteIdx }, { currentUserId }) {
 }
 
 // ============================================
+// STASHES · 个人现场暂存 (跨设备 stash · 按 user 隔离)
+// ============================================
+
+const STASH_MAX_BYTES = 5 * 1024 * 1024;
+
+function stashPush({ label, payload, encrypted, bytes }, { currentUserId }) {
+  if (!payload || typeof payload !== 'string') throw new Error('payload required (string)');
+  if (payload.length > STASH_MAX_BYTES) throw new Error('现场包超 5MB · diff 太大 · 先提交一部分再 stash');
+  const id = 'st-' + Date.now() + Math.random().toString(36).slice(2, 6);
+  db.prepare(`
+    INSERT INTO stashes (id, user_id, label, payload, encrypted, bytes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, currentUserId, (label || '').trim() || null, payload, encrypted ? 1 : 0, bytes || payload.length, Date.now());
+  return { ok: true, id };
+}
+
+// 列表不带 payload · 省流量 (payload 可能几十 kb)
+function stashList(_payload, { currentUserId }) {
+  const rows = db.prepare(`
+    SELECT id, label, encrypted, bytes, created_at AS createdAt
+    FROM stashes WHERE user_id = ? ORDER BY created_at DESC
+  `).all(currentUserId);
+  return { ok: true, stashes: rows.map(r => ({ ...r, encrypted: !!r.encrypted })) };
+}
+
+function stashGet({ id }, { currentUserId }) {
+  let row;
+  if (id) {
+    row = db.prepare('SELECT id, label, payload, encrypted, bytes, created_at AS createdAt FROM stashes WHERE id = ? AND user_id = ?').get(id, currentUserId);
+  } else {
+    // 不给 id · 拿最近一条
+    row = db.prepare('SELECT id, label, payload, encrypted, bytes, created_at AS createdAt FROM stashes WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(currentUserId);
+  }
+  if (!row) throw new Error('找不到这个 stash');
+  return { ok: true, stash: { ...row, encrypted: !!row.encrypted } };
+}
+
+function stashDrop({ id }, { currentUserId }) {
+  const r = db.prepare('DELETE FROM stashes WHERE id = ? AND user_id = ?').run(id, currentUserId);
+  if (r.changes === 0) throw new Error('找不到这个 stash (或不是你的)');
+  return { ok: true, dropped: id };
+}
+
+// ============================================
 // NOTIFICATIONS
 // ============================================
 
@@ -1476,6 +1520,8 @@ module.exports = {
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes
   addNote, deleteNote, resolveNote,
+  // stashes · 个人现场暂存
+  stashPush, stashList, stashGet, stashDrop,
   // notifications
   markAllRead, markNotifRead,
 };

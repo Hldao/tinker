@@ -17,7 +17,7 @@ const { buildState } = require('../state');
 function resetDb() {
   const tables = ['notifications', 'note_images', 'notes', 'tinkered', 'reactions',
     'method_used', 'update_images', 'updates', 'project_tools', 'projects',
-    'images', 'sessions', 'auth_tokens', 'users', 'starters', 'available_tools'];
+    'stashes', 'images', 'sessions', 'auth_tokens', 'users', 'starters', 'available_tools'];
   for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
 }
 
@@ -324,6 +324,42 @@ test('resolveNote: 自己给自己不发通知', () => {
   a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: daodao });
   const notif = db.prepare(`SELECT 1 FROM notifications WHERE type = ?`).all('noteResolved');
   assert.equal(notif.length, 0);
+});
+
+// ============================================
+// stashes · 个人现场暂存
+// ============================================
+test('stashPush + list + get + drop · 按 user 隔离', () => {
+  const { daodao, alice } = setupBasic();
+  const r = a.stashPush({ label: '卡在登录重构', payload: '{"diff":"xxx"}', encrypted: false, bytes: 12 }, { currentUserId: daodao });
+  assert.ok(r.id);
+
+  // list 不带 payload
+  const list = a.stashList({}, { currentUserId: daodao });
+  assert.equal(list.stashes.length, 1);
+  assert.equal(list.stashes[0].label, '卡在登录重构');
+  assert.equal(list.stashes[0].encrypted, false);
+  assert.equal(list.stashes[0].payload, undefined);
+
+  // get 带 payload · 不给 id 拿最近
+  const got = a.stashGet({}, { currentUserId: daodao });
+  assert.equal(got.stash.payload, '{"diff":"xxx"}');
+
+  // alice 看不到 daodao 的
+  assert.equal(a.stashList({}, { currentUserId: alice }).stashes.length, 0);
+  assert.throws(() => a.stashGet({ id: r.id }, { currentUserId: alice }), /找不到/);
+  assert.throws(() => a.stashDrop({ id: r.id }, { currentUserId: alice }), /找不到/);
+
+  // drop
+  assert.equal(a.stashDrop({ id: r.id }, { currentUserId: daodao }).dropped, r.id);
+  assert.equal(a.stashList({}, { currentUserId: daodao }).stashes.length, 0);
+});
+
+test('stashPush: 加密标志 + 超大拒绝', () => {
+  const { daodao } = setupBasic();
+  a.stashPush({ label: '密的', payload: 'ciphertext-base64', encrypted: true }, { currentUserId: daodao });
+  assert.equal(a.stashList({}, { currentUserId: daodao }).stashes[0].encrypted, true);
+  assert.throws(() => a.stashPush({ payload: 'x'.repeat(5 * 1024 * 1024 + 1) }, { currentUserId: daodao }), /5MB/);
 });
 
 // ============================================

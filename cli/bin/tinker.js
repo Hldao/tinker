@@ -8732,6 +8732,163 @@ async function cmdNoteDone(arg, opts) {
 }
 
 // =============================================
+// tinker stash · 个人现场暂存 (跨设备 / 跨时间)
+// 一个人 A 机器写一半 · push 现场到 server · B 机器 pop 还原接着写
+// 比 git stash 多了"卡在哪 + 当时 AI 的思路" · 不靠工作室 · 按账号隔离
+// 加密可选:默认明文 (零设置 · server 可读) · 设了口令就端到端 (server 看不到)
+// =============================================
+async function cmdStash(sub, args, opts) {
+  const cfg = mustHaveConfig();
+  const dossierLib = require('../lib/dossier');
+  const bridgeLib = require('../lib/bridge');
+  const positional = opts.positional || [];
+  const stashCfg = cfg.stash || {};
+
+  // tinker stash key <口令> · 设本地加密钥 (别的设备设同一个才能解)
+  if (sub === 'key') {
+    const pass = (args[2] || positional[1] || '').trim();
+    if (!pass) {
+      err('用法: ' + vermilion('tinker stash key <口令>') + sepia(' · 设了之后 push 默认加密 · 别的设备设同口令才能 pop'));
+      process.exit(1);
+    }
+    cfg.stash = { ...stashCfg, key: pass, encrypt: true };
+    saveConfig(cfg);
+    ok('设好 stash 加密口令 · 之后 push 默认加密');
+    log(sepia('  别的设备也跑一遍同样的 ') + vermilion('tinker stash key ' + pass) + sepia(' 才能 pop'));
+    return;
+  }
+
+  // tinker stash push [-m 标签] [--encrypt|--plain]
+  if (sub === 'push') {
+    if (!inGitRepo()) { err('不在 git 仓库 · stash 存的是当前仓库的现场'); process.exit(1); }
+    const label = (opts.text || '').trim();
+    const situationId = opts.situation || dossierLib.pickActiveSituationId();
+    const dossier = dossierLib.packDossier({ situationId, message: label, cwd: process.cwd() });
+    if (!dossier.diff && !dossier.situation) {
+      log(sepia('  当前没未提交改动、也没在跟踪的卡点 · 没啥可暂存'));
+      return;
+    }
+    const json = JSON.stringify(dossier);
+    let encrypt = opts.encrypt || (stashCfg.encrypt && !opts.plain);
+    if (opts.plain) encrypt = false;
+    let payload, encrypted = false;
+    if (encrypt) {
+      if (!stashCfg.key) {
+        err('要加密但没设口令 · 先 ' + vermilion('tinker stash key <口令>') + sepia(' · 或加 --plain 明文存'));
+        process.exit(1);
+      }
+      payload = bridgeLib.encryptCompressed(json, stashCfg.key);
+      encrypted = true;
+    } else {
+      payload = json;
+    }
+    try {
+      const r = await apiAction(cfg, 'stashPush', { label, payload, encrypted, bytes: payload.length });
+      const id = (r && r.result && r.result.id) || '';
+      if (opts.json) return outputJson({ ok: true, id, encrypted });
+      ok('暂存了 · ' + bold(id) + (encrypted ? sepia(' · 🔒 加密') : sepia(' · 明文')) + (label ? sepia(' · ' + label) : ''));
+      log(sepia('  另一台机器: ') + vermilion('tinker stash pop') + (encrypted ? sepia(' (先设同一个口令)') : ''));
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'STASH_PUSH_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+
+  // tinker stash drop <id>
+  if (sub === 'drop' || sub === 'rm') {
+    const id = args[2] || positional[1];
+    if (!id) { err('用法: tinker stash drop <id>'); process.exit(1); }
+    try {
+      await apiAction(cfg, 'stashDrop', { id });
+      if (opts.json) return outputJson({ ok: true, dropped: id });
+      ok('删了 ' + id);
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'STASH_DROP_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
+
+  // tinker stash pop [id] / apply [id]
+  if (sub === 'pop' || sub === 'apply') {
+    if (!inGitRepo()) { err('不在 git 仓库 · pop 要在目标仓库里跑'); process.exit(1); }
+    const id = args[2] || positional[1] || null;
+    let stash;
+    try {
+      const r = await apiAction(cfg, 'stashGet', { id });
+      stash = r && r.result && r.result.stash;
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'STASH_GET_FAILED');
+      err(e.message); process.exit(1);
+    }
+    if (!stash) { err('找不到 stash'); process.exit(1); }
+
+    let json;
+    if (stash.encrypted) {
+      if (!stashCfg.key) { err('这个 stash 加密了 · 先在本机设同一个口令 ' + vermilion('tinker stash key <口令>')); process.exit(1); }
+      try { json = bridgeLib.decrypt(stash.payload, stashCfg.key); }
+      catch { err('解不开 · 口令对不上?'); process.exit(1); }
+    } else {
+      json = stash.payload;
+    }
+    let dossier;
+    try { dossier = JSON.parse(json); } catch { err('包坏了 · 解析不了'); process.exit(1); }
+
+    log('');
+    if (dossier.message) log(sepia('  当时: ') + bold(dossier.message));
+    const cwd = process.cwd();
+
+    // 先深验 (临时工作树重放 · 不碰你当前工作树)
+    const v = dossierLib.verifyDossier({ dossier, repoPath: cwd });
+    v.checks.forEach(c => log('  ' + (c.ok ? sepia('✓') : vermilion('✗')) + ' ' + c.name + (c.note ? sepia(' · ' + c.note) : '')));
+    if (!v.verdict) {
+      if (opts.json) return errJson(v.reason, 'STASH_VERIFY_FAILED');
+      err('校验没过: ' + v.reason); process.exit(1);
+    }
+
+    // 真应用到当前工作树
+    const ap = dossierLib.applyStashToWorktree({ dossier, repoPath: cwd });
+    if (!ap.ok) {
+      if (opts.json) return errJson(ap.error, 'STASH_APPLY_FAILED');
+      err('应用失败: ' + ap.error);
+      if (ap.patchFile) log(sepia('  patch 留在 ') + ap.patchFile + sepia(' · 可手动 git apply'));
+      process.exit(1);
+    }
+    if (ap.unpushedCount > 0) {
+      log(sepia('  注:包里还有 ' + ap.unpushedCount + ' 个文件的未推改动 · 那部分走正常 git push/pull · 这里只还原了未提交的'));
+    }
+    // pop 用完即删 · apply 留着
+    if (sub === 'pop') { try { await apiAction(cfg, 'stashDrop', { id: stash.id }); } catch {} }
+    if (opts.json) return outputJson({ ok: true, id: stash.id, applied: ap.applied, dropped: sub === 'pop' });
+    ok(ap.applied ? ('还原了未提交的改动' + (sub === 'pop' ? ' · 已删这条 stash' : ' · stash 留着')) : (ap.note || '没改动可还原'));
+    return;
+  }
+
+  // 默认 / list
+  try {
+    const r = await apiAction(cfg, 'stashList', {});
+    const stashes = (r && r.result && r.result.stashes) || [];
+    if (opts.json) return outputJson({ ok: true, stashes });
+    if (stashes.length === 0) {
+      log(sepia('  没有暂存的现场 · ') + vermilion('tinker stash push -m "卡在哪"') + sepia(' 存一个'));
+      return;
+    }
+    log('');
+    log(sepia('  你的现场暂存:'));
+    stashes.forEach(s => {
+      log('  ' + vermilion(s.id) + (s.encrypted ? ' 🔒' : '') + sepia(' · ' + (s.label || '(无标签)') + ' · ' + shortAgo(s.createdAt)));
+    });
+    log('');
+    log(sepia('  取回: ') + vermilion('tinker stash pop [id]') + sepia(' · 删: ') + vermilion('tinker stash drop <id>'));
+    log('');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'STASH_LIST_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
+// =============================================
 // 桌面通知 · 给 Claude Code hook (要权限 / 长任务跑完) 弹本地横幅用
 // =============================================
 // Mac 桌面通知 · 优先 terminal-notifier (可靠 · 能点 · 独立 app 身份)
@@ -10272,6 +10429,11 @@ function help() {
   log('  ' + vermilion('tinker inbox fetch <id>') + sepia('             取回懒取的重料到 context/ (接了才下载 · verify 会自动取)'));
   log('  ' + vermilion('tinker inbox verify <id> [--repo <path>]') + sepia('  验收接力包 · 临时工作树重放 diff · 验完自动回执/退信给发起方'));
   log('');
+  log(sepia('  ') + vermilion('stash · 跨设备暂存现场 (给自己 · 不靠工作室)'));
+  log('  ' + vermilion('tinker stash push -m "卡在哪"') + sepia('         A 机器存现场 (未提交改动 + 卡点) · 到 server'));
+  log('  ' + vermilion('tinker stash') + sepia(' / ') + vermilion('pop [id]') + sepia(' / ') + vermilion('drop <id>') + sepia('   列 / B 机器还原接着写 / 删'));
+  log('  ' + vermilion('tinker stash key <口令>') + sepia('               设加密钥 (端到端 · server 看不到 · 别的设备设同口令) · 默认明文'));
+  log('');
   log(sepia('  ') + vermilion('witness · 决策推演 (异步 AI review)'));
   log('  ' + vermilion('tinker witness draft --topic "..." --by-claude') + sepia('  起草脚手架 · Claude 写内容'));
   log('  ' + vermilion('tinker witness publish "<content>" [--with-context]') + sepia('  落地 + 广播到 active studio'));
@@ -10426,6 +10588,10 @@ function parseArgs(args) {
     else if (a === '--by-claude') opts.byClaude = true;
     else if (a === '--with-context') opts.withContext = true;
     else if (a === '--force' || a === '-f') opts.force = true;
+    else if (a === '--encrypt') opts.encrypt = true;
+    else if (a === '--plain') opts.plain = true;
+    else if (a === '--situation') opts.situation = args[++i];
+    else if (a.startsWith('--situation=')) opts.situation = a.slice('--situation='.length);
     else if (a === '--tag') {
       // v0.84 支持多次 · 收集 · contribute 时一并发上
       const v = (args[++i] || '').trim();
@@ -10788,6 +10954,12 @@ function cmdSchema(opts = {}) {
         { arg: '[编号|noteId]', purpose: '无参列待处理便签 · 给编号或 n- 开头的 id 标处理' },
         { flag: '--json', purpose: 'machine-readable 输出' },
       ], jsonOutput: true, example: 'tinker note-done 1' },
+      { name: 'stash', purpose: '跨设备暂存现场 (给自己) · push 当前仓库未提交改动+卡点到 server · 另一台机器 pop 还原 · 不靠工作室', args: [
+        { arg: 'push | list | pop [id] | apply [id] | drop <id> | key <口令>', purpose: 'push 存 · pop 还原即删 · apply 还原留着 · key 设端到端加密口令' },
+        { flag: '-m / --message', purpose: 'push 时给现场一句话标签' },
+        { flag: '--encrypt / --plain', purpose: '单次覆盖加密 (默认明文 · 设了 key 默认加密)' },
+        { flag: '--json', purpose: 'machine-readable 输出' },
+      ], jsonOutput: true, example: 'tinker stash push -m "登录重构做一半"' },
     ],
     pendingFile: path.join(CONFIG_DIR, 'pending.json'),
     promptStateFile: path.join(CONFIG_DIR, 'prompt-state.json'),
@@ -10929,6 +11101,7 @@ async function main() {
       case 'ping': await cmdPing(opts); break;
       case 'send': await cmdSend(opts); break;
       case 'handoff': await cmdHandoff(opts); break;
+      case 'stash': await cmdStash(args[1], args, opts); break;
       case 'team-knowledge': await cmdTeamKnowledge(opts); break;
       case 'witness': await cmdWitness(opts); break;
       case 'inbox': await cmdInbox(opts); break;

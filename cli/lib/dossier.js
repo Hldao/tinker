@@ -524,9 +524,30 @@ function verifyDossier({ dossier, repoPath }) {
   return { checks, verdict: true, reason: null };
 }
 
+// stash 取回 · 把现场里"未提交的改动"那段 patch 应用到当前真实工作树 (不是临时的)
+// 只还原 working tree diff · 未推 commit 那部分走正常 git push/pull · 不在这儿重放 commit
+// 返回 { ok, applied, note?, error?, patchFile? } · 失败时 patch 留盘让用户手动 apply
+function applyStashToWorktree({ dossier, repoPath }) {
+  if (dossier.diffTruncated) return { ok: false, applied: false, error: 'diff 打包时被截断 (超 200kb) · 还原不了 · 当时该先提交一部分' };
+  const sections = splitDiffSections(dossier.diff || '');
+  const wt = sections.workingTree;
+  const unpushedCount = sections.unpushed ? (sections.unpushed.match(/^diff --git/gm) || []).length : 0;
+  if (!wt) return { ok: true, applied: false, note: '没有未提交改动可还原', unpushedCount };
+  const tmpPatch = path.join(os.tmpdir(), 'tinker-stash-' + Date.now() + '.patch');
+  fs.writeFileSync(tmpPatch, wt.endsWith('\n') ? wt : wt + '\n');
+  try {
+    execSync('git apply --whitespace=nowarn "' + tmpPatch + '"', { cwd: repoPath, stdio: 'pipe' });
+    try { fs.rmSync(tmpPatch, { force: true }); } catch {}
+    return { ok: true, applied: true, unpushedCount };
+  } catch (e) {
+    return { ok: false, applied: false, error: String(e.stderr || e.message || e).slice(0, 200), patchFile: tmpPatch, unpushedCount };
+  }
+}
+
 module.exports = {
   packDossier,
   unpackDossier,
+  applyStashToWorktree,
   pickActiveSituationId,
   listInbox,
   markInboxDone,
