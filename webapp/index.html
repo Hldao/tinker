@@ -1200,6 +1200,19 @@
     font-size: 16.5px;
     line-height: 1.55;             /* v0.27: 1.65 → 1.55 */
   }
+  /* 便签「处理了」· 已处理的淡一档 + 一枚苔绿小章 · 便签墙顺手分出待办 / 已处理 */
+  .note-resolved-chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--moss);
+    letter-spacing: 0.06em;
+    border: 1px solid var(--moss);
+    border-radius: 10px;
+    padding: 1px 8px;
+    margin-left: 4px;
+  }
+  .note-entry.is-resolved .note-text { opacity: 0.6; }
+  .note-entry.is-resolved .nu { opacity: 0.8; }
 
   /* —— NOTIFICATIONS · 收一档 + unread 左竖线保留 —— */
   .notif-entry {
@@ -7585,6 +7598,7 @@ const NOTIF_TEMPLATES = {
   ownerUpdate:  (n) => ({ verb:'记了一笔新进展 ·', verbColor:'var(--moss)' }),
   wantToTry:    (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
   noted:        (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
+  noteResolved: (n) => ({ verb:'处理了你留的便签 · 你提的那条 ta 动手了', verbColor:'var(--moss)' }),
 };
 
 // v0.58 通知 type chip 简短 label · 跨 type 一致排版
@@ -7599,6 +7613,7 @@ const NOTIF_TYPE_LABELS = {
   ownerUpdate: '新进展',
   wantToTry: '想试试',
   noted: '留便签',
+  noteResolved: '处理了',
 };
 
 let state;
@@ -8774,8 +8789,9 @@ function renderProject(owner, slug) {
       ${p.notes.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
       ${p.notes.map((n, nIdx) => {
         const refUpdate = n.updateId ? p.updates.find(u => u.id === n.updateId) : null;
+        const resolved = !!n.resolvedAt;
         return `
-        <div class="note-entry" id="note-${n.id}">
+        <div class="note-entry${resolved ? ' is-resolved' : ''}" id="note-${n.id}">
           ${refUpdate ? `
             <div class="note-ref" onclick="event.stopPropagation(); flashAnchor('update-${refUpdate.id}')">
               ↑ 说的是 「${escapeHtml((refUpdate.text || '').replace(/\\s+/g,' ').slice(0, 60))}${refUpdate.text.length > 60 ? '…' : ''}」 · ${shortAgo(refUpdate.at)}
@@ -8783,7 +8799,9 @@ function renderProject(owner, slug) {
           ` : ''}
           <div class="note-head">
             <span class="nu">@${n.user}</span> · ${timeAgo(n.at)}
+            ${resolved ? `<span class="note-resolved-chip" title="${n.resolvedBy ? '@' + escapeHtml(n.resolvedBy) + ' 处理了' : '已处理'}">✓ 已处理</span>` : ''}
             ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">${ICONS.undo}撤回</span>` : ''}
+            ${isMine ? `<span class="small-action" style="margin-left: 12px;" onclick="resolveNote('${p.id}', '${n.id}')">${resolved ? '撤销处理' : '✓ 处理了'}</span>` : ''}
           </div>
           <div class="note-text">"${renderMentions(n.text)}"</div>
           ${n.images && n.images.length > 0 ? `
@@ -9909,6 +9927,23 @@ async function deleteNote(projectId, noteIdx) {
     await apiAction('deleteNote', { projectId, noteIdx });
     renderProject(p.owner, p.slug);
     showToast('撤回了');
+  } catch (e) { showToast(e.message); }
+}
+
+// 项目主人把便签标成「处理了」(toggle) · 跨人时便签作者收到回响
+async function resolveNote(projectId, noteId) {
+  const p = projectById(projectId);
+  if (!p) return;
+  const n = (p.notes || []).find(x => x.id === noteId);
+  if (!n) return;
+  try {
+    const r = await apiAction('resolveNote', { projectId, noteId });
+    renderProject(p.owner, p.slug);
+    if (r && r.resolved) {
+      showToast(n.user === currentUser.handle ? '标了处理了' : '标了处理了 · @' + n.user + ' 会收到回响');
+    } else {
+      showToast('撤销了');
+    }
   } catch (e) { showToast(e.message); }
 }
 

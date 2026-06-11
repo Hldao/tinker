@@ -8631,6 +8631,93 @@ async function cmdUsed(updateId, opts) {
   }
 }
 
+// 收集我项目下的便签 (默认只待处理的) · 按时间倒序
+function gatherMyNotes(state, myHandle, { includeResolved = false } = {}) {
+  const out = [];
+  for (const p of (state.projects || [])) {
+    if (p.owner !== myHandle) continue;
+    for (const n of (p.notes || [])) {
+      if (!includeResolved && n.resolvedAt) continue;
+      out.push({
+        noteId: n.id, projectId: p.id, projectName: p.name,
+        author: n.user, text: n.text || '', at: n.at, resolved: !!n.resolvedAt,
+      });
+    }
+  }
+  out.sort((a, b) => b.at - a.at);
+  return out;
+}
+
+// tinker note-done            列我项目下待处理的便签 (编号)
+// tinker note-done <n>        把第 n 条标成处理了
+// tinker note-done <noteId>   按 id 标 (toggle · 再标一次撤销)
+// 只有项目主人能标 · 跨人时便签作者收到回响 (自己给自己不发)
+async function cmdNoteDone(arg, opts) {
+  const cfg = mustHaveConfig();
+  let state;
+  try { state = await apiState(cfg); }
+  catch (e) {
+    if (opts.json) return errJson(e.message, 'STATE_FAILED');
+    err(e.message); process.exit(1);
+  }
+  const myHandle = cfg.handle;
+
+  async function doResolve(noteId, projectId, authorHandle) {
+    const r = await apiAction(cfg, 'resolveNote', { projectId, noteId });
+    const resolved = !!(r && r.result && r.result.resolved);
+    if (opts.json) return outputJson({ ok: true, noteId, projectId, resolved });
+    if (resolved) {
+      ok(authorHandle && authorHandle !== myHandle
+        ? '标了处理了 · @' + authorHandle + ' 会收到回响'
+        : '标了处理了');
+    } else {
+      ok('撤销了处理');
+    }
+  }
+
+  try {
+    // 直接按 id (含已处理的 · 支持 toggle 撤销)
+    if (arg && /^n-/.test(arg)) {
+      const all = gatherMyNotes(state, myHandle, { includeResolved: true });
+      const target = all.find(n => n.noteId === arg);
+      if (!target) {
+        if (opts.json) return errJson('找不到这条便签 (或不是你项目下的): ' + arg, 'NOT_FOUND');
+        err('找不到这条便签 · 或它不在你的项目下: ' + arg); process.exit(1);
+      }
+      return await doResolve(target.noteId, target.projectId, target.author);
+    }
+
+    const pending = gatherMyNotes(state, myHandle);
+
+    // 按编号
+    if (arg && /^\d+$/.test(arg)) {
+      const target = pending[parseInt(arg, 10) - 1];
+      if (!target) {
+        if (opts.json) return errJson('没有第 ' + arg + ' 条待处理便签', 'OUT_OF_RANGE');
+        err('没有第 ' + arg + ' 条待处理便签 · 先跑 ' + vermilion('tinker note-done') + ' 看编号'); process.exit(1);
+      }
+      return await doResolve(target.noteId, target.projectId, target.author);
+    }
+
+    // 无参 · 列待处理
+    if (opts.json) return outputJson({ ok: true, count: pending.length, notes: pending });
+    if (pending.length === 0) { ok('便签墙上没有待处理的便签'); return; }
+    log('');
+    log(sepia('  你项目下待处理的便签:'));
+    pending.forEach((n, i) => {
+      const snippet = n.text.replace(/\s+/g, ' ').slice(0, 50);
+      log('  ' + vermilion(String(i + 1).padStart(2)) + sepia(' · ') + bold('@' + n.author) + sepia(' / ' + n.projectName));
+      log('      ' + snippet + (n.text.length > 50 ? sepia('…') : ''));
+    });
+    log('');
+    log(sepia('  标处理了: ') + vermilion('tinker note-done <编号>'));
+    log('');
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'NOTE_DONE_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
 // v0.15 编辑/删除/建项目 · 补齐 CLI 跟 server 之间最后几个动作 gap
 // 之前 editUpdate / deleteUpdate / editMethod / addProject / editProject 只有 webapp 用
 // 现在 CLI 直接能做 · 写错可以改 · 测试条可以删 · 新项目命令行起手
@@ -10046,6 +10133,7 @@ function help() {
   log(sepia('  ') + vermilion('反馈链路 · 反算法的闭环 (借了 / 启发了要回应)'));
   log('  ' + vermilion('tinker react <projectId>') + sepia('            toggle "想试试" · 项目作者收到通知'));
   log('  ' + vermilion('tinker used <updateId> -m "..."') + sepia('     标某条进展为"用了 · 跑通了" · 给原作者反馈'));
+  log('  ' + vermilion('tinker note-done [编号|noteId]') + sepia('      把你项目下的便签标成"处理了" · 便签作者收到回响 · 无参列待处理'));
   log('  ' + vermilion('tinker tinkered <projectId> --name "..." --link "https://..." --inspired-by <updateId>'));
   log(sepia('                                       挂上你做的延伸版 · 因 ta 启发'));
   log('  ' + vermilion('tinker tinkered <projectId> --undo') + sepia('  撤回延伸版'));
@@ -10591,6 +10679,10 @@ function cmdSchema(opts = {}) {
         { arg: '<resource>', purpose: 'triggers / today' },
         { flag: '--once', purpose: '打完当前 snapshot 就退 · 不长跑' },
       ], jsonOutput: true, example: 'tinker stream triggers' },
+      { name: 'note-done', purpose: '把你项目下的便签标成"处理了" (toggle) · 便签作者收到回响 · 无参列待处理', args: [
+        { arg: '[编号|noteId]', purpose: '无参列待处理便签 · 给编号或 n- 开头的 id 标处理' },
+        { flag: '--json', purpose: 'machine-readable 输出' },
+      ], jsonOutput: true, example: 'tinker note-done 1' },
     ],
     pendingFile: path.join(CONFIG_DIR, 'pending.json'),
     promptStateFile: path.join(CONFIG_DIR, 'prompt-state.json'),
@@ -10681,6 +10773,7 @@ async function main() {
       case 'react': await cmdReact(args[1], opts); break;
       case 'tinkered': await cmdTinkered(args[1], opts); break;
       case 'used': await cmdUsed(args[1], opts); break;
+      case 'note-done': await cmdNoteDone(args[1], opts); break;
       case 'edit': await cmdEditUpdate(args[1], opts); break;
       case 'delete': await cmdDeleteUpdate(args[1], opts); break;
       case 'edit-method': await cmdEditMethod(args[1], opts); break;

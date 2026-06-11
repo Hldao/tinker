@@ -1398,6 +1398,40 @@ function deleteNote({ projectId, noteIdx }, { currentUserId }) {
   return { ok: true };
 }
 
+// 项目主人把某条便签标成「处理了」(toggle) · 给便签作者一个回响
+// 只有主人能标 (主人才是动手改的人) · 通知发给便签作者 (自己给自己 notify 自动跳过)
+function resolveNote({ projectId, noteId, noteIdx }, { currentUserId }) {
+  const p = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  if (!p) throw new Error('项目不存在');
+  if (p.owner_id !== currentUserId) throw new Error('只有项目主人能标便签处理了');
+
+  let n;
+  if (noteId) {
+    n = db.prepare('SELECT id, user_id, text, resolved_at FROM notes WHERE id = ? AND project_id = ?').get(noteId, projectId);
+  } else {
+    const notes = db.prepare('SELECT id, user_id, text, resolved_at FROM notes WHERE project_id = ? ORDER BY at DESC').all(projectId);
+    n = notes[noteIdx];
+  }
+  if (!n) throw new Error('找不到这条便签');
+
+  const anchor = 'note-' + n.id;
+
+  // 已处理 → 再点一下撤销
+  if (n.resolved_at) {
+    db.prepare('UPDATE notes SET resolved_at = NULL, resolved_by = NULL WHERE id = ?').run(n.id);
+    clearNotif({ targetUserId: n.user_id, fromUserId: currentUserId, type: 'noteResolved', projectId });
+    return { ok: true, resolved: false };
+  }
+
+  const now = Date.now();
+  db.prepare('UPDATE notes SET resolved_at = ?, resolved_by = ? WHERE id = ?').run(now, currentUserId, n.id);
+  notify({
+    targetUserId: n.user_id, fromUserId: currentUserId, type: 'noteResolved',
+    projectId, extra: (n.text || '').trim().slice(0, 200), anchor,
+  });
+  return { ok: true, resolved: true, at: now };
+}
+
 // ============================================
 // NOTIFICATIONS
 // ============================================
@@ -1441,7 +1475,7 @@ module.exports = {
   // reactions
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes
-  addNote, deleteNote,
+  addNote, deleteNote, resolveNote,
   // notifications
   markAllRead, markNotifRead,
 };

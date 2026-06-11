@@ -265,6 +265,68 @@ test('addNote: @ 不重复 owner 通知', () => {
 });
 
 // ============================================
+// resolveNote · 便签「处理了」
+// ============================================
+test('resolveNote: 主人标处理了 → 便签作者收到回响 + state 带 resolvedAt', () => {
+  const { daodao, alice } = setupBasic();
+  const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addNote({ projectId: p.id, text: '首页卡片能放两张图就好了' }, { currentUserId: alice });
+  const note = db.prepare('SELECT id FROM notes WHERE project_id = ?').get(p.id);
+
+  const r = a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: daodao });
+  assert.equal(r.resolved, true);
+
+  const row = db.prepare('SELECT resolved_at, resolved_by FROM notes WHERE id = ?').get(note.id);
+  assert.ok(row.resolved_at);
+  assert.equal(row.resolved_by, 'uid-daodao');
+
+  // alice 收到 noteResolved 回响
+  const notif = db.prepare(`SELECT 1 FROM notifications WHERE target_user_id = ? AND type = ?`).all('uid-alice', 'noteResolved');
+  assert.equal(notif.length, 1);
+
+  // buildState 序列化出 resolvedAt / resolvedBy
+  const state = buildState({ targetUserId: alice });
+  const proj = state.projects.find(x => x.id === p.id);
+  const sn = proj.notes.find(x => x.id === note.id);
+  assert.ok(sn.resolvedAt);
+  assert.equal(sn.resolvedBy, 'daodao');
+});
+
+test('resolveNote: 再标一次 = 撤销 · 通知清掉', () => {
+  const { daodao, alice } = setupBasic();
+  const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addNote({ projectId: p.id, text: '改一下' }, { currentUserId: alice });
+  const note = db.prepare('SELECT id FROM notes WHERE project_id = ?').get(p.id);
+
+  a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: daodao });
+  const r2 = a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: daodao });
+  assert.equal(r2.resolved, false);
+
+  const row = db.prepare('SELECT resolved_at FROM notes WHERE id = ?').get(note.id);
+  assert.equal(row.resolved_at, null);
+  const notif = db.prepare(`SELECT 1 FROM notifications WHERE target_user_id = ? AND type = ?`).all('uid-alice', 'noteResolved');
+  assert.equal(notif.length, 0);
+});
+
+test('resolveNote: 非主人不能标', () => {
+  const { daodao, alice, bob } = setupBasic();
+  const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addNote({ projectId: p.id, text: '改一下' }, { currentUserId: alice });
+  const note = db.prepare('SELECT id FROM notes WHERE project_id = ?').get(p.id);
+  assert.throws(() => a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: bob }), /只有项目主人/);
+});
+
+test('resolveNote: 自己给自己不发通知', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addNote({ projectId: p.id, text: '自己提醒自己改卡片' }, { currentUserId: daodao });
+  const note = db.prepare('SELECT id FROM notes WHERE project_id = ?').get(p.id);
+  a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: daodao });
+  const notif = db.prepare(`SELECT 1 FROM notifications WHERE type = ?`).all('noteResolved');
+  assert.equal(notif.length, 0);
+});
+
+// ============================================
 // markAllRead
 // ============================================
 test('markAllRead: 标记 unread → read', () => {

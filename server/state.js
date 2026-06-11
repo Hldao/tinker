@@ -144,6 +144,7 @@ function buildState({ targetUserId } = {}) {
     const projectNotes = (notesByProject[p.id] || []).map(n => {
       const out = { id: n.id, user: idToHandle[n.user_id], text: n.text, at: n.at };
       if (n.update_id) out.updateId = n.update_id;
+      if (n.resolved_at) { out.resolvedAt = n.resolved_at; out.resolvedBy = idToHandle[n.resolved_by] || null; }
       const imgs = noteImagesMap[n.id];
       if (imgs && imgs.length > 0) out.images = imgs;
       return out;
