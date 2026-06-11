@@ -57,6 +57,13 @@ function ok(s) { log(moss('✓ ') + s); }
 // JSON 模式输出 helper · 给 AI agent 用 · 错误也走 JSON 走 stdout + exit 1
 // 所有 --json 命令统一用这两个 · 不要走 log/err 文本输出
 function outputJson(obj) { process.stdout.write(JSON.stringify(obj) + '\n'); }
+function agoZh(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return s + ' 秒前';
+  const m = Math.floor(s / 60); if (m < 60) return m + ' 分钟前';
+  const h = Math.floor(m / 60); if (h < 24) return h + ' 小时前';
+  return Math.floor(h / 24) + ' 天前';
+}
 function errJson(msg, code, extra) {
   const out = { ok: false, error: msg, code: code || 'ERROR' };
   if (extra) Object.assign(out, extra);
@@ -7789,6 +7796,7 @@ const VOICE_PROFILE_REGISTRY = {
   draft:            'internal',
   'maybe-check':    'internal',
   scenario:         'internal',
+  stash:            'internal',   // -m 是给自己的现场标签 · 不公开 · 不查
 };
 
 function warnIfVoiceProfileMissing(cmd, opts) {
@@ -8877,7 +8885,7 @@ async function cmdStash(sub, args, opts) {
     log('');
     log(sepia('  你的现场暂存:'));
     stashes.forEach(s => {
-      log('  ' + vermilion(s.id) + (s.encrypted ? ' 🔒' : '') + sepia(' · ' + (s.label || '(无标签)') + ' · ' + shortAgo(s.createdAt)));
+      log('  ' + vermilion(s.id) + (s.encrypted ? ' 🔒' : '') + sepia(' · ' + (s.label || '(无标签)') + ' · ' + agoZh(s.createdAt)));
     });
     log('');
     log(sepia('  取回: ') + vermilion('tinker stash pop [id]') + sepia(' · 删: ') + vermilion('tinker stash drop <id>'));
