@@ -781,6 +781,9 @@
   .tl-note-preview:hover .tl-note-preview-user { color: var(--vermilion); }
   .tl-note-preview-text { color: var(--ink-soft); font-size: 14.5px; }
   .tl-note-preview-more { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--sepia); letter-spacing: 0.05em; margin-left: 8px; white-space: nowrap; }
+  /* 便签预览条 · 已处理态 · 跟便签墙的小章呼应 · 左边线转苔绿 + 淡一档 */
+  .tl-note-preview.is-resolved { opacity: 0.72; border-left-color: var(--moss); }
+  .tl-note-preview-done { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.05em; margin-left: 8px; border: 1px solid var(--moss); border-radius: 9px; padding: 0 6px; white-space: nowrap; }
   /* 便签墙某条便签关联了 update · 顶上"说的是「XXX」"跳转链接 */
   .note-ref { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-bottom: 6px; cursor: pointer; transition: color 0.15s; padding-bottom: 6px; border-bottom: 1px dotted var(--rule); line-height: 1.5; }
   .note-ref:hover { color: var(--vermilion); }
@@ -8682,9 +8685,10 @@ function renderProject(owner, slug) {
                 const rawText = (firstNote.text || '').replace(/\s+/g, ' ');
                 const preview = rawText.length > 60 ? rawText.slice(0, 60) + '…' : rawText;
                 const extra = notesAboutThis.length - 1;
+                const noteResolved = !!firstNote.resolvedAt;
                 return `
-                  <div class="tl-note-preview" onclick="event.stopPropagation(); flashAnchor('note-${firstNote.id}')">
-                    <span class="tl-note-preview-user">@${firstNote.user}</span><span class="tl-note-preview-text">「${escapeHtml(preview)}」</span>${extra > 0 ? `<span class="tl-note-preview-more">+ ${extra} 条 ↓</span>` : `<span class="tl-note-preview-more">↓</span>`}
+                  <div class="tl-note-preview${noteResolved ? ' is-resolved' : ''}" onclick="event.stopPropagation(); flashAnchor('note-${firstNote.id}')">
+                    <span class="tl-note-preview-user">@${firstNote.user}</span><span class="tl-note-preview-text">「${escapeHtml(preview)}」</span>${noteResolved ? `<span class="tl-note-preview-done">✓ 已处理</span>` : ''}${extra > 0 ? `<span class="tl-note-preview-more">+ ${extra} 条 ↓</span>` : `<span class="tl-note-preview-more">↓</span>`}
                   </div>
                 `;
               })() : ''}
