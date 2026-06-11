@@ -787,8 +787,9 @@ function backfillDisciplines({ reclassify } = {}, { currentUserId }) {
     }
     if (changed) {
       db.prepare('UPDATE methods SET tags = ?, updated_at = ? WHERE id = ?').run(normalizeTags(arr), Date.now(), r.id);
-      syncMethodToFts(r.id);
     }
+    // 不管 tag 变没变 · 都重建一次 FTS · 让存量方法把 tags 索引进去 (v0.85 borrow 按领域命中)
+    syncMethodToFts(r.id);
   }
   return { ok: true, scanned: rows.length, updated, cleared };
 }
@@ -806,18 +807,22 @@ function deleteMethod({ methodId }, { currentUserId }) {
 // 同步 method 到 FTS · 写入 / 编辑后都调
 function syncMethodToFts(methodId) {
   const row = db.prepare(`
-    SELECT m.text, m.scenario, u.handle AS owner_handle, p.name AS project_name
+    SELECT m.text, m.scenario, m.tags, u.handle AS owner_handle, p.name AS project_name
     FROM methods m
     JOIN users u ON u.id = m.owner_id
     LEFT JOIN projects p ON p.id = m.project_id
     WHERE m.id = ?
   `).get(methodId);
   if (!row) return;
+  // v0.85 tags (含领域) 揉进被索引的文本 · 让 borrow 能按领域/主题词命中 (AI 那半)
+  let tagText = '';
+  try { const ts = row.tags ? JSON.parse(row.tags) : []; if (Array.isArray(ts)) tagText = ts.join(' '); } catch {}
+  const indexedText = tagText ? (row.text + ' ' + tagText) : row.text;
   db.prepare('DELETE FROM methods_fts WHERE method_id = ?').run(methodId);
   db.prepare(`
     INSERT INTO methods_fts (text, scenario, owner_handle, project_name, method_id)
     VALUES (?, ?, ?, ?, ?)
-  `).run(row.text, row.scenario || '', row.owner_handle, row.project_name || '', methodId);
+  `).run(indexedText, row.scenario || '', row.owner_handle, row.project_name || '', methodId);
 }
 
 // 兼容路径: 旧 API · 内部 proxy 到 createMethod (从 update 升格)
@@ -1003,8 +1008,11 @@ function listMyUpdates({ currentUserId, limit = 10, kindFilter = 'all' }) {
 //
 // 返回 { hits: [{ id, kind, text, scenario, title, projectName, ownerHandle, at, score }] }
 // kind: 'method' | 'experience' | 'learning'
-function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowerHandle = null }) {
+function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowerHandle = null, discipline = null }) {
   if (!q || !q.trim()) return { hits: [] };
+  // v0.85 按领域筛 · 只对 method 有意义 (experience/learning 在 updates 上 · 没领域 tag)
+  const wantDiscipline = discipline && DISCIPLINE_SET.has(String(discipline).replace(/^#+/, '').trim())
+    ? String(discipline).replace(/^#+/, '').trim() : null;
   const ftsQ = q.trim().split(/\s+/).filter(Boolean).map(t => t.replace(/["*]/g, '')).filter(Boolean).join(' ');
   if (!ftsQ) return { hits: [] };
 
@@ -1018,7 +1026,7 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
   // 1. methods 表 (first-class)
   if (wantMethods) {
     let methodRows = db.prepare(`
-      SELECT m.id, m.text, m.scenario, m.title, m.at,
+      SELECT m.id, m.text, m.scenario, m.title, m.at, m.tags,
              p.name AS project_name, usr.handle AS owner_handle,
              bm25(methods_fts) AS score,
              'method' AS kind
@@ -1031,13 +1039,14 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
       LIMIT ?
     `).all(ftsQ, limit);
     if (methodRows.length === 0) {
-      // LIKE 兜底 (2 字 CJK) · 多词 AND
+      // LIKE 兜底 (2 字 CJK · trigram 索引匹配不了 ≤2 字 · 含领域词 设计/产品/工程)
+      // v0.85 也查 tags · 让 2 字领域词 (设计) 的自由搜能命中 (tag 不在正文里 · 得单独查)
       const words = q.trim().split(/\s+/).filter(Boolean);
-      const conds = words.map(() => '(m.text LIKE ? OR (m.scenario IS NOT NULL AND m.scenario LIKE ?))').join(' AND ');
+      const conds = words.map(() => '(m.text LIKE ? OR (m.scenario IS NOT NULL AND m.scenario LIKE ?) OR (m.tags IS NOT NULL AND m.tags LIKE ?))').join(' AND ');
       const params = [];
-      words.forEach(w => { params.push('%' + w + '%'); params.push('%' + w + '%'); });
+      words.forEach(w => { params.push('%' + w + '%'); params.push('%' + w + '%'); params.push('%' + w + '%'); });
       methodRows = db.prepare(`
-        SELECT m.id, m.text, m.scenario, m.title, m.at,
+        SELECT m.id, m.text, m.scenario, m.title, m.at, m.tags,
                p.name AS project_name, usr.handle AS owner_handle,
                0 AS score, 'method' AS kind
         FROM methods m
@@ -1101,26 +1110,44 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
     });
   }
 
+  // 每行解析 tags + 抽出领域 (给 AI 看 · 也给领域筛用)
+  const parseTags = (raw) => { try { const t = raw ? JSON.parse(raw) : []; return Array.isArray(t) ? t : []; } catch { return []; } };
+  allRows.forEach(r => {
+    r._tags = parseTags(r.tags);
+    r._discipline = r._tags.find(t => DISCIPLINE_SET.has(t)) || null;
+  });
+
+  // v0.85 按领域筛 · 只留命中该领域的 method (其它 kind 没领域 · 直接排除)
+  if (wantDiscipline) {
+    allRows = allRows.filter(r => r.kind === 'method' && r._discipline === wantDiscipline);
+  }
+
   // 排序 · 整体按 score asc / at desc · 截断 limit
   allRows.sort((a, b) => (a.score - b.score) || (b.at - a.at));
   allRows = allRows.slice(0, limit);
 
   // 借用反馈闭环: borrower 已登录 + 命中 method ≥1 条 · 记前 3 条 method
   // 老 update.is_method 现在 method 已迁出 · 只 log method 命中
+  // 日志是尽力而为 · 整段包 try/catch · 写日志再出问题也绝不能拖垮搜索本身
+  // (历史教训:borrow_log.update_id NOT NULL 让跨人借方法整个 400 · 见 migration 070)
   if (borrowerHandle && allRows.length > 0) {
-    const excerpt = q.trim().slice(0, 80);
-    const at = Date.now();
-    const recent = at - 24 * 60 * 60 * 1000;
-    const dedupe = db.prepare(`SELECT 1 FROM borrow_log WHERE method_id = ? AND borrower_handle = ? AND at > ?`);
-    const ins = db.prepare(`
-      INSERT INTO borrow_log (update_id, method_id, owner_handle, borrower_handle, query_excerpt, at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    const methodHits = allRows.filter(r => r.kind === 'method').slice(0, 3);
-    for (const r of methodHits) {
-      if (r.owner_handle === borrowerHandle) continue;
-      if (dedupe.get(r.id, borrowerHandle, recent)) continue;
-      ins.run(null, r.id, r.owner_handle, borrowerHandle, excerpt, at);
+    try {
+      const excerpt = q.trim().slice(0, 80);
+      const at = Date.now();
+      const recent = at - 24 * 60 * 60 * 1000;
+      const dedupe = db.prepare(`SELECT 1 FROM borrow_log WHERE method_id = ? AND borrower_handle = ? AND at > ?`);
+      const ins = db.prepare(`
+        INSERT INTO borrow_log (update_id, method_id, owner_handle, borrower_handle, query_excerpt, at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      const methodHits = allRows.filter(r => r.kind === 'method').slice(0, 3);
+      for (const r of methodHits) {
+        if (r.owner_handle === borrowerHandle) continue;
+        if (dedupe.get(r.id, borrowerHandle, recent)) continue;
+        ins.run(null, r.id, r.owner_handle, borrowerHandle, excerpt, at);
+      }
+    } catch (e) {
+      try { require('./logger').logger.warn({ err: e.message }, 'borrow_log 写入失败 · 不影响搜索'); } catch {}
     }
   }
 
@@ -1138,6 +1165,9 @@ function searchMethods({ q, limit = 10, methodsOnly = false, kindFilter, borrowe
       projectName: r.project_name,
       ownerHandle: r.owner_handle,
       at: r.at,
+      // v0.85 给 AI 那半: 领域 + 全部 tag
+      discipline: r._discipline || null,
+      tags: r._tags || [],
       // 老 boolean 字段兼容
       isMethod: r.kind === 'method',
       isExperience: r.kind === 'experience',

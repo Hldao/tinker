@@ -56,6 +56,7 @@
 
 ### [methods] 方法库领域轴 (v0.85)
 > Owner: bridge 线 · 来自朋友反馈
+- **v0.85.2** borrow 接上领域 (AI 那半 · 之前领域只给人看 · AI 借的时候瞎)。FTS 索引揉进 tags · searchMethods 返回 discipline + tags 字段 (让 AI 判断方法合不合适当前任务) · `tinker borrow --discipline 设计` 按领域筛 · LIKE 兜底也查 tags 让 2 字领域词 (trigram 匹配不了) 也能自由搜命中。**顺手修了个真·线上老 bug**: borrow_log.update_id NOT NULL (012 建表) 没跟上 methods 迁出 updates (019) · 登录用户第一次借"别人的"方法 → 写日志 update_id=null 违反约束 → searchMethods 崩 → 接口 400。跨人借方法 (方法库最核心场景) 一直是坏的 · 只因借自己的/24h 重复借会绕过才没在 2-3 人内测暴露。migration 070 让 update_id 可空 + 借阅日志整段包 try/catch (日志尽力而为 · 绝不拖垮搜索)
 - **v0.85** 给方法库加一条"按手艺领域"的轴（产品 / 设计 / 数据与安全 / 工程 / AI协作），跟现有自由 tag（#supabase #auth · "用什么"）互补，这条是"哪门手艺 · 适合哪个阶段"。服务端 createMethod 用关键词分类器自动猜一个领域 tag（命中 ≥ 2 才打 · 没把握不硬塞 · 人随时可改），固定词表不漂，让"所有 ui 类方法"能被可靠捞出来。关键词以中文为主，英文只收长且不撞词的（短英文 ui/ci 会在 guide/decision 里子串误命中，不收）。网页方法库加一行领域快筛，点一下走现有 #tag 精确过滤。`backfillDisciplines` action 给存量方法补一次。应用 §12：这跟当初砍掉的"按工具筛选"不一样，领域不是工具轴，且帮不懂代码的人绕开工程类，跟"不懂代码优先"一头，正好压在假设 2（人能不能找到对的方法）上
 
 ### [cli] 触发器 / 发布路径打磨 (v0.56 → v0.57)

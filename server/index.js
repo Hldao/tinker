@@ -343,8 +343,9 @@ app.get('/api/method/search', stateLimiter, (req, res) => {
   // borrower handle 来源优先级: 显式 ?borrower=  > 当前 session/token 用户的 handle
   let borrowerHandle = req.query.borrower ? String(req.query.borrower).slice(0, 40) : null;
   if (!borrowerHandle && req.user && req.user.handle) borrowerHandle = req.user.handle;
+  const discipline = req.query.discipline ? String(req.query.discipline).slice(0, 20) : null;
   try {
-    const result = actions.searchMethods({ q, limit, methodsOnly, kindFilter, borrowerHandle });
+    const result = actions.searchMethods({ q, limit, methodsOnly, kindFilter, borrowerHandle, discipline });
     res.json(result);
   } catch (e) {
     req.log.warn({ err: e.message }, 'method search failed');

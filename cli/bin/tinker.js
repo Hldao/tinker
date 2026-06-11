@@ -8463,6 +8463,7 @@ async function cmdBorrow(query, opts) {
     log(sepia('  例:   ') + vermilion('tinker borrow "阿里云 邮件"') + sepia(' (搜踩坑经验)'));
     log(sepia('  例:   ') + vermilion('tinker borrow "supabase 邮箱登录"') + sepia(' (搜方法)'));
     log(sepia('  加 --methods-only 只看方法 · --kind experience 只看踩坑经验'));
+    log(sepia('  加 --discipline 设计 只看某个领域的方法 (产品/设计/数据与安全/工程/AI协作)'));
     return;
   }
   const url = new URL('/api/method/search', cfg.serverUrl);
@@ -8470,6 +8471,7 @@ async function cmdBorrow(query, opts) {
   url.searchParams.set('limit', String(opts.limit || 10));
   if (opts.methodsOnly || opts['methods-only']) url.searchParams.set('methodsOnly', '1');
   if (opts.kind && ['method', 'experience', 'learning'].includes(opts.kind)) url.searchParams.set('kind', opts.kind);
+  if (opts.discipline) url.searchParams.set('discipline', opts.discipline);
   // 带 handle 让作者收到反馈 (反馈闭环 v0.12) · 没登录就匿名
   if (cfg.handle) url.searchParams.set('borrower', cfg.handle);
   const res = await fetch(url.toString());
@@ -8495,6 +8497,8 @@ async function cmdBorrow(query, opts) {
     if (h.isExperience) flags.push(vermilion('[踩坑经验]'));
     if (h.isLearning) flags.push(vermilion('[上手指南]'));
     if (h.isMethod) flags.push(vermilion('[方法]'));
+    // v0.85 领域 · 给 AI 看 · 帮它判断这条方法适不适合当前任务
+    if (h.discipline) flags.push(sepia('〔' + h.discipline + '〕'));
     const flag = flags.length ? ' ' + flags.join(' ') : '';
     const when = new Date(h.at).toISOString().slice(0, 10);
     log(bold(`  ${i + 1}. `) + h.projectName + sepia(' · @') + h.ownerHandle + sepia(' · ') + when + flag);
@@ -10219,6 +10223,8 @@ function parseArgs(args) {
     else if (a === '--methods-only' || a === '--methodsOnly') opts.methodsOnly = true;
     else if (a === '--kind') opts.kind = args[++i];
     else if (a.startsWith('--kind=')) opts.kind = a.slice('--kind='.length);
+    else if (a === '--discipline') opts.discipline = args[++i];
+    else if (a.startsWith('--discipline=')) opts.discipline = a.slice('--discipline='.length);
     else if (a === '--as-experience' || a === '--asExperience') opts.asExperience = true;
     else if (a === '--as-learning' || a === '--asLearning') opts.asLearning = true;
     else if (a === '--as-decision' || a === '--asDecision') opts.asDecision = true;
