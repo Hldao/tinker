@@ -70,7 +70,7 @@ jobs:
             done
 
             echo "--- 2. 修文件权限 (容器要能读) ---"
-            chmod -R a+rX webapp server
+            chmod -R a+rX webapp server .git
 
             if [ "${{ steps.check.outputs.needs_rebuild }}" = "true" ]; then
               echo "--- 3. 重新打包 docker 镜像 ---"

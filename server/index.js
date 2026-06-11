@@ -164,6 +164,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// CLI 自升级检查 · 给 tinker update --check-only 用 · 替代直接打 GitHub (限额 + 依赖)
+// 公开 · 不要求登录 · ?since=<本地安装的 sha> 算落后多少个 cli/ 改动
+const cliVersion = require('./cli-version');
+app.get('/api/cli-version', stateLimiter, (req, res) => {
+  try {
+    res.json({ ok: true, ...cliVersion.getCliVersion(req.query.since || null) });
+  } catch (e) {
+    res.json({ ok: true, available: false });
+  }
+});
+
 // ============================================
 // AUTH endpoints
 // ============================================

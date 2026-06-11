@@ -1887,8 +1887,44 @@ function getInstalledSha() {
   return null;
 }
 
-// 从 GitHub 拉最新 main commit · 计算 behindBy (本地落后多少 commit)
+// 升级检查 · 优先问自己的 server (一次往返 · 只算 cli/ 改动 · 不依赖 GitHub 限额)
+// server 不可达 / 没这端点 / 没装 git 时 · 回退到直接打 GitHub
 async function fetchRemoteStatus() {
+  const installedSha = getInstalledSha();
+  const fromServer = await fetchRemoteStatusFromServer(installedSha);
+  if (fromServer) return fromServer;
+  return fetchRemoteStatusFromGitHub(installedSha);
+}
+
+async function fetchRemoteStatusFromServer(installedSha) {
+  try {
+    const cfg = loadConfig();
+    if (!cfg || !cfg.serverUrl) return null;
+    const url = cfg.serverUrl + '/api/cli-version' + (installedSha ? '?since=' + installedSha : '');
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'tinker-cli' },
+      signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined,
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d || !d.available) return null; // server 没装 git / 没历史 · 回退 GitHub
+    return {
+      checkedAt: Date.now(),
+      latestSha: d.latestSha,
+      latestMsg: d.latestMsg || '',
+      latestDate: null,
+      installedSha,
+      behindBy: d.behindBy || 0,
+      recentCommits: d.recentCommits || [],
+      source: 'server',
+    };
+  } catch {
+    return null;
+  }
+}
+
+// 从 GitHub 拉最新 main commit · 计算 behindBy (本地落后多少 commit) · server 不可达时的兜底
+async function fetchRemoteStatusFromGitHub(installedShaArg) {
   try {
     const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/commits/main`, {
       headers: { 'User-Agent': 'tinker-cli', 'Accept': 'application/vnd.github+json' },
@@ -1899,7 +1935,7 @@ async function fetchRemoteStatus() {
     const latestMsg = (data.commit && data.commit.message || '').split('\n')[0];
     const latestDate = data.commit && data.commit.author && data.commit.author.date;
 
-    const installedSha = getInstalledSha();
+    const installedSha = installedShaArg || getInstalledSha();
     let behindBy = 0;
     let recentCommits = [];
     if (installedSha && installedSha !== latestSha) {

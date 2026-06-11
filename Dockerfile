@@ -24,6 +24,9 @@ COPY webapp/ ./webapp/
 FROM node:20-alpine AS runtime
 WORKDIR /app
 
+# git · 给 /api/cli-version 读自己仓库历史用 (宿主 .git 只读挂进来 · 算 CLI 落后多少)
+RUN apk add --no-cache git
+
 # 用非 root 用户跑
 RUN addgroup -S tinker && adduser -S tinker -G tinker
 USER tinker
