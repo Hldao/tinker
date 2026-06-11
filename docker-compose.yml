@@ -32,13 +32,6 @@ services:
       - ./data:/data
       # 网页文件挂到外面 · 改完只要 restart 不要 rebuild · 10 秒上线
       - ./webapp:/app/webapp:ro
-      # server JS 也挂到外面 · 纯逻辑改动只 restart 不 rebuild (秒级上线)
-      # 只有动 package.json / Dockerfile 才需要重建。挂 ro · server 只往 /data 和 backups 写
-      - ./server:/app/server:ro
-      # 保住镜像里编译好的原生 node_modules (better-sqlite3 是 alpine 编译的 · 别被宿主覆盖)
-      - /app/server/node_modules
-      # backups 要可写 · 用匿名卷盖回来 (上面 ./server:ro 会让这个子目录只读)
-      - /app/server/backups
       # 仓库 .git 只读挂进来 · /api/cli-version 读它算 CLI 落后多少 (宿主 git pull 后容器即时见到)
       - ./.git:/app/.gitdir:ro
     healthcheck:
