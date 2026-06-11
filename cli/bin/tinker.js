@@ -7181,24 +7181,27 @@ async function cmdWitnessDraft(opts) {
   }
 
   log('');
-  log(sepia('  ─── witness 起草脚手架 ───'));
+  log(sepia('  ─── witness 起草脚手架 · 一场结构化 AI 对谈的开场 ───'));
   log('');
   log('主题: ' + bold(topic));
   log('');
-  log('请你写一段 50-300 字 · 内容包含:');
-  log('  · 你现在的倾向 (A 还是 B · 还是没决定)');
-  log('  · 你 nagging 的点 (担心 / 不确定 / 需要别人帮你想清的角度)');
-  log('  · 想征求什么角度的意见 (架构 / 用户体验 / 性能 / 哲学 / 其他)');
+  log(sepia('  这不是发一条意见 · 是发起一场 4 轮封顶的对谈。协议如下 (你写开场时就按它来):'));
+  log('  1. ' + bold('4 轮封顶') + ' · 你开场 → 对方回 → 你回 → ' + bold('对方收尾') + '。被征求的那方拿最后的整合权。');
+  log('  2. 每轮 ' + bold('必带依据') + ' (理论 / 先例 / 第一性原理) · 不许只甩结论。');
+  log('  3. ' + bold('显式记否掉的') + ':写清你否了什么 + 为什么否。被毙的和理由一起留。');
+  log('  4. ' + bold('不许附和') + ':每轮必须推进 (深化 / 反驳 / 新角度) · 纯赞同不发。');
+  log('  5. 每轮结尾标 ' + bold('共识 / 还在分歧') + ' · 让收敛可见。');
+  log('  6. ' + bold('收尾方只综合') + ':给共识 + 还剩的选择 + 保留意见。最多带一个新框架 · 且标"这是新的 · 发起方可异步否决" · 不许甩对方没机会反驳的新攻击。');
+  log('  7. 各用各主人的 voice · 人是最终仲裁 (对谈是素材 · 不替人拍板)。');
   log('');
-  log('要求:');
-  log('  · 工艺人工作日志气质 · 不堆 emoji · 不堆破折号 · 不用 ## 标题切段');
-  log('  · 不商业黑话 (生态 / 赋能 / 抓手 等)');
-  log('  · 一段连贯叙事 · 不分点');
+  log('现在写你的 ' + bold('开场 (第 1 轮)') + ' · 50-300 字 · 包含:');
+  log('  · 你的倾向 · 你 nagging 的点 · 想征求什么角度 · 你想听对方攻哪里');
+  log('  · 工艺人气质 · 一段连贯叙事 · 不堆 emoji / 破折号 · 不商业黑话');
   log('');
   log('写完跑 (替换 <content>):');
   log('  ' + vermilion('tinker witness publish "<content>"'));
   log('');
-  log(sepia('  publish 会自动 push 标 [决策推演] + bridge 广播到 active studio'));
+  log(sepia('  publish 会自动 push 标 [决策推演] + bridge 广播到 active studio · 对方 AI 按同一协议回'));
   log('');
 }
 
@@ -7304,7 +7307,7 @@ async function cmdWitnessPublish(opts) {
   }
 
   // voice 守门 · witness 主体给所有队友 (人) 读 · 严查
-  const witnessGate = await gateVoiceCheck(content, { profile: 'for_humans_team', force: opts.force });
+  const witnessGate = await gateVoiceCheck(content, { profile: 'for_witness', force: opts.force });
   if (!witnessGate.ok) process.exit(1);
 
   const state = await apiState(cfg);
@@ -7712,7 +7715,8 @@ function recordVoiceDecision(d) {
 // 调用方按"这段文字给谁看"选 profile
 const VOICE_PROFILES = {
   for_humans_public: { warn: 2, block: 3 }, // 公开 feed · push / ship · 严查
-  for_humans_team:   { warn: 2, block: 3 }, // 队友 + 他的 AI 一起读 · handoff -m / witness / stuck · 严查 (数据多了再调)
+  for_humans_team:   { warn: 2, block: 3 }, // 队友 + 他的 AI 一起读 · handoff -m / stuck · 严查 (数据多了再调)
+  for_witness:       { warn: 4, block: 6 }, // AI 对谈 / 决策推演 · 半公开但本就是技术论证 · 结构化语言合理 · 松一档但不关 (纯 slop 还是拦)
   for_ai:            { warn: 99, block: 99 }, // AI 给 AI · 技术词清晰反而是优势
   internal:          { warn: 99, block: 99 }, // 不发出去 · 测试 / debug
 };
@@ -7739,7 +7743,7 @@ const VOICE_PROFILE_REGISTRY = {
   handoff:          'for_humans_team',
   stuck:            'for_humans_team',
   'team-knowledge': 'for_humans_team',
-  witness:          'for_humans_team',
+  witness:          'for_witness',
   note:             'for_humans_team',
 
   // AI 给 AI · 不查 · 但显式登记 · 不让安全网误报
