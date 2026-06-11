@@ -6721,6 +6721,7 @@ async function cmdBridgeCheckInbox() {
     try {
       const cfg = loadConfig();
       if (cfg && cfg.token && cfg.serverUrl && cfg.handle) {
+        ensureNotifyDaemon(cfg); // 顺手确保后台通知器活着 · 中途来的消息也能弹桌面
         await pullBridgeMessagesForHook(cfg, recentNotis);
       }
     } catch { /* 拉失败静默 · 下次 hook 重试 */ }
@@ -7170,7 +7171,7 @@ async function cmdWitness(opts) {
 
 // 发起方起草
 async function cmdWitnessDraft(opts) {
-  const topic = (opts.text || opts.title || '').trim();
+  const topic = (opts.topic || opts.text || opts.title || '').trim();
   if (!topic) { err('用法: tinker witness draft --topic "X 要不要做"'); process.exit(1); }
   const byClaude = !!opts.byClaude;
 
@@ -8940,6 +8941,125 @@ function cmdNotifyClaude(event) {
     return;
   }
 }
+
+// =============================================
+// notify daemon · 隐形自管理的桥消息通知器
+// 队友消息到 server · 这个后台进程长轮询听 · 一到就弹桌面 (中途也能收到 · 不用开 session)
+// 职责砍到最小:只弹桌面 · 用自己的游标 · 绝不碰收件箱 / 不落地 / 不消费 (那条走 SessionStart hook)
+// 用户永远不手动开它:SessionStart hook 顺手 ensure 它活着 · 单实例 · 空闲自退
+// =============================================
+const NOTIFYD_PID_FILE = path.join(CONFIG_DIR, 'notifyd.pid');
+const NOTIFYD_CURSOR_FILE = path.join(CONFIG_DIR, 'notifyd.cursor');
+const NOTIFYD_IDLE_EXIT_MS = 6 * 60 * 60 * 1000; // 空闲 6 小时自退 · 下次 session 再起
+
+function pidAlive(pid) {
+  if (!pid) return false;
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+// SessionStart hook 调 · 没在跑就 detached 起一个 · 在跑就什么都不做
+function ensureNotifyDaemon(cfg) {
+  if (!cfg || !cfg.token || !cfg.serverUrl) return;
+  try {
+    const raw = fs.existsSync(NOTIFYD_PID_FILE) ? JSON.parse(fs.readFileSync(NOTIFYD_PID_FILE, 'utf-8')) : null;
+    if (raw && pidAlive(raw.pid)) return; // 已经有一个活着
+  } catch {}
+  try {
+    const { spawn } = require('child_process');
+    const child = spawn(process.argv[0], [process.argv[1], 'notify-daemon', 'run'], { detached: true, stdio: 'ignore' });
+    child.unref();
+  } catch {}
+}
+
+// 把一条桥消息压成一行桌面提示 · 能解就解 (拿标题) · 解不开就只报来源
+function summarizeForDesktop(msg, bridgeLib) {
+  const from = '@' + (msg.fromHandle || '?');
+  let detail = '';
+  try {
+    const dec = bridgeLib.tryDecryptWithAnyStudio(msg.payload);
+    if (dec) {
+      const obj = JSON.parse(dec.plaintext);
+      if (msg.kind === 'noti') detail = (obj.title || obj.body || '').slice(0, 60);
+      else if (msg.kind === 'file') detail = '发来 ' + ((obj.files || []).length) + ' 个文件' + (obj.message ? ' · ' + (obj.message || '').slice(0, 40) : '');
+      else if (msg.kind === 'task') detail = '发来接力包';
+    }
+  } catch {}
+  if (!detail) detail = msg.kind === 'file' ? '发来文件' : msg.kind === 'task' ? '发来接力包' : '发来一条消息';
+  return { title: 'Tinker · ' + from, body: detail };
+}
+
+async function cmdNotifyDaemon(sub) {
+  // stop · 杀掉在跑的 (调试 / 用户想关)
+  if (sub === 'stop') {
+    try {
+      const raw = JSON.parse(fs.readFileSync(NOTIFYD_PID_FILE, 'utf-8'));
+      if (pidAlive(raw.pid)) { process.kill(raw.pid); ok('停了 notify daemon (pid ' + raw.pid + ')'); }
+      else log(sepia('  没在跑'));
+      try { fs.unlinkSync(NOTIFYD_PID_FILE); } catch {}
+    } catch { log(sepia('  没在跑')); }
+    return;
+  }
+  if (sub === 'status') {
+    try {
+      const raw = JSON.parse(fs.readFileSync(NOTIFYD_PID_FILE, 'utf-8'));
+      log(pidAlive(raw.pid) ? sepia('  在跑 · pid ') + bold(raw.pid) + sepia(' · 起于 ' + new Date(raw.startedAt).toLocaleString()) : sepia('  没在跑 (有残留 pid 文件)'));
+    } catch { log(sepia('  没在跑')); }
+    return;
+  }
+
+  // run · 真正的守护循环 (detached 子进程跑这条 · stdout 已 ignore)
+  const cfg = loadConfig();
+  if (!cfg || !cfg.token || !cfg.serverUrl || !cfg.handle) return;
+
+  // 单实例锁:已有活着的就退
+  try {
+    const raw = fs.existsSync(NOTIFYD_PID_FILE) ? JSON.parse(fs.readFileSync(NOTIFYD_PID_FILE, 'utf-8')) : null;
+    if (raw && raw.pid !== process.pid && pidAlive(raw.pid)) return;
+  } catch {}
+  try { fs.writeFileSync(NOTIFYD_PID_FILE, JSON.stringify({ pid: process.pid, startedAt: Date.now() })); } catch {}
+  const cleanup = () => { try { const r = JSON.parse(fs.readFileSync(NOTIFYD_PID_FILE, 'utf-8')); if (r.pid === process.pid) fs.unlinkSync(NOTIFYD_PID_FILE); } catch {} };
+  process.on('exit', cleanup);
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+
+  const bridgeLib = require('../lib/bridge');
+
+  // 初始化游标:第一次起设到当前最大 seq · 不为历史积压狂弹 · 只通知从现在起的新消息
+  let cursor = 0;
+  try { cursor = parseInt(fs.readFileSync(NOTIFYD_CURSOR_FILE, 'utf-8').trim(), 10) || 0; } catch {}
+  if (!cursor) {
+    try {
+      const r = await fetch(cfg.serverUrl + '/api/bridge/poll?since=0', { headers: { Authorization: 'Bearer ' + cfg.token }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+      if (r.ok) { const d = await r.json(); cursor = (d.messages || []).reduce((m, x) => Math.max(m, x.seq), 0); }
+    } catch {}
+    try { fs.writeFileSync(NOTIFYD_CURSOR_FILE, String(cursor)); } catch {}
+  }
+
+  let lastActivity = Date.now();
+  let backoff = 1000;
+  while (true) {
+    if (Date.now() - lastActivity > NOTIFYD_IDLE_EXIT_MS) return; // 空闲太久自退
+    try {
+      const r = await fetch(cfg.serverUrl + '/api/bridge/poll?since=' + cursor, {
+        headers: { Authorization: 'Bearer ' + cfg.token },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(35000) : undefined,
+      });
+      if (!r.ok) { await sleepMs(backoff); backoff = Math.min(backoff * 2, 30000); continue; }
+      backoff = 1000;
+      const data = await r.json();
+      for (const msg of (data.messages || [])) {
+        cursor = Math.max(cursor, msg.seq);
+        if (msg.fromHandle === cfg.handle) continue; // 不为自己发的弹
+        fireDesktop(summarizeForDesktop(msg, bridgeLib));
+        lastActivity = Date.now();
+      }
+      try { fs.writeFileSync(NOTIFYD_CURSOR_FILE, String(cursor)); } catch {}
+    } catch (e) {
+      if (e && (e.name === 'AbortError' || (e.message || '').includes('timeout'))) continue; // 长轮询超时 · 正常 · 立刻再来
+      await sleepMs(backoff); backoff = Math.min(backoff * 2, 30000);
+    }
+  }
+}
+function sleepMs(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // v0.15 编辑/删除/建项目 · 补齐 CLI 跟 server 之间最后几个动作 gap
 // 之前 editUpdate / deleteUpdate / editMethod / addProject / editProject 只有 webapp 用
@@ -11073,6 +11193,7 @@ async function main() {
       case 'outbox': cmdOutbox(opts); break;  // v0.49 我发出去的私信
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'notify-claude': cmdNotifyClaude(args[1]); return;  // hidden · Claude Code Notification/Stop/UserPromptSubmit hook 用 · stdout 必须干净
+      case 'notify-daemon': await cmdNotifyDaemon(args[1]); return;  // hidden · 后台桥消息通知器 (run/stop/status) · SessionStart 自动 ensure
       case 'studio':
         await cmdStudio(args[1], args, opts);
         break;
@@ -11100,7 +11221,7 @@ async function main() {
     // 不在 hook / watch / check (--from-hook) / update 等后台/系统命令里显示
     // v0.36 也顺手 spawn 后台刷 cache · 这样普通用户不用 commit 也能定期 (24h TTL) 收到新版提醒
     // 之前只有 post-commit hook 触发 cmdCheck 时刷 · 不 commit 的用户永远看不到更新
-    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'notify-claude', 'situation'].includes(cmd)) {
+    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'notify-claude', 'notify-daemon', 'situation'].includes(cmd)) {
       showUpdateBannerIfNeeded();
       spawnUpdateCheckAsync();
     }
