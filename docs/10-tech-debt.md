@@ -4,6 +4,27 @@
 
 ---
 
+## ② 部署提速 · server JS 也 bind-mount (想做没做成)
+
+**问题**
+server 代码 `COPY` 进镜像 · 每次改 server 都全量 `docker compose build` (平时 1-3 分钟 · 加系统包那次 20 分钟)。webapp 已经 bind-mount 进容器 · 改了只 restart 秒级。server 想同样待遇。
+
+**为什么现在不做 (踩过一次坑)**
+2026-06-11 试过:`./server:/app/server:ro` + 在里面挂 `node_modules` 匿名卷 → Docker 报 `read-only file system` (只读父挂载里建不了子挂载点) · 容器起不来 · 生产 down 了几分钟 · 已回滚。
+
+**正确做法 (验证后再上)**
+把 node_modules 装到 `/app` (server 父目录) 而不是 `/app/server` 里:
+- Dockerfile: `COPY server/package*.json /app/` · 在 `/app` 跑 `npm ci` · node_modules 落 `/app/node_modules`
+- server 代码仍在 `/app/server` · node 靠向上查找解析模块 (walks up 到 /app/node_modules) · 不冲突
+- compose: `./server:/app/server` (rw · server 只写 /data 和 backups · 但 rw 避免子挂载点问题) · backups 用匿名卷盖回
+- CI: `server/*.js` 改 → 只 restart · `server/package*.json` / Dockerfile → rebuild + `--renew-anon-volumes` 防 node_modules 陈旧
+- **关键前提**:本地有 docker 能先验证容器起得来再上 · 别再直接推生产
+
+**什么时候做**
+本地能验证时 · 或 server 改动频繁到 1-3 分钟重建明显烦人时。现在不痛 · 不急。
+
+---
+
 ## ① `/api/state` 一把 dump 全站 (随规模恶化)
 
 **问题**
