@@ -5966,7 +5966,9 @@ function cmdOutbox(opts) {
     log(sepia('  outbox 空 · v0.49 之前发的找不回 (server poll 不返自己发的)'));
     return;
   }
-  const days = opts.daysBack || 1;
+  // 给了关键词就全量翻 (不受默认 1 天窗限制) · 按内容搜回老 handoff
+  const kw = (opts.search || (opts.positional || [])[0] || '').trim().toLowerCase();
+  const days = kw ? 3650 : (opts.daysBack || 1);
   const cutoff = Date.now() - days * 86400000;
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.jsonl')).sort().reverse();
   const entries = [];
@@ -5979,6 +5981,10 @@ function cmdOutbox(opts) {
           if (e.at < cutoff) continue;
           if (opts.toHandle && e.to !== opts.toHandle) continue;
           if (opts.kind && e.kind !== opts.kind) continue;
+          if (kw) {
+            const hay = [e.message, e.title, e.body, (e.files || []).join(' '), e.to, e.toStudio].join(' ').toLowerCase();
+            if (!hay.includes(kw)) continue;
+          }
           entries.push(e);
         } catch {}
       }
@@ -5987,7 +5993,7 @@ function cmdOutbox(opts) {
   entries.sort((a, b) => b.at - a.at);
   if (opts.json) { outputJson({ ok: true, entries }); return; }
   log('');
-  log(bold('  outbox · 我发出去的私信 (近 ' + days + ' 天)'));
+  log(bold('  outbox · 我发出去的私信' + (kw ? ' · 搜「' + kw + '」(全量)' : ' (近 ' + days + ' 天)')));
   log('');
   if (entries.length === 0) {
     log(sepia('  空 · 范围内没发过 (或者 v0.49 之前 · outbox 没装)'));
@@ -6280,9 +6286,18 @@ async function cmdHandoff(opts) {
   const to = opts.toHandle || null;
   const useStudio = !to;
 
-  let situationId = opts.situation || dossierLib.pickActiveSituationId();
-  if (!situationId) {
+  // --no-situation 明确不带现场 · 否则 --situation 指定 · 都没有就自动挑最近 active 的
+  let situationId = null;
+  if (!opts.noSituation) situationId = opts.situation || dossierLib.pickActiveSituationId();
+  if (!situationId && !opts.noSituation) {
     log(sepia('  没找到 active situation · 不带 situation 也能发 · 接收方只看 git/voice'));
+  } else if (situationId && !opts.situation) {
+    // 自动挑的现场可能跟你这次 handoff 的主题无关 (pickActiveSituationId 只看"最近未解决")
+    // 历史坑:CC-ENC 那次自动挂上了无关的 deepseek 现场 · 静默关联用户根本不知道
+    // 现在把挑中的 topic 显出来 · 挂错了你能当场看见 · 加 --no-situation 重发
+    let topic = '';
+    try { topic = (JSON.parse(fs.readFileSync(path.join(dossierLib.STRUGGLES_DIR, situationId + '.json'), 'utf-8')).topic || '').slice(0, 60); } catch {}
+    log(sepia('  自动带上现场: ') + bold(topic || situationId) + sepia('  (跟这次无关就加 --no-situation 重发)'));
   }
 
   const dossier = dossierLib.packDossier({ situationId, message, cwd: process.cwd() });
@@ -10368,7 +10383,8 @@ function help() {
   log('  ' + vermilion('tinker studio list / info <slug> / leave <slug>') + sepia('  其余操作 · 跑 tinker studio help 看全'));
   log('');
   log(sepia('  ') + vermilion('接力 · 队友 AI 异步往返'));
-  log('  ' + vermilion('tinker handoff -m "..." [-t @<who>]') + sepia('   把当前现场打包加密发给队友 · 带 git diff + voice + situation'));
+  log('  ' + vermilion('tinker handoff -m "..." [-t @<who>] [--no-situation]') + sepia('  打包现场发队友 · 自动挑的现场会显示 · 不对加 --no-situation'));
+  log('  ' + vermilion('tinker outbox [关键词] [--days N]') + sepia('   翻我发过的私信 / handoff · 给关键词全量搜回 (借图片字段那种老上下文)'));
   log('  ' + vermilion('tinker handoff reply <msgId> [--by-claude]') + sepia('  接力方回稿给原发起方 (接到哪步 · 留了什么)'));
   log('  ' + vermilion('tinker handoff reply <msgId> publish "<content>"') + sepia(' 落地回稿 + bridge 回投递 + 自动标 inbox 完成'));
   log('  ' + vermilion('tinker inbox') + sepia('                        看收到的 handoff task · tinker inbox <id> 看详情 · tinker inbox done <id> 标完工'));
@@ -10538,6 +10554,9 @@ function parseArgs(args) {
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
     else if (a.startsWith('--situation=')) opts.situation = a.slice('--situation='.length);
+    else if (a === '--no-situation') opts.noSituation = true;
+    else if (a === '--search') opts.search = args[++i];
+    else if (a.startsWith('--search=')) opts.search = a.slice('--search='.length);
     else if (a === '--tag') {
       // v0.84 支持多次 · 收集 · contribute 时一并发上
       const v = (args[++i] || '').trim();
