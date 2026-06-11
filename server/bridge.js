@@ -49,12 +49,6 @@ function bridgeSend({ to, toStudio, kind, payload }, { currentUserId }) {
   else if (to) notifyWaiters('handle:' + to);
   else notifyWaiters('*');
 
-  // 推到收件人手机 · fire-and-forget · 不阻塞发消息 · 失败静默
-  // (收件人本地不用挂 watch · server 直接推 Bark)
-  try {
-    require('./push').fanoutMessagePush({ to, toStudio, fromHandle: fromRow.handle, fromUserId: currentUserId, kind });
-  } catch { /* 推送出问题不挡核心发消息 */ }
-
   return { id, seq: result.lastInsertRowid, createdAt };
 }
 

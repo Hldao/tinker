@@ -8732,33 +8732,8 @@ async function cmdNoteDone(arg, opts) {
 }
 
 // =============================================
-// tinker notify · 个人推送通道 (solo-native)
-// 不依赖工作室 · 发送方本地直推到你自己的手机 (Bark) / 桌面 (Mac)
-// 场景:AI 跑完长任务 · 或你离开电脑时想被叫回 → tinker notify -m "..."
+// 桌面通知 · 给 Claude Code hook (要权限 / 长任务跑完) 弹本地横幅用
 // =============================================
-function getNotifyTargets(cfg) {
-  return (cfg && cfg.notify && Array.isArray(cfg.notify.targets)) ? cfg.notify.targets : [];
-}
-
-// Bark: POST 到 base url (含 device key) · JSON body
-async function firePushBark(target, { title, body, level }) {
-  const payload = { title: title || 'Tinker', body: body || '', group: 'Tinker' };
-  payload.sound = level === 'urgent' ? 'alarm' : 'birdsong';
-  if (level === 'urgent') payload.level = 'timeSensitive';
-  try {
-    const res = await fetch(target.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(payload),
-    });
-    const j = await res.json().catch(() => null);
-    if (res.ok && (!j || j.code === undefined || j.code === 200)) return { ok: true };
-    return { ok: false, error: (j && j.message) || ('HTTP ' + res.status) };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-}
-
 // Mac 桌面通知 · 优先 terminal-notifier (可靠 · 能点 · 独立 app 身份)
 // 没装就退回 osascript (零依赖 · 但归在"脚本编辑器"名下 · 权限没开会静默丢)
 let _tnPath; // undefined=没查过 · null=没装 · string=路径
@@ -8806,27 +8781,6 @@ function fireDesktop({ title, body }) {
   }
 }
 
-async function sendNotify(cfg, { title, body, level }) {
-  const targets = getNotifyTargets(cfg);
-  const results = [];
-  for (const t of targets) {
-    let r;
-    if (t.type === 'bark') r = await firePushBark(t, { title, body, level });
-    else if (t.type === 'mac' || t.type === 'desktop') r = fireDesktop({ title, body });
-    else r = { ok: false, error: '未知类型 ' + t.type };
-    results.push({ target: t.label || t.type, type: t.type, ok: r.ok, error: r.error, via: r.via });
-  }
-  return results;
-}
-
-// 走了 osascript 兜底 (没装 terminal-notifier) · 提示一下 · macOS 这条横幅可能静默丢
-function maybeMacHint(results) {
-  if (process.platform !== 'darwin') return;
-  if (!results.some(r => r.type === 'mac' && r.via === 'osascript')) return;
-  log(sepia('  Mac 横幅没看到? osascript 这条归在"脚本编辑器"名下 · 权限没开会静默丢'));
-  log(sepia('  最稳: ') + vermilion('brew install terminal-notifier') + sepia(' · 装完自动优先用它'));
-}
-
 // hidden · Claude Code hook 调 · 在"要权限 / 长任务跑完"时弹本地桌面通知
 // 不碰 notify 目标配置 · 直接弹 OS 横幅 (跨平台) · 桌面才是 vibe coding 主场
 // 关键:这条命令 stdout 必须干净 (Claude 会把 hook stdout 当决策 JSON 解析)
@@ -8866,155 +8820,6 @@ function cmdNotifyClaude(event) {
       fireDesktop({ title: 'Claude Code', body: '跑完了 · 用了 ' + dur + ' · 回来看看' });
     }
     return;
-  }
-}
-
-function notifyHelp() {
-  log('');
-  log(bold('  tinker notify · 个人推送通道 (一个人也能用 · 不用工作室)'));
-  log('');
-  log('  ' + vermilion('tinker notify add bark <你的 bark url>') + sepia('      登记 iPhone (Bark app 里复制 · 形如 https://api.day.app/xxxx)'));
-  log('  ' + vermilion('tinker notify add mac') + sepia('                      开 Mac 桌面横幅'));
-  log('  ' + vermilion('tinker notify -m "build 完了 · 3 个测试挂了"') + sepia('   立刻推给你所有目标 (AI 跑完长任务喊你用)'));
-  log('  ' + vermilion('tinker notify list / remove bark|mac / test'));
-  log('');
-  log(sepia('  两条路 · 配一次就好:'));
-  log(sepia('   · bark (手机) → 也登记到 server · 别人经桥发你消息时 server 直接推 · 你本地不用挂 watch'));
-  log(sepia('   · mac (桌面) → 只在本地 · 给"你的 AI 在这台机器跑完"弹横幅用'));
-  log(sepia('  给 AI:长任务跑完 / 用户离开时想被叫回 · 直接跑 ') + vermilion('tinker notify -m "..."'));
-  log('');
-}
-
-async function cmdNotify(subcmd, args, opts) {
-  const cfg = loadConfig() || {};
-  const MANAGE = new Set(['add', 'remove', 'rm', 'list', 'ls', 'test', 'help']);
-
-  // 发送模式:subcmd 不是管理子命令 (含没给 subcmd 但有 -m)
-  if (!subcmd || !MANAGE.has(subcmd)) {
-    const body = (opts.text || (subcmd && !MANAGE.has(subcmd) ? subcmd : '') || '').trim();
-    const title = (opts.title || 'Tinker').trim();
-    const level = (opts.level || 'info').toLowerCase();
-    const targets = getNotifyTargets(cfg);
-    if (targets.length === 0) {
-      if (opts.json) return errJson('还没登记推送目标 · 先 tinker notify add bark <url> / add mac', 'NO_TARGETS');
-      err('还没登记推送目标');
-      log(sepia('  先跑 ') + vermilion('tinker notify add bark <你的 bark url>') + sepia(' 或 ') + vermilion('tinker notify add mac'));
-      process.exit(1);
-    }
-    if (!body) {
-      if (opts.json) return errJson('要发什么? 用 -m "..."', 'NO_BODY');
-      err('要发什么? ' + vermilion('tinker notify -m "build 完了"'));
-      process.exit(1);
-    }
-    const results = await sendNotify(cfg, { title, body, level });
-    const okCount = results.filter(r => r.ok).length;
-    if (opts.json) return outputJson({ ok: okCount > 0, sent: okCount, total: results.length, results });
-    results.forEach(r => log('  ' + (r.ok ? sepia('✓ ') : vermilion('✗ ')) + (r.target) + (r.error ? sepia(' · ' + r.error) : '')));
-    maybeMacHint(results);
-    if (okCount > 0) ok('推了 ' + okCount + '/' + results.length); else { err('全推失败'); process.exit(1); }
-    return;
-  }
-
-  switch (subcmd) {
-    case 'help':
-      notifyHelp();
-      return;
-    case 'list': case 'ls': {
-      const targets = getNotifyTargets(cfg);
-      if (opts.json) return outputJson({ ok: true, targets });
-      if (targets.length === 0) { log(sepia('  还没登记推送目标 · ') + vermilion('tinker notify add bark <url>')); return; }
-      log('');
-      log(sepia('  已登记的推送目标:'));
-      targets.forEach(t => {
-        if (t.type === 'bark') log('  ' + bold('bark') + sepia(' · ' + (t.label || '') + ' · ' + t.url));
-        else if (t.type === 'mac') log('  ' + bold('mac') + sepia(' · 桌面通知'));
-        else log('  ' + bold(t.type));
-      });
-      log('');
-      return;
-    }
-    case 'add': {
-      const kind = args[2];
-      cfg.notify = cfg.notify || { targets: [] };
-      if (kind === 'bark') {
-        const url = (args[3] || '').trim();
-        if (!/^https?:\/\//.test(url)) {
-          if (opts.json) return errJson('用法: tinker notify add bark <https://api.day.app/你的key>', 'BAD_URL');
-          err('用法: ' + vermilion('tinker notify add bark <https://api.day.app/你的key>'));
-          log(sepia('  在 iPhone 装 Bark app · 首页那条 url 就是 (含你的 key)'));
-          process.exit(1);
-        }
-        const label = opts.label || '我的 iPhone';
-        cfg.notify.targets = getNotifyTargets(cfg).filter(t => !(t.type === 'bark' && t.url === url));
-        cfg.notify.targets.push({ type: 'bark', url, label });
-        saveConfig(cfg);
-        // 同步登记到 server · 让别人经桥发消息时 server 直接推你手机 (不用本地挂 watch)
-        let serverNote = ' · 只存了本地';
-        if (cfg.token) {
-          try {
-            const r = await apiAction(cfg, 'registerPushTarget', { type: 'bark', url, label });
-            serverNote = (r && r.ok)
-              ? ' · 已登记到 server · 别人经桥发你消息也会推手机'
-              : ' · server 没收 (' + ((r && r.error) || '?') + ') · 本地已存';
-          } catch { serverNote = ' · server 没连上 · 本地已存'; }
-        } else {
-          serverNote = ' · 没 token · 只存本地 · server 推要先 tinker login';
-        }
-        if (opts.json) return outputJson({ ok: true, added: 'bark', server: serverNote.trim() });
-        ok('登记了 Bark · ' + label + sepia(serverNote));
-        log(sepia('  试一条: ') + vermilion('tinker notify test'));
-        return;
-      }
-      if (kind === 'mac') {
-        if (process.platform !== 'darwin') {
-          if (opts.json) return errJson('当前不是 macOS', 'NOT_MAC');
-          err('当前不是 macOS · Mac 桌面通知只在 mac 上能用'); process.exit(1);
-        }
-        if (!getNotifyTargets(cfg).some(t => t.type === 'mac')) cfg.notify.targets.push({ type: 'mac' });
-        saveConfig(cfg);
-        if (opts.json) return outputJson({ ok: true, added: 'mac' });
-        ok('开了 Mac 桌面通知');
-        log(sepia('  试一条: ') + vermilion('tinker notify test'));
-        return;
-      }
-      if (opts.json) return errJson('用法: tinker notify add bark <url> | add mac', 'BAD_ADD');
-      err('用法: ' + vermilion('tinker notify add bark <url>') + sepia(' 或 ') + vermilion('tinker notify add mac'));
-      process.exit(1);
-      return;
-    }
-    case 'remove': case 'rm': {
-      const which = (args[2] || '').trim();
-      const before = getNotifyTargets(cfg).length;
-      if (!which) {
-        if (opts.json) return errJson('用法: tinker notify remove bark|mac', 'BAD_REMOVE');
-        err('用法: ' + vermilion('tinker notify remove bark|mac')); process.exit(1);
-      }
-      cfg.notify = cfg.notify || { targets: [] };
-      cfg.notify.targets = getNotifyTargets(cfg).filter(t => t.type !== which);
-      saveConfig(cfg);
-      // bark 同步从 server 删 (mac 本来就只在本地)
-      if (which === 'bark' && cfg.token) {
-        try { await apiAction(cfg, 'removePushTarget', { type: 'bark' }); } catch {}
-      }
-      const removed = before - cfg.notify.targets.length;
-      if (opts.json) return outputJson({ ok: true, removed });
-      if (removed > 0) ok('去掉了 ' + removed + ' 个 ' + which + ' 目标'); else log(sepia('  没有 ' + which + ' 目标可去'));
-      return;
-    }
-    case 'test': {
-      const targets = getNotifyTargets(cfg);
-      if (targets.length === 0) {
-        if (opts.json) return errJson('还没登记推送目标', 'NO_TARGETS');
-        err('还没登记推送目标 · 先 ' + vermilion('tinker notify add bark <url>')); process.exit(1);
-      }
-      const results = await sendNotify(cfg, { title: 'Tinker', body: '这是一条测试 · 看到就说明通了', level: 'info' });
-      const okCount = results.filter(r => r.ok).length;
-      if (opts.json) return outputJson({ ok: okCount > 0, sent: okCount, total: results.length, results });
-      results.forEach(r => log('  ' + (r.ok ? sepia('✓ ') : vermilion('✗ ')) + r.target + (r.error ? sepia(' · ' + r.error) : '')));
-      maybeMacHint(results);
-      if (okCount > 0) ok('测试推了 ' + okCount + '/' + results.length + ' · 看看手机/桌面'); else { err('全推失败'); process.exit(1); }
-      return;
-    }
   }
 }
 
@@ -10438,10 +10243,6 @@ function help() {
   log(sepia('                                       挂上你做的延伸版 · 因 ta 启发'));
   log('  ' + vermilion('tinker tinkered <projectId> --undo') + sepia('  撤回延伸版'));
   log('');
-  log(sepia('  ') + vermilion('个人推送 · 一个人也能用 (不靠工作室)'));
-  log('  ' + vermilion('tinker notify -m "..."') + sepia('              推到你自己的手机 (Bark) / 桌面 (Mac) · AI 跑完长任务喊你'));
-  log('  ' + vermilion('tinker notify add bark <url> / add mac') + sepia('  登记目标 · ') + vermilion('tinker notify test') + sepia(' 验一条'));
-  log('');
   log(sepia('  ') + vermilion('编辑 / 删除 / 建项目'));
   log('  ' + vermilion('tinker edit <updateId> -m "..."') + sepia('     改一条 update [--scenario "..."]'));
   log('  ' + vermilion('tinker delete <updateId>') + sepia('            删一条 update · TTY confirm · 非 TTY 加 --yes'));
@@ -10589,10 +10390,6 @@ function parseArgs(args) {
     else if (a.startsWith('--scenario=')) opts.scenario = a.slice('--scenario='.length);
     else if (a === '--title') opts.title = args[++i];
     else if (a.startsWith('--title=')) opts.title = a.slice('--title='.length);
-    else if (a === '--label') opts.label = args[++i];
-    else if (a.startsWith('--label=')) opts.label = a.slice('--label='.length);
-    else if (a === '--level') opts.level = args[++i];
-    else if (a.startsWith('--level=')) opts.level = a.slice('--level='.length);
     else if (a === '--topic') opts.topic = args[++i];
     else if (a.startsWith('--topic=')) opts.topic = a.slice('--topic='.length);
     else if (a === '--update') opts.update = true;
@@ -10991,13 +10788,6 @@ function cmdSchema(opts = {}) {
         { arg: '[编号|noteId]', purpose: '无参列待处理便签 · 给编号或 n- 开头的 id 标处理' },
         { flag: '--json', purpose: 'machine-readable 输出' },
       ], jsonOutput: true, example: 'tinker note-done 1' },
-      { name: 'notify', purpose: '个人推送 · 推到用户自己的手机(Bark)/桌面(Mac) · 不靠工作室 · 长任务跑完 / 用户离开想被叫回时主动调', args: [
-        { flag: '-m / --message', purpose: '推送正文 · 直接 tinker notify -m "build 完了 · 3 个测试挂了"' },
-        { flag: '--title', purpose: '标题 · 默认 Tinker' },
-        { flag: '--level urgent', purpose: '提升优先级 (Bark timeSensitive + alarm 声)' },
-        { arg: 'add bark <url> | add mac | list | remove | test', purpose: '管理目标 (用户配一次 · 之后 AI 只管发)' },
-        { flag: '--json', purpose: 'machine-readable 输出' },
-      ], jsonOutput: true, example: 'tinker notify -m "agent 跑完了 · 看一眼"' },
     ],
     pendingFile: path.join(CONFIG_DIR, 'pending.json'),
     promptStateFile: path.join(CONFIG_DIR, 'prompt-state.json'),
@@ -11089,7 +10879,6 @@ async function main() {
       case 'tinkered': await cmdTinkered(args[1], opts); break;
       case 'used': await cmdUsed(args[1], opts); break;
       case 'note-done': await cmdNoteDone(args[1], opts); break;
-      case 'notify': await cmdNotify(args[1], args, opts); break;
       case 'edit': await cmdEditUpdate(args[1], opts); break;
       case 'delete': await cmdDeleteUpdate(args[1], opts); break;
       case 'edit-method': await cmdEditMethod(args[1], opts); break;
