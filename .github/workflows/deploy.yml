@@ -30,9 +30,15 @@ jobs:
           NEEDS_REBUILD=false
           for f in $CHANGED; do
             case "$f" in
+              # 依赖 / 镜像 / 编排变了 · 必须重建
+              server/package*.json) NEEDS_REBUILD=true ;;
+              Dockerfile|docker-compose.yml|docker-compose.*.yml) NEEDS_REBUILD=true ;;
+              # 这些 bind-mount 进容器 · 改了只 restart 就能生效 (秒级)
               webapp/*) ;;
+              server/*) ;;
               docs/*) ;;
               README.md|*.md) ;;
+              # 其它 (deploy 脚本 / CI 自身等) · 保守起见重建
               *) NEEDS_REBUILD=true ;;
             esac
           done
@@ -75,10 +81,10 @@ jobs:
             if [ "${{ steps.check.outputs.needs_rebuild }}" = "true" ]; then
               echo "--- 3. 重新打包 docker 镜像 ---"
               docker compose build
-              echo "--- 4. 启动新容器 ---"
-              docker compose up -d
+              echo "--- 4. 启动新容器 (--renew-anon-volumes 刷新匿名卷里的 node_modules · 防依赖陈旧) ---"
+              docker compose up -d --force-recreate --renew-anon-volumes
             else
-              echo "--- 3. 只重启容器 (webapp 走 volume 挂载) ---"
+              echo "--- 3. 只重启容器 (webapp + server JS 走 volume 挂载 · restart 即生效) ---"
               docker compose restart tinker
             fi
 

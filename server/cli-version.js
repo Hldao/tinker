@@ -46,8 +46,10 @@ function getCliVersion(since) {
   const latest = commits[0];
   const base = { available: true, latestSha: latest.sha, latestMsg: latest.title, total: commits.length };
   if (!since) return base;
-  if (since === latest.sha) return { ...base, behindBy: 0, recentCommits: [] };
-  const idx = commits.findIndex(c => c.sha === since);
+  // 兼容完整 sha 和短 sha (前缀匹配) · CLI 发的是完整 sha · 但手测/老客户端可能给短的
+  const matches = (full) => full === since || (since.length >= 7 && full.startsWith(since));
+  if (matches(latest.sha)) return { ...base, behindBy: 0, recentCommits: [] };
+  const idx = commits.findIndex(c => matches(c.sha));
   if (idx === -1) {
     return { ...base, behindBy: commits.length, windowExceeded: true, recentCommits: commits.slice(0, 5).map(c => c.title) };
   }
