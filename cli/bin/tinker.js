@@ -2318,11 +2318,13 @@ async function cmdClaudeHookInstall(opts = {}) {
   settings.hooks.SessionStart = settings.hooks.SessionStart || [];
   settings.hooks.SessionEnd = settings.hooks.SessionEnd || [];
   settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit || [];
+  settings.hooks.Notification = settings.hooks.Notification || [];
+  settings.hooks.Stop = settings.hooks.Stop || [];
 
   // --clean · 先把历史装过的 tinker hook 全清掉 · 再下面正常装一份新的
   // 修历史 install bug 留下的重复 entry · 不影响用户自己装的 hook
   if (opts.clean) {
-    for (const lifecycle of ['SessionStart', 'SessionEnd', 'UserPromptSubmit']) {
+    for (const lifecycle of ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'Notification', 'Stop']) {
       const arr = settings.hooks[lifecycle] || [];
       settings.hooks[lifecycle] = arr
         .map(entry => {
@@ -2364,7 +2366,14 @@ async function cmdClaudeHookInstall(opts = {}) {
 
   // v0.17 全局 UserPromptSubmit (无 matcher) · 每次用户 prompt 都 check pending reminders
   // post-commit hook 触发的 reminder 没人处理时 · 这里会注入 AI context · 让 AI 主动汇报
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, null, 'tinker pending --check 2>/dev/null || true', 'pending-check');
+  // 顺手 notify-claude prompt 记这轮开始时间 (给 Stop 算耗时 · 只有长任务才弹通知) · 它 stdout 干净不污染 pending 注入
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, null, 'tinker notify-claude prompt 2>/dev/null; tinker pending --check 2>/dev/null || true', 'pending-check');
+
+  // 桌面通知 · Claude Code 要你确认权限 / 等你输入时弹 (matcher 限定 · 不噪)
+  installClaudeHookEntry(settings.hooks.Notification, 'permission_prompt', 'tinker notify-claude notification 2>/dev/null || true', 'notify-permission');
+  installClaudeHookEntry(settings.hooks.Notification, 'idle_prompt', 'tinker notify-claude notification 2>/dev/null || true', 'notify-idle');
+  // 长任务跑完弹 · Stop 每轮都触发 · 但只有这轮超 60s 才弹 (notify-claude 内部判耗时)
+  installClaudeHookEntry(settings.hooks.Stop, null, 'tinker notify-claude stop 2>/dev/null || true', 'notify-done');
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
   log('');
@@ -2382,7 +2391,11 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('    UserPromptSubmit ship             · 说完工 / 上线类的话'));
   log(sepia('    UserPromptSubmit handoff          · 说接力 / 交接给类的话 · 自动跑 tinker handoff'));
   log(sepia('    UserPromptSubmit invite           · 说邀请加入类的话 · 自动跑 tinker studio invite'));
+  log(sepia('    Notification permission_prompt    · Claude Code 要你确认权限 · 弹桌面通知'));
+  log(sepia('    Notification idle_prompt          · Claude Code 在等你输入 · 弹桌面通知'));
+  log(sepia('    Stop notify-done                  · 长任务 (超 60s) 跑完 · 弹桌面通知'));
   log(sepia('  matcher 命中 → maybe-X 静默判断 → 输出 reminder 注入 AI 上下文 → AI 看上下文决定是否提醒'));
+  log(sepia('  桌面通知走系统自带 (Mac osascript / Win 气泡 / Linux notify-send) · Mac 装了 terminal-notifier 更稳'));
   log('');
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-claude'));
 }
@@ -2423,21 +2436,21 @@ function cmdClaudeHookUninstall() {
   catch { err('settings.json 解析失败 · 手动看一下'); process.exit(1); }
 
   const before = JSON.stringify(settings);
-  // 卸 SessionStart compact 跟 SessionEnd 两套
-  ['SessionStart', 'SessionEnd'].forEach(evt => {
+  // 卸所有 lifecycle 里 tinker 自己装的 hook (命令含 "tinker ") · 别人装的不动
+  for (const evt of ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'Notification', 'Stop']) {
     const list = (settings.hooks && settings.hooks[evt]) || [];
     for (let i = list.length - 1; i >= 0; i--) {
-      list[i].hooks = (list[i].hooks || []).filter(h => !(h.command || '').includes('tinker situation'));
+      list[i].hooks = (list[i].hooks || []).filter(h => !/\btinker\s/.test(h.command || ''));
       if (list[i].hooks.length === 0) list.splice(i, 1);
     }
-  });
+  }
 
   if (JSON.stringify(settings) === before) {
     log(sepia('  没找到 Tinker hook · 没动'));
     return;
   }
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-  ok('Claude Code hooks 删了 (SessionStart compact + SessionEnd)');
+  ok('Claude Code hooks 删了 (所有 tinker hook · 含桌面通知)');
 }
 
 function cmdHookUninstall() {
@@ -8758,19 +8771,36 @@ function macNotifierPath() {
   } catch { _tnPath = null; }
   return _tnPath;
 }
-function firePushMac({ title, body }) {
-  if (process.platform !== 'darwin') return { ok: false, error: '当前不是 macOS' };
+// 跨平台桌面通知 · Mac / Windows / Linux 都尽量用系统自带 · 不强制装东西
+function fireDesktop({ title, body }) {
   const cp = require('child_process');
-  const tn = macNotifierPath();
+  const t = title || 'Tinker';
+  const b = body || '';
   try {
-    if (tn) {
-      cp.execFileSync(tn, ['-title', title || 'Tinker', '-message', body || '', '-group', 'tinker', '-sound', 'Glass']);
-      return { ok: true, via: 'terminal-notifier' };
+    if (process.platform === 'darwin') {
+      const tn = macNotifierPath();
+      if (tn) {
+        cp.execFileSync(tn, ['-title', t, '-message', b, '-group', 'tinker', '-sound', 'Glass']);
+        return { ok: true, via: 'terminal-notifier' };
+      }
+      const esc = (s) => String(s || '').replace(/[\\"]/g, '\\$&').replace(/[\r\n]+/g, ' ');
+      cp.execFileSync('osascript', ['-e', `display notification "${esc(b)}" with title "${esc(t)}" sound name "Glass"`]);
+      return { ok: true, via: 'osascript' };
     }
-    const esc = (s) => String(s || '').replace(/[\\"]/g, '\\$&').replace(/[\r\n]+/g, ' ');
-    const script = `display notification "${esc(body)}" with title "${esc(title || 'Tinker')}" sound name "Glass"`;
-    cp.execFileSync('osascript', ['-e', script]);
-    return { ok: true, via: 'osascript' };
+    if (process.platform === 'win32') {
+      // Windows 自带 .NET · NotifyIcon 气泡 · 不用装模块 (BurntToast 那种)
+      const ps = (s) => "'" + String(s || '').replace(/'/g, "''").replace(/[\r\n]+/g, ' ') + "'";
+      const script = 'Add-Type -AssemblyName System.Windows.Forms; ' +
+        '$n=New-Object System.Windows.Forms.NotifyIcon; ' +
+        '$n.Icon=[System.Drawing.SystemIcons]::Information; $n.Visible=$true; ' +
+        '$n.ShowBalloonTip(6000, ' + ps(t) + ', ' + ps(b) + ', [System.Windows.Forms.ToolTipIcon]::Info); ' +
+        'Start-Sleep -Milliseconds 6500; $n.Dispose()';
+      cp.execFileSync('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', script], { windowsHide: true });
+      return { ok: true, via: 'powershell' };
+    }
+    // linux · notify-send (libnotify · 桌面发行版基本自带)
+    cp.execFileSync('notify-send', [t, b]);
+    return { ok: true, via: 'notify-send' };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -8782,7 +8812,7 @@ async function sendNotify(cfg, { title, body, level }) {
   for (const t of targets) {
     let r;
     if (t.type === 'bark') r = await firePushBark(t, { title, body, level });
-    else if (t.type === 'mac') r = firePushMac({ title, body });
+    else if (t.type === 'mac' || t.type === 'desktop') r = fireDesktop({ title, body });
     else r = { ok: false, error: '未知类型 ' + t.type };
     results.push({ target: t.label || t.type, type: t.type, ok: r.ok, error: r.error, via: r.via });
   }
@@ -8795,6 +8825,48 @@ function maybeMacHint(results) {
   if (!results.some(r => r.type === 'mac' && r.via === 'osascript')) return;
   log(sepia('  Mac 横幅没看到? osascript 这条归在"脚本编辑器"名下 · 权限没开会静默丢'));
   log(sepia('  最稳: ') + vermilion('brew install terminal-notifier') + sepia(' · 装完自动优先用它'));
+}
+
+// hidden · Claude Code hook 调 · 在"要权限 / 长任务跑完"时弹本地桌面通知
+// 不碰 notify 目标配置 · 直接弹 OS 横幅 (跨平台) · 桌面才是 vibe coding 主场
+// 关键:这条命令 stdout 必须干净 (Claude 会把 hook stdout 当决策 JSON 解析)
+const CLAUDE_TURN_DIR = path.join(CONFIG_DIR, 'claude-turns');
+const STOP_NOTIFY_THRESHOLD_MS = 60 * 1000; // 长任务门槛 · 短回复不弹
+
+function readHookStdin() {
+  if (process.stdin.isTTY) return {};
+  try { return JSON.parse(fs.readFileSync(0, 'utf-8')); } catch { return {}; }
+}
+
+function cmdNotifyClaude(event) {
+  const input = readHookStdin();
+  const sid = String(input.session_id || 'default').replace(/[^\w.-]/g, '_');
+  const turnFile = path.join(CLAUDE_TURN_DIR, sid);
+
+  if (event === 'prompt') {
+    // 记这轮开始时间 · 给 stop 算耗时用
+    try { fs.mkdirSync(CLAUDE_TURN_DIR, { recursive: true }); fs.writeFileSync(turnFile, String(Date.now())); } catch {}
+    return;
+  }
+  if (event === 'notification') {
+    const msg = (input.message || '').trim();
+    const ntype = input.notification_type || '';
+    const body = msg || (ntype === 'permission_prompt' ? '要你确认权限' : '在等你');
+    fireDesktop({ title: 'Claude Code', body });
+    return;
+  }
+  if (event === 'stop') {
+    let started = 0;
+    try { started = parseInt(fs.readFileSync(turnFile, 'utf-8'), 10) || 0; } catch {}
+    try { fs.unlinkSync(turnFile); } catch {}
+    const elapsed = started ? Date.now() - started : 0;
+    if (elapsed >= STOP_NOTIFY_THRESHOLD_MS) {
+      const secs = Math.round(elapsed / 1000);
+      const dur = secs >= 60 ? Math.round(secs / 60) + ' 分钟' : secs + ' 秒';
+      fireDesktop({ title: 'Claude Code', body: '跑完了 · 用了 ' + dur + ' · 回来看看' });
+    }
+    return;
+  }
 }
 
 function notifyHelp() {
@@ -11073,6 +11145,7 @@ async function main() {
       case 'inbox': await cmdInbox(opts); break;
       case 'outbox': cmdOutbox(opts); break;  // v0.49 我发出去的私信
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
+      case 'notify-claude': cmdNotifyClaude(args[1]); return;  // hidden · Claude Code Notification/Stop/UserPromptSubmit hook 用 · stdout 必须干净
       case 'studio':
         await cmdStudio(args[1], args, opts);
         break;
@@ -11101,7 +11174,7 @@ async function main() {
     // 不在 hook / watch / check (--from-hook) / update 等后台/系统命令里显示
     // v0.36 也顺手 spawn 后台刷 cache · 这样普通用户不用 commit 也能定期 (24h TTL) 收到新版提醒
     // 之前只有 post-commit hook 触发 cmdCheck 时刷 · 不 commit 的用户永远看不到更新
-    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'situation'].includes(cmd)) {
+    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'notify-claude', 'situation'].includes(cmd)) {
       showUpdateBannerIfNeeded();
       spawnUpdateCheckAsync();
     }
