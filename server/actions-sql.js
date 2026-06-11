@@ -637,6 +637,36 @@ function syncUpdateToFts(updateId) {
 // v0.81 methods 是 first-class entity · 不再是 updates 上的 flag
 // 兼容路径: 旧 markAsMethod / unmarkMethod 仍可用 · 内部 proxy 到 new methods table
 //
+// v0.85 方法领域 · 给方法库一条"按手艺领域"的轴 (产品/设计/数据与安全/工程/AI协作)
+// 跟现有自由 tag (#supabase #auth · "用什么") 互补 · 这条是"哪门手艺 · 适合哪个阶段"
+// 固定词表 = 不漂 · 让"所有 ui 类方法"能被可靠捞出来
+// 关键词命中打分 · 命中 >= 2 才打 (有把握) · 否则留空不硬塞 · 人随时可手动改
+//
+// 关键词以中文为主 (作者写中文) · 英文只收长且不会撞词的 (docker/sqlite/figma 等)
+// 短英文 (ui/ci/ux) 会在 "guide"/"decision" 里子串误命中 · 不收
+const DISCIPLINES = [
+  { tag: '产品', kw: ['产品', '需求', '用户', '功能', '定位', '迭代', '场景', '用例', '增长', '留存', '转化', '商业', '定价', '付费', '市场', '冷启动', '流程', '运营'] },
+  { tag: '设计', kw: ['设计', '样式', '排版', '视觉', '界面', '布局', '配色', '按钮', '字体', '颜色', '动效', '交互', '原型', '间距', '响应式', '圆角', '阴影', 'figma'] },
+  { tag: '数据与安全', kw: ['安全', '加密', '鉴权', '认证', '密钥', '权限', '注入', '备份', '隐私', '脱敏', '数据库', '迁移', '索引', '备案', '登录', 'sqlite', 'cookie'] },
+  { tag: '工程', kw: ['部署', '构建', '打包', '重构', '性能', '缓存', '接口', '后端', '服务器', '报错', '调试', '测试', '日志', '监控', '并发', '脚本', '回滚', 'docker'] },
+  { tag: 'AI协作', kw: ['提示词', '模型', '上下文', '幻觉', '起草', '口吻', '智能体', 'claude', 'cursor', 'prompt', 'agent', 'llm'] },
+];
+const DISCIPLINE_SET = new Set(DISCIPLINES.map(d => d.tag));
+
+function suggestDiscipline(text, scenario) {
+  const hay = ((scenario || '') + ' ' + (text || '')).toLowerCase();
+  let best = null, bestScore = 0;
+  for (const d of DISCIPLINES) {
+    let s = 0;
+    for (const k of d.kw) { if (hay.includes(k.toLowerCase())) s++; }
+    if (s > bestScore) { bestScore = s; best = d.tag; }
+  }
+  return bestScore >= 2 ? best : null;  // 没把握 (< 2 命中) 不打
+}
+function tagsHaveDiscipline(arr) {
+  return Array.isArray(arr) && arr.some(t => DISCIPLINE_SET.has(String(t).replace(/^#+/, '').trim()));
+}
+
 // v0.84 tag 规范化 helper · 用户输入清理 · 去重 · 限长
 // 输入: 字符串数组 / undefined · 输出: JSON 数组 string 或 null
 function normalizeTags(tags) {
@@ -668,7 +698,13 @@ function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath
   const now = Date.now();
   const scenarioVal = scenario && scenario.trim() ? scenario.trim().slice(0, 100) : null;
   const titleVal = title && title.trim() ? title.trim().slice(0, 100) : null;
-  const tagsVal = normalizeTags(tags);
+  // v0.85 没带领域 tag 就自动猜一个 (有把握才打) · 让方法库的领域轴保持一致
+  const tagInput = Array.isArray(tags) ? tags.slice() : [];
+  if (!tagsHaveDiscipline(tagInput)) {
+    const disc = suggestDiscipline(text, scenario);
+    if (disc) tagInput.unshift(disc);
+  }
+  const tagsVal = normalizeTags(tagInput);
   const txn = db.transaction(() => {
     db.prepare(`
       INSERT INTO methods (id, owner_id, title, scenario, text, at, updated_at, project_id, source_update_id, source_doc_path, tags)
@@ -720,6 +756,25 @@ function editMethod({ methodId, text, scenario, projectId, title, tags }, { curr
   });
   txn();
   return { ok: true };
+}
+
+// v0.85 一次性回填 · 给当前用户没有领域 tag 的方法补一个 (存量少 · 跑一次即可)
+// 自己的方法才回填 · 没把握的 (suggestDiscipline 返 null) 跳过 · 不硬塞
+function backfillDisciplines(_payload, { currentUserId }) {
+  const rows = db.prepare('SELECT id, text, scenario, tags FROM methods WHERE owner_id = ?').all(currentUserId);
+  let updated = 0;
+  for (const r of rows) {
+    let arr = [];
+    try { arr = r.tags ? JSON.parse(r.tags) : []; } catch {}
+    if (tagsHaveDiscipline(arr)) continue;
+    const disc = suggestDiscipline(r.text, r.scenario);
+    if (!disc) continue;
+    arr.unshift(disc);
+    db.prepare('UPDATE methods SET tags = ?, updated_at = ? WHERE id = ?').run(normalizeTags(arr), Date.now(), r.id);
+    syncMethodToFts(r.id);
+    updated++;
+  }
+  return { ok: true, scanned: rows.length, updated };
 }
 
 function deleteMethod({ methodId }, { currentUserId }) {
@@ -1328,7 +1383,7 @@ module.exports = {
   // updates
   addUpdate, editUpdate, deleteUpdate,
   // v0.81 methods first-class · 跟 updates 平级独立 entity
-  createMethod, editMethod, deleteMethod,
+  createMethod, editMethod, deleteMethod, backfillDisciplines,
   // method library (v0.12 兼容路径 · 内部 proxy 到 createMethod / deleteMethod)
   markAsMethod, unmarkMethod,
   // experience tag (v0.12) · 给 AI 检索经验 · 跟 method 同构但语义不同

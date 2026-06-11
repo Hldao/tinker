@@ -241,6 +241,11 @@
   .methods-lib-tab { color: var(--sepia); cursor: pointer; padding: 4px 2px; border-bottom: 1px solid transparent; transition: color 0.15s, border-color 0.15s; }
   .methods-lib-tab:hover { color: var(--ink); }
   .methods-lib-tab.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .methods-lib-disciplines { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 14px 0 2px; }
+  .disc-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia-light); letter-spacing: 0.08em; margin-right: 4px; }
+  .disc-chip { font-family: 'Newsreader', serif; font-size: 13px; color: var(--sepia); padding: 3px 13px; border: 1px solid var(--rule); border-radius: 14px; cursor: pointer; transition: all 0.15s; }
+  .disc-chip:hover { color: var(--vermilion); border-color: var(--vermilion); }
+  .disc-chip.active { background: var(--vermilion); color: var(--bg); border-color: var(--vermilion); }
   .methods-lib-list { margin-top: 24px; display: flex; flex-direction: column; gap: 36px; }
   .methods-lib-group-head { font-family: 'Newsreader', serif; font-size: 17px; color: var(--ink); margin-bottom: 12px; }
   .methods-lib-group-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; }
@@ -8866,6 +8871,12 @@ function daysSinceShip(ts) {
 // - 三种维度: 关键词搜 · 按作者分组 · 按项目分组
 // - 不做 trending / star / ranking (Tinker 反算法立场)
 let methodsLibraryState = { query: '', groupBy: 'project', remoteHits: null, lastQuery: null };
+// v0.85 方法领域轴 · 跟服务端 DISCIPLINES 词表对齐 · 点一下走 #tag 精确过滤
+const METHOD_DISCIPLINES = ['产品', '设计', '数据与安全', '工程', 'AI协作'];
+function toggleDiscipline(d) {
+  methodsLibraryState.query = (methodsLibraryState.query === '#' + d) ? '' : '#' + d;
+  renderMethodsLibrary();
+}
 async function renderMethodsLibrary(initialQuery) {
   if (initialQuery !== undefined) methodsLibraryState.query = initialQuery;
   const root = document.getElementById('methods-library-content');
@@ -9031,6 +9042,10 @@ async function renderMethodsLibrary(initialQuery) {
           ${groupTab('owner', '按作者')}
           ${groupTab('recent', '按最近')}
         </div>
+      </div>
+      <div class="methods-lib-disciplines">
+        <span class="disc-eyebrow">领域</span>
+        ${METHOD_DISCIPLINES.map(d => `<span class="disc-chip ${methodsLibraryState.query === '#' + d ? 'active' : ''}" onclick="toggleDiscipline('${d}')">${d}</span>`).join('')}
       </div>
     </div>
     <div class="methods-lib-list">${groupedHtml}</div>

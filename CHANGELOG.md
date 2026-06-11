@@ -54,6 +54,10 @@
 - **v0.54** 压缩信封 · handoff payload gzip 后再加密 · git diff 普遍压到两三成 · 信封带 4 字节 magic + flags 版本位区分新老 · 老消息走老路不动。修了一个 diff 截断误判 (includes 嗅字符串会自匹配源码 · 改成打包时记 diffTruncated 标志位)
 - **v0.55** 拆信封懒取 (Phase 2) · bridge task 只发轻信封 (说明 + repo + blobRef) · 重料 (diff/situation/voice) 加密压缩后存 server blob 库 · 接收方点了"接"才 `tinker inbox fetch` / `verify` 拉回来 · 53kb 包压成 463 字节轻信封上线。blob 按 sha256(明文) 内容寻址 + studio 命名空间 · 同工作室内容相同自动去重。server 加 `bridge_blobs` 表 (migration 060) + `/api/bridge/blob` 存取路由 · 沿用 messages 那套"只存密文不解密"
 
+### [methods] 方法库领域轴 (v0.85)
+> Owner: bridge 线 · 来自朋友反馈
+- **v0.85** 给方法库加一条"按手艺领域"的轴（产品 / 设计 / 数据与安全 / 工程 / AI协作），跟现有自由 tag（#supabase #auth · "用什么"）互补，这条是"哪门手艺 · 适合哪个阶段"。服务端 createMethod 用关键词分类器自动猜一个领域 tag（命中 ≥ 2 才打 · 没把握不硬塞 · 人随时可改），固定词表不漂，让"所有 ui 类方法"能被可靠捞出来。关键词以中文为主，英文只收长且不撞词的（短英文 ui/ci 会在 guide/decision 里子串误命中，不收）。网页方法库加一行领域快筛，点一下走现有 #tag 精确过滤。`backfillDisciplines` action 给存量方法补一次。应用 §12：这跟当初砍掉的"按工具筛选"不一样，领域不是工具轴，且帮不懂代码的人绕开工程类，跟"不懂代码优先"一头，正好压在假设 2（人能不能找到对的方法）上
+
 ### [cli] 触发器 / 发布路径打磨 (v0.56 → v0.57)
 > Owner: bridge 线
 - **v0.57** 截图后端可换 · microlink Pro 要 $50/月 (两人小工作室太贵) · 抽出 captureScreenshotToFile 统一三个调用点 (ship 封面 / before / after) · 默认还是 microlink 免费档 (50/天 · 无 key 不破坏现状) · 配了 key 走 apiflash 或 screenshotone (都直接返图字节 · 免费档更宽)。新命令 `tinker screenshot <provider> <key>` 设置 · `tinker screenshot test` 验 key 通不通 · `tinker config` 显示当前后端 · 支持 TINKER_SHOT_KEY/PROVIDER env 覆盖 (watcher 子进程也能拿到)
