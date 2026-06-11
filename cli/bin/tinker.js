@@ -2085,6 +2085,16 @@ async function cmdUpdateReal() {
 
   log('');
   ok('CLI 升级完成');
+
+  // 升级后自动刷新 Claude Code hook · 防"更新了 CLI 但没拿到新 hook"
+  // (只在原本装过的情况下重装 · 不给没装过的人硬塞 · 尊重 opt-in)
+  // 案例:notify-claude 桌面通知是新加的 hook · 光 tinker update 不会装上 · 用户白等
+  if (hasClaudeHooksInstalled()) {
+    log(sepia('  刷新 Claude Code hook (补上新增的) ...'));
+    try { await cmdClaudeHookInstall({ quiet: true }); ok('hook 已刷新'); }
+    catch { log(sepia('  hook 刷新没成 · 手动跑一下 ') + vermilion('tinker hook install-claude')); }
+  }
+
   // 最近几条更新内容(粗略)
   try {
     const recent = execSync('git log --since="7 days ago" --pretty=format:"  %s" -n 8 cli/', { cwd: SRC_DIR, encoding: 'utf-8' }).trim();
@@ -2096,6 +2106,22 @@ async function cmdUpdateReal() {
   log('');
   log(sepia('  跑 ') + vermilion('tinker help') + sepia(' 看看新命令'));
   log('');
+}
+
+// 检测用户是否已经装过 Claude Code hook (settings.json 里有 tinker 命令)
+function hasClaudeHooksInstalled() {
+  try {
+    const p = path.join(os.homedir(), '.claude', 'settings.json');
+    if (!fs.existsSync(p)) return false;
+    const s = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    const hooks = s.hooks || {};
+    for (const evt of Object.keys(hooks)) {
+      for (const entry of (hooks[evt] || [])) {
+        if ((entry.hooks || []).some(h => /\btinker\s/.test(h.command || ''))) return true;
+      }
+    }
+  } catch {}
+  return false;
 }
 
 // =============================================
@@ -2419,6 +2445,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   installClaudeHookEntry(settings.hooks.Stop, null, 'tinker notify-claude stop 2>/dev/null || true', 'notify-done');
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+  if (opts.quiet) return;  // tinker update 升级后静默刷新时 · 不刷这一大段清单
   log('');
   ok('Claude Code hooks 装好了:');
   log(sepia('    SessionStart compact              · /compact 时'));
@@ -4547,7 +4574,7 @@ const MAYBE_KINDS = {
   invite: {
     cooldownMin: 30,
     matcher: '邀请.{0,4}加入|拉.{0,4}进|拉.{0,4}入|加入.{0,4}(工作室|团队|我们)|让.{0,4}(进|加入)|把.{0,4}拉.{0,4}进|拉一下.{0,4}(进|入)',
-    reminder: '用户对话里像是想邀请队友加入工作室。跟其他 maybe-X 不同 · invite 让你主动跑命令:\n1) 找 slug: 跑 `tinker studio list` 看用户哪个 active · 用 active 的 slug\n2) 找目标 handle: 从对话里看 (比如"邀请猫猫" → @猫猫)\n3) Bash 跑 `tinker studio invite <slug> @<handle>`\n4) 命令自动通过 bridge 投递邀请通知给对方 · 不用复制 token 微信发\n5) 报告用户已发 · 对方 watch 上会收 + 下次起 Claude session 提示一键加入',
+    reminder: '用户对话里像是想邀请队友加入工作室。跟其他 maybe-X 不同 · invite 让你主动跑命令:\n1) 找 slug: 跑 `tinker studio list` 看用户哪个 active · 用 active 的 slug\n2) 找目标 handle: 从对话里看 (比如"邀请猫猫" → @猫猫)\n3) Bash 跑 `tinker studio invite <slug> @<handle>`\n4) 命令自动通过 bridge 投递邀请通知给对方 · 不用复制 token 微信发\n5) 报告用户已发 · 对方下次起 Claude session 时自动收到 + 提示一键加入',
   },
 };
 
@@ -5850,7 +5877,7 @@ async function cmdStudio(subcmd, args, opts) {
       ok(`邀请生成了 · 给 @${targetHandle} · 24h 内有效`);
       if (autoSent) {
         log(sepia('  ✓ 已自动通过 bridge 投递到 ta 的 inbox'));
-        log(sepia('  ✓ ta tinker watch 上会自动收到 · 下次起 Claude session 提示一键加入'));
+        log(sepia('  ✓ ta 下次起 Claude session 时自动收到 · 提示一键加入'));
         log('');
         log(sepia('  备份方案 (bridge 失效时):'));
       } else {
@@ -5914,7 +5941,7 @@ function stripAnsi(s) { return (s || '').toString().replace(/\x1b\[[0-9;]*m/g, '
 // 注意 helper 是 async (因为 TTY confirm 走 inquirer)
 
 // =====================================================
-// v0.21 bridge user-facing commands · ping / send / watch
+// v0.21 bridge user-facing commands · ping / send (收消息走 SessionStart hook · 不挂 watch)
 // 走 active studio 暗号 (来自 cmdStudio create/join/accept)
 // 默认广播到 active studio · -t @who 点对点
 // =====================================================
@@ -6146,149 +6173,6 @@ async function cmdSend(opts) {
   } catch (e) { err(e.message); process.exit(1); }
 }
 
-async function cmdBridgeWatch(opts) {
-  const cfg = mustHaveConfig();
-  const bridgeLib = require('../lib/bridge');
-  const studiosData = bridgeLib.loadStudios();
-  if (!studiosData.studios || studiosData.studios.length === 0) {
-    err('还没加入任何工作室 · 没东西可收');
-    process.exit(1);
-  }
-
-  const inboxDir = path.join(CONFIG_DIR, 'inbox');
-  if (!fs.existsSync(inboxDir)) fs.mkdirSync(inboxDir, { recursive: true });
-  const cursorFile = path.join(inboxDir, '.cursor');
-  let since = 0;
-  try { since = parseInt(fs.readFileSync(cursorFile, 'utf-8').trim(), 10) || 0; } catch {}
-
-  log('');
-  log(sepia('  tinker watch · 长轮询挂上 · Ctrl+C 退出'));
-  log(sepia('  inbox: ') + inboxDir);
-  log(sepia('  起点 seq: ') + since);
-  log(sepia('  studios: ') + studiosData.studios.map(s => s.slug).join(' / '));
-  log('');
-
-  let backoff = 1000;
-  while (true) {
-    try {
-      const resRaw = await fetch(cfg.serverUrl + '/api/bridge/poll?since=' + since, {
-        headers: { Authorization: 'Bearer ' + cfg.token },
-        signal: AbortSignal.timeout ? AbortSignal.timeout(35000) : undefined,
-      });
-      if (!resRaw.ok) {
-        log(sepia('  poll HTTP ' + resRaw.status + ' · 退避 ' + backoff + 'ms'));
-        await new Promise(r => setTimeout(r, backoff));
-        backoff = Math.min(backoff * 2, 30000);
-        continue;
-      }
-      backoff = 1000;
-      const data = await resRaw.json();
-      for (const msg of (data.messages || [])) {
-        const tryDec = bridgeLib.tryDecryptWithAnyStudio(msg.payload);
-        if (tryDec) {
-          try {
-            const obj = JSON.parse(tryDec.plaintext);
-            await renderInboxMessage(msg, obj, tryDec.studio, inboxDir, cfg);
-          } catch { /* JSON 坏 · 忽略 */ }
-        } else {
-          // v0.29 fallback: 邀请走明文 base64 (没暗号可解 · 这是设计)
-          try {
-            const plain = Buffer.from(msg.payload, 'base64').toString('utf-8');
-            const obj = JSON.parse(plain);
-            if (obj && obj.type === 'studio-invite') {
-              renderInviteMessage(msg, obj, inboxDir);
-            }
-          } catch { /* 不是 invite · 别的团队的密文 · 忽略 */ }
-        }
-        since = Math.max(since, msg.seq);
-      }
-      fs.writeFileSync(cursorFile, String(since));
-    } catch (e) {
-      if (e.name === 'AbortError' || (e.message || '').includes('timeout')) continue;
-      log(sepia('  网络错: ' + e.message + ' · 退避 ' + backoff + 'ms'));
-      await new Promise(r => setTimeout(r, backoff));
-      backoff = Math.min(backoff * 2, 30000);
-    }
-  }
-}
-
-async function renderInboxMessage(msg, obj, studio, inboxDir, cfg) {
-  const ts = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
-  const target = msg.toStudio
-    ? sepia('→ studio:') + studio.slug
-    : msg.toHandle ? sepia('→ @') + msg.toHandle : sepia('(广播)');
-  log('');
-  log(sepia('  ─── ') + ts + sepia(' · @') + msg.fromHandle + ' ' + target + sepia(' · ') + msg.kind + sepia(' · seq ') + msg.seq);
-  if (msg.kind === 'noti') {
-    const lvl = obj.level || 'info';
-    const tag = lvl === 'urgent' ? '🚨' : lvl === 'warn' ? '⚠' : lvl === 'ok' ? '✓' : '🔔';
-    log('  ' + tag + ' ' + bold(obj.title || '(无标题)'));
-    if (obj.body) log(sepia('  ') + obj.body);
-  } else if (msg.kind === 'file') {
-    const files = obj.files || [];
-    log(sepia('  📎 ') + files.length + ' 个文件' + (obj.message ? ' · ' + obj.message : ''));
-    for (const f of files) {
-      const safe = (f.name || 'unnamed').replace(/[^\w.\-一-鿿]/g, '_');
-      const fp = path.join(inboxDir, msg.fromHandle + '_' + msg.seq + '_' + safe);
-      try {
-        fs.writeFileSync(fp, Buffer.from(f.content, 'base64'));
-        log(sepia('    ↓ ') + fp);
-      } catch (e) { log(sepia('    ⚠ ') + e.message); }
-    }
-  } else if (msg.kind === 'task') {
-    // v0.22 handoff · 落地 dossier 到 ~/.tinker/inbox/<msgId>/
-    let unpackError = null;
-    try {
-      const dossierLib = require('../lib/dossier');
-      const targetDir = dossierLib.unpackDossier({ msgId: msg.id, fromHandle: msg.fromHandle, dossier: obj, studioSlug: studio.slug });
-      log(sepia('  🎯 ') + bold('handoff 接力包') + sepia(' · ') + (obj.message || '(无说明)').slice(0, 80));
-      log(sepia('     落地: ') + targetDir);
-      log(sepia('     扫一眼 (人): ') + vermilion('cat ' + path.join(targetDir, 'BRIEF.md')));
-      log(sepia('     接的话 (AI): ') + vermilion('cat ' + path.join(targetDir, 'README.md')) + sepia(' · 原料在 context/'));
-      log(sepia('     处理完: ') + vermilion('tinker inbox done ' + msg.id));
-    } catch (e) {
-      unpackError = e.message;
-      log(sepia('  ⚠ handoff 解包失败:') + e.message);
-    }
-    // v0.52 自动回执/退信给发起方 · 失败静默 (回执丢了不挡收件)
-    try {
-      await sendHandoffReceipt({ cfg, msgId: msg.id, fromHandle: msg.fromHandle, studio, dossier: obj, unpackError });
-      if (!unpackError) log(sepia('     ✓ 回执发回 @') + msg.fromHandle);
-    } catch {}
-  }
-  log('');
-}
-
-// v0.29 邀请通知 · 走明文 base64 (没暗号可解 · 这是设计)
-// payload = base64 JSON { type:'studio-invite', slug, studioName, token, fromHandle, at }
-function renderInviteMessage(msg, obj, inboxDir) {
-  const ts = new Date(msg.createdAt).toLocaleTimeString('zh-CN', { hour12: false });
-  const from = obj.fromHandle || msg.fromHandle;
-  const name = obj.studioName || obj.slug || '(无名工作室)';
-  log('');
-  log(sepia('  ─── ') + ts + sepia(' · @') + from + sepia(' · studio-invite · seq ') + msg.seq);
-  log('  📩 ' + bold('@' + from + ' 邀请你加入 ' + name));
-  log(sepia('     slug: ') + (obj.slug || '?'));
-  log(sepia('     一键加入: ') + vermilion('tinker studio accept ' + (obj.token || '?')));
-
-  const inviteDir = path.join(inboxDir, 'invite-' + msg.id);
-  try {
-    fs.mkdirSync(inviteDir, { recursive: true });
-    fs.writeFileSync(path.join(inviteDir, 'INVITE.json'), JSON.stringify({
-      msgId: msg.id,
-      fromHandle: from,
-      studio: { slug: obj.slug, name: obj.studioName },
-      token: obj.token,
-      at: obj.at || msg.createdAt,
-      seq: msg.seq,
-    }, null, 2));
-    fs.writeFileSync(path.join(inviteDir, 'PENDING'), String(Date.now()));
-    log(sepia('     落地: ') + inviteDir);
-  } catch (e) {
-    log(sepia('  ⚠ 落地 invite 失败:') + e.message);
-  }
-  log('');
-}
 
 // =====================================================
 // v0.55 handoff 重料 blob 存取 · Phase 2 懒取
@@ -6954,8 +6838,26 @@ async function pullBridgeMessagesForHook(cfg, recentNotis) {
               }, null, 2));
             } catch {}
           }
+        } else if (msg.kind === 'file') {
+          // v0.91 修:之前 file 在 SessionStart 啥都不做 · 但 cursor 照推进 → 文件消息被静默吞掉
+          //   (注释说"等 watch 处理" · 可 cursor 已过 · watch 也再看不到 → 永久丢)
+          //   现在跟 task 一样落地 + 进 reminder · 文件本身落 inbox · 给用户一行提示
+          const files = obj.files || [];
+          const landed = [];
+          for (const f of files) {
+            const safe = (f.name || 'unnamed').replace(/[^\w.\-一-鿿]/g, '_');
+            const fp = path.join(INBOX, msg.fromHandle + '_' + msg.seq + '_' + safe);
+            try { fs.writeFileSync(fp, Buffer.from(f.content || '', 'base64')); landed.push(fp); } catch {}
+          }
+          recentNotis.push({
+            fromHandle: msg.fromHandle,
+            title: '发来 ' + files.length + ' 个文件' + (obj.message ? ' · ' + obj.message : ''),
+            body: landed.length ? ('落地了 · 要看跑 cat ' + landed[0] + (landed.length > 1 ? ' (共 ' + landed.length + ' 个)' : '')) : '',
+            level: 'info',
+            type: 'file',
+            files: landed,
+          });
         }
-        // file kind hook 模式不持久化 · 避免大文件落到本地 · 等用户跑 watch 时再处理
         handled = true;
         // 这个 seq 之前失败过 · 现在成功了 → 移除
         if (failedPayloads[msg.seq]) delete failedPayloads[msg.seq];
@@ -11169,7 +11071,6 @@ async function main() {
         return;
       case 'schema': cmdSchema(opts); break;
       case 'stream': await cmdStream(args[1], opts); return; // 长跑 NDJSON 输出 · 不退出
-      case 'watch': await cmdBridgeWatch(opts); break;  // v0.21 用户面: 长轮询收 bridge 消息
       case 'watch-deploy': await cmdWatch(args[1]); break;  // 内部命令 · 被 spawnDeployWatcher 调用
       case 'help': case '--help': case '-h': case undefined: help(); break;
       default:
