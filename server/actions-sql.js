@@ -644,24 +644,31 @@ function syncUpdateToFts(updateId) {
 //
 // 关键词以中文为主 (作者写中文) · 英文只收长且不会撞词的 (docker/sqlite/figma 等)
 // 短英文 (ui/ci/ux) 会在 "guide"/"decision" 里子串误命中 · 不收
+// 词表校准教训 (拿真实方法验出来的):
+// - 产品别收太泛的词 (用户/功能/场景/迭代) · 它们在工程/安全文里也常出现 ·
+//   会把工程复盘吸成"产品" · 只留商业/策略类专有词
+// - 工程/安全要按作者真实写法收 (bug/调试/根因/暗号/token/端点/时区) · 不然漏判
+// - 跨域的"思考方式"方法 (多视角/机制vs行为) 本就难归类 · 留空比硬塞强
 const DISCIPLINES = [
-  { tag: '产品', kw: ['产品', '需求', '用户', '功能', '定位', '迭代', '场景', '用例', '增长', '留存', '转化', '商业', '定价', '付费', '市场', '冷启动', '流程', '运营'] },
-  { tag: '设计', kw: ['设计', '样式', '排版', '视觉', '界面', '布局', '配色', '按钮', '字体', '颜色', '动效', '交互', '原型', '间距', '响应式', '圆角', '阴影', 'figma'] },
-  { tag: '数据与安全', kw: ['安全', '加密', '鉴权', '认证', '密钥', '权限', '注入', '备份', '隐私', '脱敏', '数据库', '迁移', '索引', '备案', '登录', 'sqlite', 'cookie'] },
-  { tag: '工程', kw: ['部署', '构建', '打包', '重构', '性能', '缓存', '接口', '后端', '服务器', '报错', '调试', '测试', '日志', '监控', '并发', '脚本', '回滚', 'docker'] },
+  { tag: '产品', kw: ['产品', '需求', '定位', '增长', '留存', '转化', '商业', '定价', '付费', '市场', '冷启动', '运营', '激励', '排行榜'] },
+  { tag: '设计', kw: ['设计', '样式', '排版', '视觉', '界面', '布局', '配色', '按钮', '字体', '颜色', '动效', '交互', '原型', '间距', '响应式', '圆角', '阴影', '表单', 'figma'] },
+  { tag: '数据与安全', kw: ['安全', '加密', '鉴权', '认证', '密钥', '暗号', 'token', '权限', '注入', '备份', '隐私', '脱敏', '数据库', '迁移', '索引', '备案', '登录', '会话', 'session', 'cookie', '401'] },
+  { tag: '工程', kw: ['部署', 'docker', '构建', '打包', '重构', '性能', '缓存', '接口', '后端', '服务器', '报错', '调试', '诊断', '根因', 'bug', '端点', '协议', '日志', '监控', '并发', '脚本', '回滚', '时区'] },
   { tag: 'AI协作', kw: ['提示词', '模型', '上下文', '幻觉', '起草', '口吻', '智能体', 'claude', 'cursor', 'prompt', 'agent', 'llm'] },
 ];
 const DISCIPLINE_SET = new Set(DISCIPLINES.map(d => d.tag));
 
 function suggestDiscipline(text, scenario) {
   const hay = ((scenario || '') + ' ' + (text || '')).toLowerCase();
-  let best = null, bestScore = 0;
-  for (const d of DISCIPLINES) {
+  const scores = DISCIPLINES.map(d => {
     let s = 0;
     for (const k of d.kw) { if (hay.includes(k.toLowerCase())) s++; }
-    if (s > bestScore) { bestScore = s; best = d.tag; }
-  }
-  return bestScore >= 2 ? best : null;  // 没把握 (< 2 命中) 不打
+    return { tag: d.tag, s };
+  });
+  const max = Math.max(...scores.map(x => x.s));
+  if (max < 2) return null;                         // 没把握 (< 2 命中) 不打
+  const top = scores.filter(x => x.s === max);
+  return top.length === 1 ? top[0].tag : null;      // 平分也归 null · 不偏向排第一的
 }
 function tagsHaveDiscipline(arr) {
   return Array.isArray(arr) && arr.some(t => DISCIPLINE_SET.has(String(t).replace(/^#+/, '').trim()));
@@ -758,23 +765,32 @@ function editMethod({ methodId, text, scenario, projectId, title, tags }, { curr
   return { ok: true };
 }
 
-// v0.85 一次性回填 · 给当前用户没有领域 tag 的方法补一个 (存量少 · 跑一次即可)
+// v0.85 一次性回填 · 给当前用户的方法补领域 tag (存量少 · 跑一次即可)
 // 自己的方法才回填 · 没把握的 (suggestDiscipline 返 null) 跳过 · 不硬塞
-function backfillDisciplines(_payload, { currentUserId }) {
+// reclassify=true: 先剥掉旧领域 tag 再重判 · 词表改进后用来修正之前打错的
+//   (剥的只是领域 tag · 自由 tag #supabase 这些不动)
+function backfillDisciplines({ reclassify } = {}, { currentUserId }) {
   const rows = db.prepare('SELECT id, text, scenario, tags FROM methods WHERE owner_id = ?').all(currentUserId);
-  let updated = 0;
+  let updated = 0, cleared = 0;
   for (const r of rows) {
     let arr = [];
     try { arr = r.tags ? JSON.parse(r.tags) : []; } catch {}
-    if (tagsHaveDiscipline(arr)) continue;
-    const disc = suggestDiscipline(r.text, r.scenario);
-    if (!disc) continue;
-    arr.unshift(disc);
-    db.prepare('UPDATE methods SET tags = ?, updated_at = ? WHERE id = ?').run(normalizeTags(arr), Date.now(), r.id);
-    syncMethodToFts(r.id);
-    updated++;
+    let changed = false;
+    if (reclassify) {
+      const before = arr.length;
+      arr = arr.filter(t => !DISCIPLINE_SET.has(String(t).replace(/^#+/, '').trim()));
+      if (arr.length !== before) { cleared++; changed = true; }
+    }
+    if (!tagsHaveDiscipline(arr)) {
+      const disc = suggestDiscipline(r.text, r.scenario);
+      if (disc) { arr.unshift(disc); updated++; changed = true; }
+    }
+    if (changed) {
+      db.prepare('UPDATE methods SET tags = ?, updated_at = ? WHERE id = ?').run(normalizeTags(arr), Date.now(), r.id);
+      syncMethodToFts(r.id);
+    }
   }
-  return { ok: true, scanned: rows.length, updated };
+  return { ok: true, scanned: rows.length, updated, cleared };
 }
 
 function deleteMethod({ methodId }, { currentUserId }) {
