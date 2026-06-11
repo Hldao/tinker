@@ -1433,6 +1433,37 @@ function resolveNote({ projectId, noteId, noteIdx }, { currentUserId }) {
 }
 
 // ============================================
+// PUSH TARGETS · 个人推送目标 (server 端存 · 桥消息落库时推手机)
+// ============================================
+
+function registerPushTarget({ type, url, label }, { currentUserId }) {
+  if (type !== 'bark') throw new Error('server 端暂时只支持 bark (mac 桌面横幅是本地的 · server 推不了)');
+  if (!url || !/^https?:\/\//.test(url)) throw new Error('要一个 http(s) 推送地址 (Bark app 里那条)');
+  const existing = db.prepare('SELECT id FROM push_targets WHERE user_id = ? AND url = ?').get(currentUserId, url);
+  if (existing) {
+    db.prepare('UPDATE push_targets SET label = ?, type = ? WHERE id = ?').run((label || '').trim() || null, type, existing.id);
+    return { ok: true, id: existing.id, updated: true };
+  }
+  const id = 'pt-' + Date.now() + Math.random().toString(36).slice(2, 6);
+  db.prepare('INSERT INTO push_targets (id, user_id, type, url, label, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, currentUserId, type, url, (label || '').trim() || null, Date.now());
+  return { ok: true, id };
+}
+
+function removePushTarget({ url, type }, { currentUserId }) {
+  let r;
+  if (url) r = db.prepare('DELETE FROM push_targets WHERE user_id = ? AND url = ?').run(currentUserId, url);
+  else if (type) r = db.prepare('DELETE FROM push_targets WHERE user_id = ? AND type = ?').run(currentUserId, type);
+  else throw new Error('给个 url 或 type 才知道删哪条');
+  return { ok: true, removed: r.changes };
+}
+
+function listPushTargets(_payload, { currentUserId }) {
+  const rows = db.prepare('SELECT id, type, url, label, created_at AS createdAt FROM push_targets WHERE user_id = ? ORDER BY created_at').all(currentUserId);
+  return { ok: true, targets: rows };
+}
+
+// ============================================
 // NOTIFICATIONS
 // ============================================
 
@@ -1476,6 +1507,8 @@ module.exports = {
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes
   addNote, deleteNote, resolveNote,
+  // push targets · 个人推送 (server 推手机)
+  registerPushTarget, removePushTarget, listPushTargets,
   // notifications
   markAllRead, markNotifRead,
 };

@@ -17,7 +17,7 @@ const { buildState } = require('../state');
 function resetDb() {
   const tables = ['notifications', 'note_images', 'notes', 'tinkered', 'reactions',
     'method_used', 'update_images', 'updates', 'project_tools', 'projects',
-    'images', 'sessions', 'auth_tokens', 'users', 'starters', 'available_tools'];
+    'push_targets', 'images', 'sessions', 'auth_tokens', 'users', 'starters', 'available_tools'];
   for (const t of tables) db.prepare(`DELETE FROM ${t}`).run();
 }
 
@@ -324,6 +324,73 @@ test('resolveNote: 自己给自己不发通知', () => {
   a.resolveNote({ projectId: p.id, noteId: note.id }, { currentUserId: daodao });
   const notif = db.prepare(`SELECT 1 FROM notifications WHERE type = ?`).all('noteResolved');
   assert.equal(notif.length, 0);
+});
+
+// ============================================
+// push targets · 个人推送
+// ============================================
+test('registerPushTarget: 存 bark + list + 去重更新 label', () => {
+  const { daodao } = setupBasic();
+  const r = a.registerPushTarget({ type: 'bark', url: 'https://api.day.app/KEY1', label: '我的 iPhone' }, { currentUserId: daodao });
+  assert.ok(r.id);
+  let list = a.listPushTargets({}, { currentUserId: daodao });
+  assert.equal(list.targets.length, 1);
+  assert.equal(list.targets[0].url, 'https://api.day.app/KEY1');
+  // 同 url 再 register → 更新不新增
+  const r2 = a.registerPushTarget({ type: 'bark', url: 'https://api.day.app/KEY1', label: '新名' }, { currentUserId: daodao });
+  assert.equal(r2.updated, true);
+  list = a.listPushTargets({}, { currentUserId: daodao });
+  assert.equal(list.targets.length, 1);
+  assert.equal(list.targets[0].label, '新名');
+});
+
+test('registerPushTarget: mac / 非法 url 被拒', () => {
+  const { daodao } = setupBasic();
+  assert.throws(() => a.registerPushTarget({ type: 'mac' }, { currentUserId: daodao }), /只支持 bark/);
+  assert.throws(() => a.registerPushTarget({ type: 'bark', url: 'notaurl' }, { currentUserId: daodao }), /http/);
+});
+
+test('removePushTarget: 按 url 删', () => {
+  const { daodao } = setupBasic();
+  a.registerPushTarget({ type: 'bark', url: 'https://api.day.app/KEY1' }, { currentUserId: daodao });
+  const r = a.removePushTarget({ url: 'https://api.day.app/KEY1' }, { currentUserId: daodao });
+  assert.equal(r.removed, 1);
+  assert.equal(a.listPushTargets({}, { currentUserId: daodao }).targets.length, 0);
+});
+
+test('fanoutMessagePush: 点对点 → 推收件人的 bark · 不推发送方', () => {
+  const { daodao, alice } = setupBasic();
+  // alice 登记 bark · daodao 发给 alice
+  a.registerPushTarget({ type: 'bark', url: 'https://api.day.app/ALICE' }, { currentUserId: alice });
+  a.registerPushTarget({ type: 'bark', url: 'https://api.day.app/DAODAO' }, { currentUserId: daodao });
+
+  const calls = [];
+  const origFetch = global.fetch;
+  global.fetch = async (url, init) => { calls.push({ url, init }); return { ok: true, json: async () => ({ code: 200 }) }; };
+  try {
+    require('../push').fanoutMessagePush({ to: 'alice', toStudio: null, fromHandle: 'daodao', fromUserId: daodao, kind: 'noti' });
+  } finally {
+    global.fetch = origFetch;
+  }
+  // 只推 alice · 不推自己
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.day.app/ALICE');
+  const body = JSON.parse(calls[0].init.body);
+  assert.match(body.body, /@daodao/);
+});
+
+test('fanoutMessagePush: 广播 (无 to / 无 studio) 不推', () => {
+  const { daodao, alice } = setupBasic();
+  a.registerPushTarget({ type: 'bark', url: 'https://api.day.app/ALICE' }, { currentUserId: alice });
+  const calls = [];
+  const origFetch = global.fetch;
+  global.fetch = async (url) => { calls.push(url); return { ok: true, json: async () => ({}) }; };
+  try {
+    require('../push').fanoutMessagePush({ to: null, toStudio: null, fromHandle: 'daodao', fromUserId: daodao, kind: 'noti' });
+  } finally {
+    global.fetch = origFetch;
+  }
+  assert.equal(calls.length, 0);
 });
 
 // ============================================
