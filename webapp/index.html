@@ -8415,10 +8415,9 @@ function renderWorkshop(handle) {
       </div>
     ` : ''}
   `;
-  // v0.38 有挂靠工作室时 · 异步拉 preview 数据 · 渲染厚卡板块到"最近在动"之前
-  if (user.studios && user.studios.length > 0) {
-    loadAndRenderWorkshopStudios(handle, isMe);
-  }
+  // v0.38 异步拉 preview 数据 · 渲染厚卡板块到"最近在动"之前
+  // 不再用 bulk dump 的 user.studios 当开关 (那个现在只含本人) · 直接按 handle 拉 · 空了内部不渲染
+  loadAndRenderWorkshopStudios(handle, isMe);
 }
 
 /* ============ STUDIO (工作室聚合页 · v0.18) ============

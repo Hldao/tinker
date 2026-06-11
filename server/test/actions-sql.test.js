@@ -363,6 +363,32 @@ test('stashPush: 加密标志 + 超大拒绝', () => {
 });
 
 // ============================================
+// 隐私 · buildState 只给请求者本人带 studios (别泄露全站社交图)
+// ============================================
+test('buildState: studios 只挂请求者本人 · 别人的不在 bulk dump 里', () => {
+  const { daodao, alice } = setupBasic();
+  const studios = require('../studios');
+  // daodao 建工作室 · alice 加入
+  studios.studioCreate({ slug: 'daogu', name: '岛&猫', secretHash: '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881' }, { currentUserId: daodao });
+  studios.studioJoin({ slug: 'daogu', secretHash: '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881' }, { currentUserId: alice });
+
+  // daodao 视角:看得到自己的 studios · 看不到 alice 的
+  const asDaodao = buildState({ targetUserId: daodao });
+  assert.ok(asDaodao.users['daodao'].studios && asDaodao.users['daodao'].studios.length === 1);
+  assert.equal(asDaodao.users['alice'].studios, undefined);
+
+  // alice 视角:看得到自己的 · 看不到 daodao 的
+  const asAlice = buildState({ targetUserId: alice });
+  assert.ok(asAlice.users['alice'].studios && asAlice.users['alice'].studios.length === 1);
+  assert.equal(asAlice.users['daodao'].studios, undefined);
+
+  // 匿名视角:谁的 studios 都看不到
+  const anon = buildState({});
+  assert.equal(anon.users['daodao'].studios, undefined);
+  assert.equal(anon.users['alice'].studios, undefined);
+});
+
+// ============================================
 // markAllRead
 // ============================================
 test('markAllRead: 标记 unread → read', () => {

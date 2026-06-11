@@ -22,19 +22,22 @@ function buildState({ targetUserId } = {}) {
     usersOut[u.handle] = { name: u.name || u.handle, tagline: u.tagline || '' };
   }
 
-  // v0.20 给每个 user 带上挂靠的工作室 · 让个人页能渲染"挂靠 → /s/xxx"链接
-  // 一次性 join 查 · 不 N+1 (workshop 数量很少)
-  const studioRows = db.prepare(`
-    SELECT sm.user_id, s.slug, s.name, s.tagline AS studioTagline, sm.role
-    FROM studio_members sm
-    JOIN studios s ON s.id = sm.studio_id
-    ORDER BY sm.joined_at ASC
-  `).all();
-  for (const r of studioRows) {
-    const handle = idToHandle[r.user_id];
-    if (!handle || !usersOut[handle]) continue;
-    if (!usersOut[handle].studios) usersOut[handle].studios = [];
-    usersOut[handle].studios.push({ slug: r.slug, name: r.name, tagline: r.studioTagline, role: r.role });
+  // 工作室挂靠关系 · 只给"请求者本人"带上 (隐私:别在全站 dump 里把每个人的工作室成员关系
+  //   一把吐给匿名访问者 · 那会变成可批量爬的社交图)。
+  // 看别人资料页时 · webapp 按需调 /api/users/:handle/studios-preview 单取 (一次一个 · 要知道 handle)。
+  // 工作室聚合页 /api/studios/:slug 仍公开列成员 · 那是"专门访问某个工作室"的设计 · 不是批量。
+  const myHandle = targetUserId ? idToHandle[targetUserId] : null;
+  if (myHandle && usersOut[myHandle]) {
+    const myStudioRows = db.prepare(`
+      SELECT s.slug, s.name, s.tagline AS studioTagline, sm.role
+      FROM studio_members sm
+      JOIN studios s ON s.id = sm.studio_id
+      WHERE sm.user_id = ?
+      ORDER BY sm.joined_at ASC
+    `).all(targetUserId);
+    if (myStudioRows.length > 0) {
+      usersOut[myHandle].studios = myStudioRows.map(r => ({ slug: r.slug, name: r.name, tagline: r.studioTagline, role: r.role }));
+    }
   }
 
   // 抓所有项目 (包括 archive) · feed 由 webapp getFeedEvents 过滤 · workshop 的"做过的"区要显示 archive
