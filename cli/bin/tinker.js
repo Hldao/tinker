@@ -972,6 +972,7 @@ async function cmdConfig(opts = {}) {
       tokenSet: !!cfg.token,
       tokenSuffix: cfg.token ? cfg.token.slice(-4) : null,
       llm: cfg.llm ? { provider: cfg.llm.provider, configured: true } : { configured: false },
+      screenshot: (() => { const s = getShotConfig(cfg); return { provider: s.provider, keySet: !!s.apiKey }; })(),
       configFile: CONFIG_FILE,
     });
     return;
@@ -986,6 +987,8 @@ async function cmdConfig(opts = {}) {
   } else {
     log('    llm        ' + sepia('(未配置)'));
   }
+  const shot = getShotConfig(cfg);
+  log('    screenshot ' + bold(shot.provider) + (shot.apiKey ? sepia(' (key: ****' + shot.apiKey.slice(-4) + ')') : sepia(' (免费档 · 无 key)')));
   log(sepia('    file       ' + CONFIG_FILE));
   // 警告区
   const warnings = [];
@@ -997,6 +1000,62 @@ async function cmdConfig(opts = {}) {
     warnings.forEach(w => log(sepia('    · ' + w)));
   }
   log('');
+}
+
+// tinker screenshot                 看当前截图后端
+// tinker screenshot <provider> <key> 设置 (apiflash / screenshotone)
+// tinker screenshot microlink        退回免费档 (清掉 key)
+// tinker screenshot test             用当前后端抓一张 prod 试试 · 验 key 通不通
+async function cmdScreenshotConfig(opts = {}) {
+  const cfg = loadConfig();
+  if (!cfg) { err('还没配置 · 先跑 ' + vermilion('tinker login')); process.exit(1); }
+  const pos = opts.positional || [];
+  const sub = pos[0];
+
+  if (!sub) {
+    const { provider, apiKey } = getShotConfig(cfg);
+    log(sepia('\n  截图后端:'));
+    log('    provider   ' + bold(provider));
+    log('    key        ' + (apiKey ? bold('****' + apiKey.slice(-4)) : sepia('(无 · microlink 免费档不要 key)')));
+    log(sepia('\n  换后端: ') + vermilion('tinker screenshot apiflash <KEY>') + sepia(' 或 ') + vermilion('tinker screenshot screenshotone <KEY>'));
+    log(sepia('  退免费: ') + vermilion('tinker screenshot microlink'));
+    log(sepia('  测一张: ') + vermilion('tinker screenshot test') + '\n');
+    return;
+  }
+
+  if (sub === 'test') {
+    const { provider } = getShotConfig(cfg);
+    const tmp = path.join(CONFIG_DIR, 'snapshots', 'test-' + Date.now() + '.jpg');
+    try { fs.mkdirSync(path.dirname(tmp), { recursive: true }); } catch {}
+    log(sepia('\n  用 ') + bold(provider) + sepia(' 抓一张 ') + cfg.serverUrl + sepia(' ...'));
+    const okShot = captureScreenshotToFile(cfg, cfg.serverUrl, tmp);
+    if (okShot) {
+      const kb = Math.round(fs.statSync(tmp).size / 1024);
+      try { fs.unlinkSync(tmp); } catch {}
+      ok('截图成功 · ' + kb + 'KB · 后端通了');
+    } else {
+      err('截图失败 · key 不对 / 配额用完 / 死链都可能 · 跑 tinker screenshot 看当前配置');
+    }
+    return;
+  }
+
+  const provider = sub;
+  if (!['apiflash', 'screenshotone', 'microlink'].includes(provider)) {
+    err('provider 只支持: apiflash / screenshotone / microlink');
+    process.exit(1);
+  }
+  cfg.screenshot = cfg.screenshot || {};
+  cfg.screenshot.provider = provider;
+  if (provider === 'microlink') {
+    delete cfg.screenshot.apiKey;
+  } else {
+    const key = pos[1] || opts.token;
+    if (!key) { err('要给 key · 例: tinker screenshot ' + provider + ' <KEY>'); process.exit(1); }
+    cfg.screenshot.apiKey = key;
+  }
+  saveConfig(cfg);
+  ok('截图后端 → ' + bold(provider) + (provider === 'microlink' ? sepia(' (免费档)') : sepia(' (key ****' + cfg.screenshot.apiKey.slice(-4) + ')')));
+  log(sepia('  验一下: ') + vermilion('tinker screenshot test') + '\n');
 }
 
 async function cmdProjects(opts = {}) {
@@ -1491,51 +1550,72 @@ function imageFromPath(filePath) {
   return [{ src: 'data:' + mime + ';base64,' + buf.toString('base64'), caption: '' }];
 }
 
-// 调 microlink.io 抓 URL 截图 → 下载 → 转 base64 data URL
-// 免费 50 次/天, 不需要 API key, 16:9 viewport 跟陈列馆 figure 匹配
-// 参数取舍:
-// - viewport 1280x720 (16:9 桌面) · deviceScaleFactor=2 → 高清 retina
-// - waitUntil=networkidle0 · 等到没有网络请求才截 (SPA 必备)
-// - waitForTimeout=2500 · 多等 2.5s 让懒加载图片 / 字体 / 入场动画落地
-// - JPEG quality 85 · 文件大小 / 清晰度的甜蜜点
-async function screenshotUrl(url) {
-  const params = new URLSearchParams({
-    url,
-    screenshot: 'true',
-    type: 'jpeg',
-    'viewport.width': '1280',
-    'viewport.height': '720',
-    'viewport.deviceScaleFactor': '2',
-    waitUntil: 'networkidle0',
-    waitForTimeout: '2500',
-    'screenshot.quality': '85',
-    meta: 'false',
-  });
-  const api = 'https://api.microlink.io/?' + params.toString();
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 45000); // 45s 超时 (deviceScale=2 + wait 更长 · 多留余地)
-  let json;
+// =====================================================
+// 截图后端 · 可换 (v0.57)
+// 默认 microlink (免费 50/天 · 无 key) · 配了 key 走 apiflash / screenshotone
+// config.json 的 screenshot 段: { provider: 'apiflash'|'screenshotone'|'microlink', apiKey }
+// 历史: microlink Pro 要 $50/月 · 对两人小工作室太贵 · 换便宜档免费档够用
+// =====================================================
+function getShotConfig(cfg) {
+  const sc = (cfg && cfg.screenshot) || {};
+  // env 覆盖 · 让 CI / watcher 子进程也能拿到
+  const apiKey = process.env.TINKER_SHOT_KEY || sc.apiKey || null;
+  const provider = process.env.TINKER_SHOT_PROVIDER || sc.provider || (apiKey ? 'screenshotone' : 'microlink');
+  return { provider, apiKey };
+}
+
+// 同步抓 URL 截图存到 outPath (走 curl) · 成功返 true · 三个调用点共用
+// 统一 16:9 1280x720 · scale 2 · jpeg q85 · 跟陈列馆 figure 比例匹配
+function captureScreenshotToFile(cfg, targetUrl, outPath) {
+  const { provider, apiKey } = getShotConfig(cfg);
   try {
-    const res = await fetch(api, { signal: ctl.signal });
-    if (!res.ok) throw new Error('microlink ' + res.status);
-    json = await res.json();
-  } finally { clearTimeout(timer); }
-  // 关键检查:目标页面本身的 HTTP 状态(microlink 会忠实截下 404 / 403 错误页 → 一片空白)
-  const upstreamStatus = json && json.data && json.data.statusCode;
-  if (upstreamStatus && upstreamStatus >= 400) {
-    throw new Error('productLink 返回 ' + upstreamStatus + ',八成是死链或私有页');
-  }
-  const shotUrl = json && json.data && json.data.screenshot && json.data.screenshot.url;
-  if (!shotUrl) throw new Error('microlink 没返回截图 URL');
-  const imgRes = await fetch(shotUrl);
-  if (!imgRes.ok) throw new Error('下载截图 ' + imgRes.status);
-  const arrBuf = await imgRes.arrayBuffer();
-  const sizeKB = Math.round(arrBuf.byteLength / 1024);
-  // 过小的截图通常是错误页或空白,< 4KB 直接拒绝
-  if (sizeKB < 4) {
-    throw new Error('截图只有 ' + sizeKB + 'KB,基本是空白页');
-  }
-  const base64 = Buffer.from(arrBuf).toString('base64');
+    if (provider === 'apiflash') {
+      if (!apiKey) return false;
+      const p = new URLSearchParams({
+        access_key: apiKey, url: targetUrl, format: 'jpeg',
+        width: '1280', height: '720', quality: '85',
+        wait_until: 'network_idle', response_type: 'image', fresh: 'true',
+      });
+      execSync(`curl -sS --max-time 60 -o "${outPath}" "https://api.apiflash.com/v1/urltoimage?${p.toString()}"`, { encoding: 'utf-8' });
+    } else if (provider === 'screenshotone') {
+      if (!apiKey) return false;
+      const p = new URLSearchParams({
+        access_key: apiKey, url: targetUrl, format: 'jpg',
+        viewport_width: '1280', viewport_height: '720', device_scale_factor: '2',
+        image_quality: '85', block_ads: 'true', block_cookie_banners: 'true', cache: 'false',
+      });
+      execSync(`curl -sS --max-time 60 -o "${outPath}" "https://api.screenshotone.com/take?${p.toString()}"`, { encoding: 'utf-8' });
+    } else {
+      // microlink · 两步 (先 JSON 拿 url · 再下图)
+      const p = new URLSearchParams({
+        url: targetUrl, screenshot: 'true', type: 'jpeg',
+        'viewport.width': '1280', 'viewport.height': '720', 'viewport.deviceScaleFactor': '2',
+        waitUntil: 'networkidle0', waitForTimeout: '2500', 'screenshot.quality': '85', meta: 'false',
+      });
+      const json = JSON.parse(execSync(`curl -sS --max-time 60 "https://api.microlink.io/?${p.toString()}"`, { encoding: 'utf-8' }));
+      const shotUrl = json.data && json.data.screenshot && json.data.screenshot.url;
+      if (!shotUrl) return false;
+      execSync(`curl -sS --max-time 60 -o "${outPath}" "${shotUrl}"`, { encoding: 'utf-8' });
+    }
+    // 空白页 / 错误页通常 < 4KB · 拒掉
+    const sz = fs.statSync(outPath).size;
+    if (sz < 4096) { try { fs.unlinkSync(outPath); } catch {} return false; }
+    return true;
+  } catch { try { fs.unlinkSync(outPath); } catch {} return false; }
+}
+
+// 抓 URL 截图 → 转 base64 data URL (ship 封面用)
+// 走 captureScreenshotToFile · provider 可换 · 临时文件落地后读出来转 base64
+async function screenshotUrl(url) {
+  const cfg = loadConfig();
+  const tmp = path.join(CONFIG_DIR, 'snapshots', 'cover-' + Date.now() + '.jpg');
+  try { fs.mkdirSync(path.dirname(tmp), { recursive: true }); } catch {}
+  const okShot = captureScreenshotToFile(cfg, url, tmp);
+  if (!okShot) throw new Error('截图失败 (provider: ' + getShotConfig(cfg).provider + ') · 死链 / 配额 / 空白页都可能');
+  const buf = fs.readFileSync(tmp);
+  const sizeKB = Math.round(buf.length / 1024);
+  const base64 = buf.toString('base64');
+  try { fs.unlinkSync(tmp); } catch {}
   return { images: [{ src: 'data:image/jpeg;base64,' + base64, caption: '自动抓的首页截图' }], sizeKB };
 }
 
@@ -3218,29 +3298,14 @@ function evaluateUiSession(state, cfg) {
   };
 }
 
-// microlink 抓 prod 当前样子 · 存到 ~/.tinker/snapshots/
-// 返回保存的文件路径 · 失败返回 null
+// 抓 prod 当前样子当 before 快照 · 存到 ~/.tinker/snapshots/
+// 返回保存的文件路径 · 失败返回 null · provider 可换 (走 captureScreenshotToFile)
 function takeBeforeSnapshot(cfg, sha) {
   if (!cfg || !cfg.serverUrl) return null;
   const snapDir = path.join(CONFIG_DIR, 'snapshots');
   try { fs.mkdirSync(snapDir, { recursive: true }); } catch {}
   const fname = path.join(snapDir, (sha || Date.now()) + '-before.jpg');
-  try {
-    const params = new URLSearchParams({
-      url: cfg.serverUrl,
-      screenshot: 'true', type: 'jpeg',
-      'viewport.width': '1280', 'viewport.height': '720',
-      'viewport.deviceScaleFactor': '2',
-      waitUntil: 'networkidle0', waitForTimeout: '2500',
-      'screenshot.quality': '85', meta: 'false',
-    });
-    // 同步抓 (curl 走 bash) · hook 阻塞 5 秒内可接受
-    const json = JSON.parse(execSync(`curl -sS "https://api.microlink.io/?${params.toString()}"`, { encoding: 'utf-8' }));
-    const shotUrl = json.data && json.data.screenshot && json.data.screenshot.url;
-    if (!shotUrl) return null;
-    execSync(`curl -sS -o "${fname}" "${shotUrl}"`, { encoding: 'utf-8' });
-    return fname;
-  } catch { return null; }
+  return captureScreenshotToFile(cfg, cfg.serverUrl, fname) ? fname : null;
 }
 
 // 启动 detached 后台进程 · 等 deploy 完成 + 抓 after + editUpdate 贴图
@@ -3300,29 +3365,20 @@ async function cmdWatch(taskFile) {
     return;
   }
 
-  // 抓 after 快照
+  // 抓 after 快照 · provider 跟 before 一致 (走同一份 config · 子进程 loadConfig)
   wlog('snapping after');
   let afterPath = null;
-  try {
+  {
     const snapDir = path.join(CONFIG_DIR, 'snapshots');
     try { fs.mkdirSync(snapDir, { recursive: true }); } catch {}
     afterPath = path.join(snapDir, task.updateId + '-after.jpg');
-    const params = new URLSearchParams({
-      url: task.serverUrl,
-      screenshot: 'true', type: 'jpeg',
-      'viewport.width': '1280', 'viewport.height': '720',
-      'viewport.deviceScaleFactor': '2',
-      waitUntil: 'networkidle0', waitForTimeout: '3000',
-      'screenshot.quality': '85', meta: 'false',
-    });
-    const json = JSON.parse(execSync(`curl -sS "https://api.microlink.io/?${params.toString()}"`, { encoding: 'utf-8' }));
-    const shotUrl = json.data && json.data.screenshot && json.data.screenshot.url;
-    if (!shotUrl) throw new Error('no shot url');
-    execSync(`curl -sS -o "${afterPath}" "${shotUrl}"`, { encoding: 'utf-8' });
-  } catch (e) {
-    wlog('snap after fail: ' + e.message);
-    try { fs.unlinkSync(taskFile); } catch {}
-    return;
+    const cfg = loadConfig();
+    const okShot = captureScreenshotToFile(cfg, task.serverUrl, afterPath);
+    if (!okShot) {
+      wlog('snap after fail (provider: ' + getShotConfig(cfg).provider + ')');
+      try { fs.unlinkSync(taskFile); } catch {}
+      return;
+    }
   }
 
   // 读 before + after · 编 data URL · editUpdate
@@ -9964,6 +10020,7 @@ function help() {
   log('  ' + vermilion('tinker mute 1h') + sepia(' / ') + vermilion('today') + sepia(' / ') + vermilion('forever') + sepia(' / ') + vermilion('off') + sepia('   静音控制'));
   log('  ' + vermilion('tinker session status') + sepia(' / ') + vermilion('end') + sepia('     看 UI session 状态 / 手动结束'));
   log('  ' + vermilion('tinker llm set') + sepia(' / ') + vermilion('status') + sepia(' / ') + vermilion('off') + sepia('       配 / 看 / 清 LLM key (给自动起草用)'));
+  log('  ' + vermilion('tinker screenshot <provider> <key>') + sepia('   换截图后端 (apiflash / screenshotone · 默认 microlink 免费档) · test 验一张'));
   log('');
   log(sepia('  ') + vermilion('收尾 · 沉淀'));
   log('  ' + vermilion('tinker goodnight') + sepia('                   今日总结 (commit + push + Claude Code token + 方法被借)'));
@@ -10560,6 +10617,7 @@ async function main() {
       case 'login': await cmdLogin(opts); break;
       case 'onboard': await cmdOnboard(opts); break;
       case 'config': await cmdConfig(opts); break;
+      case 'screenshot': await cmdScreenshotConfig(opts); break;
       case 'projects': case 'ls': await cmdProjects(opts); break;
       case 'push': await cmdPush(opts); break;
       case 'stuck': await cmdStuck(opts); break;
