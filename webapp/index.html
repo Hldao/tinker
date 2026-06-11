@@ -229,9 +229,12 @@
   .entry-text { color: var(--ink); font-size: 16px; line-height: 1.55; margin-bottom: 8px; font-family: 'Newsreader', serif; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; text-overflow: ellipsis; }
   /* v0.84 方法 tag chip · 跨用户聚类信号 · 卡片底部显示 */
   .method-tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .method-tag-chip { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); padding: 2px 8px; background: rgba(120, 113, 108, 0.06); border-radius: 12px; letter-spacing: 0.05em; cursor: pointer; transition: background 0.15s; }
+  .method-tag-chip { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); padding: 2px 8px; background: rgba(120, 113, 108, 0.06); border-radius: 12px; letter-spacing: 0.05em; cursor: pointer; transition: background 0.15s; }
   .method-tag-chip:hover { background: rgba(120, 113, 108, 0.14); }
   .method-tag-chip::before { content: '#'; opacity: 0.5; margin-right: 2px; }
+  /* v0.86 领域 tag · 每个领域一色 (颜色走 inline style · 见 renderMethodTagRow) · 无 # · 跟 #主题 区分开 */
+  .method-tag-chip.is-discipline { font-weight: 500; letter-spacing: 0.02em; }
+  .method-tag-chip.is-discipline::before { content: ''; margin: 0; }
   /* v0.83 方法库子页 · masthead 方法库 进入 · 跨用户跨项目 */
   .methods-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
   .methods-lib-search { flex: 1; min-width: 240px; font-family: 'Newsreader', serif; font-size: 16px; padding: 10px 14px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; color: var(--ink); transition: border-color 0.15s; }
@@ -259,8 +262,11 @@
   .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
   .method-hero-card:hover { border-color: var(--moss); transform: translateY(-1px); }
   .method-hero-card-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; align-self: flex-start; }
-  .method-hero-card-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.5; color: var(--ink); }
-  .method-hero-card-untitled { font-family: 'Newsreader', 'Songti SC', serif; font-size: 14px; color: var(--sepia); font-style: italic; }
+  /* v0.86 顶部一条:badge + 领域/主题 tag · 标签从正文下方挪到卡片上方 */
+  .method-hero-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .method-hero-card-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.5; color: var(--ink); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  /* v0.86 无场景的方法:正文去斜体 + 按行干净截断 (不再句中硬切 80 字) */
+  .method-hero-card-untitled { font-family: 'Newsreader', 'Songti SC', serif; font-size: 14px; color: #44403c; line-height: 1.55; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .method-hero-card-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-top: 4px; flex-wrap: wrap; }
   .method-hero-card-meta .nh { color: var(--sepia); cursor: pointer; }
   .method-hero-card-meta .nh:hover { color: var(--vermilion); }
@@ -7958,8 +7964,15 @@ function getFeedEvents() {
 function renderMethodTagRow(m) {
   const tags = Array.isArray(m.tags) ? m.tags : [];
   if (tags.length === 0) return '';
+  // 领域 tag 在前 (服务端 unshift) · 主题 tag 在后 · 领域上色 + 去 # · 主题保持 #灰
+  const sorted = [...tags].sort((a, b) => (METHOD_DISCIPLINE_COLORS[b] ? 1 : 0) - (METHOD_DISCIPLINE_COLORS[a] ? 1 : 0));
   return `<div class="method-tag-row">${
-    tags.map(t => `<span class="method-tag-chip" onclick="event.stopPropagation(); methodsLibraryState.query='#${escapeHtml(t)}'; showScreen('methods');">${escapeHtml(t)}</span>`).join('')
+    sorted.map(t => {
+      const color = METHOD_DISCIPLINE_COLORS[t];
+      const cls = color ? 'method-tag-chip is-discipline' : 'method-tag-chip';
+      const style = color ? ` style="color:${color}; background:${color}1a;"` : '';
+      return `<span class="${cls}"${style} onclick="event.stopPropagation(); methodsLibraryState.query='#${escapeHtml(t)}'; showScreen('methods');">${escapeHtml(t)}</span>`;
+    }).join('')
   }</div>`;
 }
 
@@ -8326,7 +8339,7 @@ function renderWorkshop(handle) {
         const p = m.projectId ? projectsById.get(m.projectId) : null;
         const scenarioOrFallback = m.scenario
           ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
-          : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 80))}…</div>`;
+          : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 180))}</div>`;
         const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
         const projectLine = p
           ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
@@ -8334,9 +8347,11 @@ function renderWorkshop(handle) {
         const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span>` : '';
         return `
           <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
-            <span class="method-hero-card-badge">✤ 方法</span>
+            <div class="method-hero-card-top">
+              <span class="method-hero-card-badge">✤ 方法</span>
+              ${renderMethodTagRow(m)}
+            </div>
             ${scenarioOrFallback}
-            ${renderMethodTagRow(m)}
             <div class="method-hero-card-meta">
               ${borrowed}
               ${projectLine}
@@ -8873,6 +8888,14 @@ function daysSinceShip(ts) {
 let methodsLibraryState = { query: '', groupBy: 'project', remoteHits: null, lastQuery: null };
 // v0.85 方法领域轴 · 跟服务端 DISCIPLINES 词表对齐 · 点一下走 #tag 精确过滤
 const METHOD_DISCIPLINES = ['产品', '设计', '数据与安全', '工程', 'AI协作'];
+// v0.86 每个领域一个颜色 · 跟陈列馆/状态色同一套土系调 · 卡片上的领域 tag 用它上色
+const METHOD_DISCIPLINE_COLORS = {
+  '产品': '#c2410c',       // 朱红 · 品牌主色
+  '设计': '#7c3aed',       // 紫
+  '数据与安全': '#0f766e', // 深青
+  '工程': '#15803d',       // 苔绿
+  'AI协作': '#ad6526',     // 赭黄
+};
 function toggleDiscipline(d) {
   methodsLibraryState.query = (methodsLibraryState.query === '#' + d) ? '' : '#' + d;
   renderMethodsLibrary();
@@ -8928,16 +8951,18 @@ async function renderMethodsLibrary(initialQuery) {
     const p = m.projectId ? projectsById.get(m.projectId) : null;
     const scenarioOrFallback = m.scenario
       ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
-      : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 80))}…</div>`;
+      : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 180))}</div>`;
     const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
     const projectLine = p
       ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
       : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
     return `
       <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
-        <span class="method-hero-card-badge">✤ 方法</span>
+        <div class="method-hero-card-top">
+          <span class="method-hero-card-badge">✤ 方法</span>
+          ${renderMethodTagRow(m)}
+        </div>
         ${scenarioOrFallback}
-        ${renderMethodTagRow(m)}
         <div class="method-hero-card-meta">
           <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
           <span style="color: var(--sepia-light);">·</span>

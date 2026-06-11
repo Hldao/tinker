@@ -55,6 +55,8 @@
 - **v0.55** 拆信封懒取 (Phase 2) · bridge task 只发轻信封 (说明 + repo + blobRef) · 重料 (diff/situation/voice) 加密压缩后存 server blob 库 · 接收方点了"接"才 `tinker inbox fetch` / `verify` 拉回来 · 53kb 包压成 463 字节轻信封上线。blob 按 sha256(明文) 内容寻址 + studio 命名空间 · 同工作室内容相同自动去重。server 加 `bridge_blobs` 表 (migration 060) + `/api/bridge/blob` 存取路由 · 沿用 messages 那套"只存密文不解密"
 
 ### [methods] 方法库领域轴 (v0.85)
+- **v0.86** 方法卡片视觉打磨:标签从正文下方挪到卡片**顶部**(跟 ✤ 方法 badge 同一条) · 每个领域**一个颜色**(产品朱红/设计紫/数据与安全深青/工程苔绿/AI协作赭黄 · 无 # 前缀) · 主题 tag 退成中性 #灰 · 一眼分出"领域"和"主题"两层 · 顺手去掉无场景方法正文的中文斜体(跟 v0.30 清洗一致) + 正文按行 line-clamp 干净截断(不再句中硬切 80 字)
+
 > Owner: bridge 线 · 来自朋友反馈
 - **v0.85.2** borrow 接上领域 (AI 那半 · 之前领域只给人看 · AI 借的时候瞎)。FTS 索引揉进 tags · searchMethods 返回 discipline + tags 字段 (让 AI 判断方法合不合适当前任务) · `tinker borrow --discipline 设计` 按领域筛 · LIKE 兜底也查 tags 让 2 字领域词 (trigram 匹配不了) 也能自由搜命中。**顺手修了个真·线上老 bug**: borrow_log.update_id NOT NULL (012 建表) 没跟上 methods 迁出 updates (019) · 登录用户第一次借"别人的"方法 → 写日志 update_id=null 违反约束 → searchMethods 崩 → 接口 400。跨人借方法 (方法库最核心场景) 一直是坏的 · 只因借自己的/24h 重复借会绕过才没在 2-3 人内测暴露。migration 070 让 update_id 可空 + 借阅日志整段包 try/catch (日志尽力而为 · 绝不拖垮搜索)
 - **v0.85** 给方法库加一条"按手艺领域"的轴（产品 / 设计 / 数据与安全 / 工程 / AI协作），跟现有自由 tag（#supabase #auth · "用什么"）互补，这条是"哪门手艺 · 适合哪个阶段"。服务端 createMethod 用关键词分类器自动猜一个领域 tag（命中 ≥ 2 才打 · 没把握不硬塞 · 人随时可改），固定词表不漂，让"所有 ui 类方法"能被可靠捞出来。关键词以中文为主，英文只收长且不撞词的（短英文 ui/ci 会在 guide/decision 里子串误命中，不收）。网页方法库加一行领域快筛，点一下走现有 #tag 精确过滤。`backfillDisciplines` action 给存量方法补一次。应用 §12：这跟当初砍掉的"按工具筛选"不一样，领域不是工具轴，且帮不懂代码的人绕开工程类，跟"不懂代码优先"一头，正好压在假设 2（人能不能找到对的方法）上
