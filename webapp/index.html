@@ -261,7 +261,7 @@
   .method-hero-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
   .method-hero-card:hover { border-color: var(--moss); transform: translateY(-1px); }
-  .method-hero-card-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; align-self: flex-start; }
+  .method-hero-card-badge { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; }
   /* v0.86 顶部一条:badge + 领域/主题 tag · 标签从正文下方挪到卡片上方 */
   .method-hero-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .method-hero-card-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.5; color: var(--ink); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
@@ -287,6 +287,10 @@
 
   /* feed 缩略图 — 田野笔记气质 · max-height 200px */
   .feed-figure { margin-top: 14px; display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+  /* 两张图并排 · 田野笔记里的改前/改后对照 · 平分一行 · 顶对齐方便从上往下读 */
+  .feed-figure.multi { align-items: flex-start; flex-wrap: nowrap; }
+  .feed-figure.multi .feed-figure-frame { flex: 1 1 0; min-width: 0; }
+  .feed-figure.multi .feed-figure-frame img { width: 100%; max-height: none; }
   .feed-figure-frame {
     border: 1px solid var(--sepia-light);
     padding: 5px;
@@ -8080,8 +8084,9 @@ function makeEntryEl(e) {
     showScreen('project', e.owner, e.projectSlug);
     if (e.updateId) setTimeout(() => flashAnchor('update-' + e.updateId), 50);
   };
-  const firstImg = e.images && e.images.length > 0 ? e.images[0] : null;
-  const moreCount = e.images && e.images.length > 1 ? e.images.length - 1 : 0;
+  const allImgs = (e.images && e.images.length > 0) ? e.images : [];
+  const shownImgs = allImgs.slice(0, 2);
+  const moreCount = allImgs.length > 2 ? allImgs.length - 2 : 0;
   const seeking = e.feedbackAsk !== undefined;
   entry.innerHTML = `
     <div class="entry-time mono">${shortAgo(e.at)}</div>
@@ -8095,15 +8100,16 @@ function makeEntryEl(e) {
       </div>
       ${seeking && e.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(e.feedbackAsk)}</div>` : ''}
       <div class="entry-text">${renderRichText(e.text)}</div>
-      ${firstImg ? (isEncryptedImageSlot(firstImg) ? renderEncryptedPlaceholder() : `
-        <div class="feed-figure">
-          <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(firstImg.src).replace(/"/g,'&quot;')}, ${JSON.stringify(firstImg.caption||'').replace(/"/g,'&quot;')})">
-            <img src="${firstImg.src}" alt="${escapeHtml(firstImg.caption||'')}" onerror="window.__handleEncImgError(this)">
-          </div>
+      ${shownImgs.length > 0 ? `
+        <div class="feed-figure${shownImgs.length > 1 ? ' multi' : ''}">
+          ${shownImgs.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder() : `
+          <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
+            <img src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
+          </div>`).join('')}
           ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
         </div>
-      `) : ''}
-      <div class="entry-meta" style="margin-top: ${firstImg ? '14px' : '0'};">
+      ` : ''}
+      <div class="entry-meta" style="margin-top: ${shownImgs.length > 0 ? '14px' : '0'};">
         <span>${e.tools.slice(0,3).join('、')}</span>
         ${e.status === 'done' ? `<span class="entry-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${e.projectId}')">✦ 在陈列馆</span>` : ''}
         ${seeking && e.productLink ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
