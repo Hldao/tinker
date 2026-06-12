@@ -8550,6 +8550,7 @@ async function renderStudio(slug) {
       <h1 class="workshop-name mb-3">${escapeHtml(s.name)}</h1>
       ${s.tagline ? `<p class="workshop-tagline">「${escapeHtml(s.tagline)}」</p>` : ''}
       <div class="mono text-xs mt-3" style="color: var(--sepia);">/s/${escapeHtml(s.slug)} · ${s.members.length} 个人</div>
+      ${isMember ? `<div class="mt-3"><span class="small-action" style="color: var(--sepia); cursor: pointer;" onclick="leaveStudio('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">离开工作室</span></div>` : ''}
     </div>
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
@@ -10694,8 +10695,13 @@ async function leaveStudio(studioId, studioName) {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || '离开失败');
     state = await fetchState();
-    renderAccount();
     showToast('已离开 — ' + studioName);
+    // 从工作室页离开 · 别停在已经退出的那一页 · 导航回自己的工坊 (账户页则就地刷新列表)
+    if (history.state && history.state.screen === 'studio') {
+      showScreen('workshop', currentUser.handle);
+    } else {
+      renderAccount();
+    }
   } catch (e) {
     showToast('离开失败：' + e.message);
   }
