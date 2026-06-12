@@ -63,22 +63,45 @@ function studioJoin({ slug, secretHash }, { currentUserId }) {
   return { id: studio.id, name: studio.name, alreadyMember: false };
 }
 
-function studioLeave({ studioId }, { currentUserId }) {
+function studioLeave({ studioId, successorUserId } = {}, { currentUserId }) {
   const row = db.prepare(
     'SELECT role FROM studio_members WHERE studio_id = ? AND user_id = ?'
   ).get(studioId, currentUserId);
   if (!row) throw new Error('你不在这个工作室里');
 
-  // owner 退出前要确保还有别的成员 · 或者改成转让 (Phase 2)
+  // owner 退出 = 先把 owner 转让出去再走 · 否则工作室没 owner 变孤儿 (见 tech-debt ⑤)
   if (row.role === 'owner') {
-    const otherCount = db.prepare(
-      "SELECT COUNT(*) AS c FROM studio_members WHERE studio_id = ? AND user_id != ?"
-    ).get(studioId, currentUserId).c;
-    if (otherCount === 0) {
-      throw new Error('你是唯一 owner · 没人继承 · 先邀请别人加入再退');
+    const others = db.prepare(
+      'SELECT user_id, role FROM studio_members WHERE studio_id = ? AND user_id != ? ORDER BY joined_at ASC'
+    ).all(studioId, currentUserId);
+    if (others.length === 0) {
+      // 唯一成员的 owner = 没人继承 · 暂拦死 (解散工作室的入口还没做 · 见 tech-debt ⑤)
+      throw new Error('你是唯一成员 · 没人继承 · 先邀请别人加入再退 (解散工作室还没做)');
     }
+    // 走了之后已经没 owner 了才需要转让 · 接班人:显式指定 (B) 优先 · 否则最早加入的 (A 兜底)
+    let heirId = null;
+    if (!others.some(o => o.role === 'owner')) {
+      heirId = others[0].user_id;
+      if (successorUserId) {
+        if (!others.some(o => o.user_id === successorUserId)) {
+          throw new Error('指定的接班人不在这个工作室里');
+        }
+        heirId = successorUserId;
+      }
+    }
+    const txn = db.transaction(() => {
+      if (heirId) {
+        db.prepare("UPDATE studio_members SET role = 'owner' WHERE studio_id = ? AND user_id = ?")
+          .run(studioId, heirId);
+      }
+      db.prepare('DELETE FROM studio_members WHERE studio_id = ? AND user_id = ?')
+        .run(studioId, currentUserId);
+    });
+    txn();
+    return { left: true, transferredTo: heirId || undefined };
   }
 
+  // 非 owner 直接走
   db.prepare('DELETE FROM studio_members WHERE studio_id = ? AND user_id = ?')
     .run(studioId, currentUserId);
 
