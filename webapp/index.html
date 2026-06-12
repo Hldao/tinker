@@ -8972,10 +8972,12 @@ function toggleDiscipline(d) {
   methodsLibraryState.query = (methodsLibraryState.query === '#' + d) ? '' : '#' + d;
   renderMethodsLibrary();
 }
-async function renderMethodsLibrary(initialQuery) {
+async function renderMethodsLibrary(initialQuery, listOnly) {
   if (initialQuery !== undefined) methodsLibraryState.query = initialQuery;
   const root = document.getElementById('methods-library-content');
   if (!root) return;
+  // 请求序号 · 防竞态:快速改词时旧搜索后到会被丢弃 · 不覆盖新结果
+  const seq = (methodsLibraryState._reqSeq = (methodsLibraryState._reqSeq || 0) + 1);
 
   const all = state.methods || [];
   const projectsById = new Map(state.projects.map(p => [p.id, p]));
@@ -8991,6 +8993,9 @@ async function renderMethodsLibrary(initialQuery) {
   } else if (q) {
     // 缓存机制: 同 query 不重发 · 等用户改了再发
     if (methodsLibraryState.lastQuery !== q || methodsLibraryState.remoteHits === null) {
+      // 发请求前先给个加载提示 (只在列表区 · 不动输入框)
+      const le = document.getElementById('methods-lib-list');
+      if (le) le.innerHTML = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">搜索中…</div>`;
       try {
         const url = new URL('/api/method/search', location.origin);
         url.searchParams.set('q', q);
@@ -8998,11 +9003,13 @@ async function renderMethodsLibrary(initialQuery) {
         url.searchParams.set('limit', '50');
         const res = await fetch(url.toString());
         const data = await res.json();
+        if (seq !== methodsLibraryState._reqSeq) return;  // 已被更新的搜索取代 · 丢弃这次结果
         // FTS5 命中是 method id · 用 id 反查 state.methods 拿全字段 (含 borrowCount)
         const hitIds = new Set((data.hits || []).map(h => h.methodId || h.id));
         methodsLibraryState.remoteHits = all.filter(m => hitIds.has(m.id));
         methodsLibraryState.lastQuery = q;
       } catch (e) {
+        if (seq !== methodsLibraryState._reqSeq) return;
         // 网络挂 fallback 到本地 substring
         methodsLibraryState.remoteHits = all.filter(m => {
           const lq = q.toLowerCase();
@@ -9013,7 +9020,7 @@ async function renderMethodsLibrary(initialQuery) {
         methodsLibraryState.lastQuery = q;
       }
     }
-    methods = methodsLibraryState.remoteHits;
+    methods = methodsLibraryState.remoteHits || [];
   } else {
     methodsLibraryState.remoteHits = null;
     methodsLibraryState.lastQuery = null;
@@ -9123,6 +9130,13 @@ async function renderMethodsLibrary(initialQuery) {
     groupedHtml = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">${q ? '没搜到 · 换个词试试' : '还没有沉淀方法 · 用 tinker contribute --from-file 推一份过来'}</div>`;
   }
 
+  // 搜索路径:只更新结果列表 · 不重建外壳/输入框 · 焦点和光标自然保住
+  if (listOnly) {
+    const listEl = document.getElementById('methods-lib-list');
+    if (listEl) listEl.innerHTML = groupedHtml;
+    return;
+  }
+
   const groupTab = (key, label) => `
     <span class="methods-lib-tab ${methodsLibraryState.groupBy === key ? 'active' : ''}" onclick="methodsLibraryState.groupBy='${key}'; renderMethodsLibrary();">${label}</span>
   `;
@@ -9133,7 +9147,7 @@ async function renderMethodsLibrary(initialQuery) {
       <p class="feed-sub mb-6">vibe coder 沉淀下来的手艺 · 关键词搜 · 复制 markdown 直接喂给你的 AI</p>
       <div class="methods-lib-toolbar">
         <input type="text" id="methods-lib-q" class="methods-lib-search" placeholder="搜方法 · supabase / 邮箱登录 / 部署…" value="${escapeHtml(methodsLibraryState.query)}"
-          oninput="methodsLibraryState.query = this.value; clearTimeout(window._methodsLibT); window._methodsLibT = setTimeout(() => renderMethodsLibrary(), 200);">
+          oninput="methodsLibraryState.query = this.value; clearTimeout(window._methodsLibT); window._methodsLibT = setTimeout(() => renderMethodsLibrary(undefined, true), 200);">
         <div class="methods-lib-tabs">
           ${groupTab('topic', '按主题')}
           ${groupTab('project', '按项目')}
@@ -9146,10 +9160,11 @@ async function renderMethodsLibrary(initialQuery) {
         ${METHOD_DISCIPLINES.map(d => `<span class="disc-chip ${methodsLibraryState.query === '#' + d ? 'active' : ''}" onclick="toggleDiscipline('${d}')">${d}</span>`).join('')}
       </div>
     </div>
-    <div class="methods-lib-list">${groupedHtml}</div>
+    <div class="methods-lib-list" id="methods-lib-list">${groupedHtml}</div>
   `;
 
-  // 让 search 框 retain focus (因为 oninput 重 render 会丢)
+  // 全量渲染后 (页面入站/切分组/点领域)·带着关键词时把焦点放回搜索框末尾
+  // 搜索打字走 listOnly 分支不重建输入框 · 不会到这 · 所以不丢焦点
   const qInput = document.getElementById('methods-lib-q');
   if (qInput && document.activeElement !== qInput && q) {
     qInput.focus();
