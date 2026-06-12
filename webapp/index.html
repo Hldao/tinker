@@ -7761,7 +7761,17 @@ function navigateFromHash() {
 }
 
 window.addEventListener('hashchange', navigateFromHash);
-window.addEventListener('popstate', navigateFromHash);
+// 返回键(手机/浏览器)优先关弹窗:有弹窗开着就关掉、把当前屏 hash 压回,
+// 这样返回栈不丢、屏幕不切;没弹窗才正常逐屏返回。
+window.addEventListener('popstate', () => {
+  if (closeOpenModals()) {
+    if ((location.hash || '#/') !== _renderedHash) {
+      try { history.pushState(null, '', _renderedHash); } catch (e) {}
+    }
+    return;
+  }
+  navigateFromHash();
+});
 
 function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
 function projectById(id){ return state.projects.find(p=>p.id===id); }
@@ -8151,7 +8161,7 @@ function makeEntryEl(e) {
         <div class="feed-figure${shownImgs.length > 1 ? ' multi' : ''}">
           ${shownImgs.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder() : `
           <div class="feed-figure-frame" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
-            <img src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
+            <img loading="lazy" src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
           </div>`).join('')}
           ${moreCount > 0 ? `<span class="feed-figure-more">+ ${moreCount} 张</span>` : ''}
         </div>
@@ -8655,7 +8665,7 @@ function renderProject(owner, slug) {
           return `
             <figure class="tl-figure">
               <div class="tl-figure-frame" onclick="zoomImage('${safeSrc}', '${escapeHtml(img.caption||'')}')">
-                <img src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
+                <img loading="lazy" src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
               </div>
               <figcaption class="tl-figure-caption"><span class="label">图 ${figureIdx}</span>${escapeHtml(img.caption || '')}</figcaption>
             </figure>
@@ -8841,7 +8851,7 @@ function renderProject(owner, slug) {
             <div class="note-images">
               ${n.images.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder({small: true}) : `
                 <div class="note-image-frame" onclick="zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
-                  <img src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
+                  <img loading="lazy" src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
                 </div>
               `).join('')}
             </div>
@@ -9268,7 +9278,7 @@ function renderShowcase(focusId) {
         </div>
         ${coverImage ? `
         <div class="showcase-card-figure" onclick="event.stopPropagation(); zoomImage(${JSON.stringify(coverImage.src).replace(/"/g,'&quot;')}, ${JSON.stringify(coverImage.caption||'').replace(/"/g,'&quot;')})">
-          <img src="${coverImage.src}" alt="${escapeHtml(coverImage.caption || '')}" onerror="window.__handleEncImgError(this)">
+          <img loading="lazy" src="${coverImage.src}" alt="${escapeHtml(coverImage.caption || '')}" onerror="window.__handleEncImgError(this)">
         </div>` : ''}
         ${p.desc ? `<div class="showcase-card-desc">${escapeHtml(p.desc)}</div>` : ''}
         ${reflection ? `<blockquote class="showcase-card-reflection" style="border-left-color: ${cfg.badgeColor};">
@@ -9844,7 +9854,7 @@ function renderPendingImages() {
   const list = document.getElementById('upload-list');
   list.innerHTML = pendingImages.map((img, idx) => `
     <div class="upload-thumb">
-      <img src="${img.src}" alt="">
+      <img loading="lazy" src="${img.src}" alt="">
       <div class="remove" onclick="removePendingImage(${idx})">×</div>
     </div>
   `).join('');
@@ -9876,7 +9886,7 @@ function renderNotePendingImages() {
   if (!list) return;
   list.innerHTML = notePendingImages.map((img, idx) => `
     <div class="upload-thumb">
-      <img src="${img.src}" alt="">
+      <img loading="lazy" src="${img.src}" alt="">
       <div class="remove" onclick="removeNotePendingImage(${idx})">×</div>
     </div>
   `).join('');
@@ -9907,7 +9917,7 @@ function renderShipPendingImages() {
   if (!list) return;
   list.innerHTML = shipPendingImages.map((img, idx) => `
     <div class="upload-thumb">
-      <img src="${img.src}" alt="">
+      <img loading="lazy" src="${img.src}" alt="">
       <div class="remove" onclick="removeShipPendingImage(${idx})">×</div>
     </div>
   `).join('');
@@ -11370,6 +11380,14 @@ function openWorkshopSetup() {
 }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
+// 关掉当前打开的任意弹窗 · 返回是否关掉了 (ESC / 手机返回键 共用)
+// 用 id 前缀选根 · 比硬编码白名单可靠 · 新增弹窗自动覆盖不会漏
+function closeOpenModals() {
+  const open = document.querySelectorAll('[id^="modal-"]:not(.hidden)');
+  open.forEach(el => el.classList.add('hidden'));
+  return open.length > 0;
+}
+
 // 分享当前项目页 (Tinker URL) · spec §5.3 "离开路径"
 function shareProject(platform) {
   const p = projectById(currentProjectCtx);
@@ -11471,12 +11489,9 @@ document.addEventListener('paste', (e) => {
 
 /* ============ 键盘快捷键 ============ */
 document.addEventListener('keydown', (e) => {
-  // ESC 关任意 modal
+  // ESC 关任意 modal (旧版只覆盖 11 个硬编码白名单 · 登录/建工作室/邀请等 9 个关不掉)
   if (e.key === 'Escape') {
-    ['modal-note','modal-tinkered','modal-update','modal-zoom','modal-search','modal-method-used','modal-pick-project','modal-new-project','modal-edit-workshop','modal-status-picker','modal-ship-ceremony'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
-    });
+    closeOpenModals();
   }
   // ⌘K / Ctrl+K 触发搜索
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
