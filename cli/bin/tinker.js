@@ -2436,7 +2436,7 @@ async function cmdClaudeHookInstall(opts = {}) {
   // v0.17 全局 UserPromptSubmit (无 matcher) · 每次用户 prompt 都 check pending reminders
   // post-commit hook 触发的 reminder 没人处理时 · 这里会注入 AI context · 让 AI 主动汇报
   // 顺手 notify-claude prompt 记这轮开始时间 (给 Stop 算耗时 · 只有长任务才弹通知) · 它 stdout 干净不污染 pending 注入
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, null, 'tinker notify-claude prompt 2>/dev/null; tinker pending --check 2>/dev/null || true', 'pending-check');
+  installClaudeHookEntry(settings.hooks.UserPromptSubmit, null, 'tinker notify-claude prompt 2>/dev/null; tinker maybe-borrow-worked 2>/dev/null; tinker pending --check 2>/dev/null || true', 'pending-check');
 
   // 桌面通知 · Claude Code 要你确认权限 / 等你输入时弹 (matcher 限定 · 不噪)
   installClaudeHookEntry(settings.hooks.Notification, 'permission_prompt', 'tinker notify-claude notification 2>/dev/null || true', 'notify-permission');
@@ -8428,6 +8428,124 @@ ${joined}`;
   log('');
 }
 
+// 59 捕获借 · 把命中的一等方法记到 ~/.tinker/borrowed.jsonl
+// 给"借了且跑通了自动回响"检测器当线索:methodId + 作者 + 文本指纹 + 时间
+// 只记别人的、有 methodId 的 · 7 天外的自动剪掉 · 文件不无限长
+const BORROWED_FILE = path.join(CONFIG_DIR, 'borrowed.jsonl');
+function recordBorrowedMethods(cfg, query, hits) {
+  const mine = cfg.handle;
+  const fresh = (hits || [])
+    .filter(h => h.methodId && h.ownerHandle && h.ownerHandle !== mine)
+    .slice(0, 5)
+    .map(h => ({
+      methodId: h.methodId,
+      owner: h.ownerHandle,
+      scenario: (h.scenario || '').slice(0, 80),
+      // 指纹:正文里最长的一行 (去空白) · 检测器拿它在对话里找强匹配
+      fingerprint: (h.text || '').split('\n').map(s => s.trim()).filter(s => s.length >= 12).sort((a, b) => b.length - a.length)[0]?.slice(0, 120) || '',
+      query: query.slice(0, 40),
+      at: Date.now(),
+    }));
+  if (fresh.length === 0) return;
+  let existing = [];
+  try { existing = fs.readFileSync(BORROWED_FILE, 'utf-8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch {}
+  const cutoff = Date.now() - 7 * 86400000;
+  // 同 methodId 去重保最新 · 7 天外剪掉
+  const byId = {};
+  for (const e of [...existing, ...fresh]) {
+    if (e.at < cutoff) continue;
+    byId[e.methodId] = e; // 后写的覆盖
+  }
+  const out = Object.values(byId).sort((a, b) => a.at - b.at);
+  try {
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(BORROWED_FILE, out.map(e => JSON.stringify(e)).join('\n') + '\n');
+  } catch {}
+}
+
+// 59b 检测 · 借了某方法、且在 Claude session 里跑通了 → 提示回个「用了」
+// 保守到底:指纹够长(≥16)+ 在对话里出现 + 之后有"用户亲口说的"成功信号 · 三个都满足才算
+// 宁可漏报不可误报 (误报=乱叫=跟回报引擎反着来) · 每个方法只提一次 · 永远只建议不自动发
+const BORROW_SUCCESS_RE = /(跑通|搞定|成功|可以了|好了|解决了|通过了|没问题了|works|worked|fixed|passed)/i;
+
+// 抽最近活跃 session 的 message 流 (带 role) · 给指纹/信号定位
+function readRecentClaudeParts() {
+  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
+  if (!fs.existsSync(claudeRoot)) return [];
+  let newest = null, newestM = 0;
+  try {
+    for (const d of fs.readdirSync(claudeRoot)) {
+      const full = path.join(claudeRoot, d);
+      let st; try { st = fs.statSync(full); } catch { continue; }
+      if (!st.isDirectory()) continue;
+      for (const f of fs.readdirSync(full)) {
+        if (!f.endsWith('.jsonl')) continue;
+        const fp = path.join(full, f);
+        let s; try { s = fs.statSync(fp); } catch { continue; }
+        if (s.mtimeMs > newestM) { newestM = s.mtimeMs; newest = fp; }
+      }
+    }
+  } catch {}
+  if (!newest) return [];
+  let content = '';
+  try { content = fs.readFileSync(newest, 'utf-8'); } catch { return []; }
+  const parts = [];
+  for (const line of content.split('\n')) {
+    if (!line || line[0] !== '{') continue;
+    let o; try { o = JSON.parse(line); } catch { continue; }
+    const msg = o.message;
+    if (!msg) continue;
+    let text = '';
+    if (typeof msg.content === 'string') text = msg.content;
+    else if (Array.isArray(msg.content)) text = msg.content.map(c => (typeof c === 'string' ? c : (c && c.text) || '')).join(' ');
+    if (text) parts.push({ role: o.type, text });
+  }
+  return parts;
+}
+
+function detectBorrowedMethodWorked() {
+  let borrowed = [];
+  try { borrowed = fs.readFileSync(BORROWED_FILE, 'utf-8').split('\n').filter(Boolean).map(l => JSON.parse(l)); } catch { return { matches: [], borrowed: [] }; }
+  const candidates = borrowed.filter(b => !b.notified && b.fingerprint && b.fingerprint.length >= 16);
+  if (candidates.length === 0) return { matches: [], borrowed };
+  const parts = readRecentClaudeParts();
+  if (parts.length === 0) return { matches: [], borrowed };
+  const matches = [];
+  for (const b of candidates) {
+    let fpIdx = -1;
+    for (let i = 0; i < parts.length; i++) { if (parts[i].text.includes(b.fingerprint)) { fpIdx = i; break; } }
+    if (fpIdx === -1) continue; // 指纹没在对话里出现 · 没真用
+    let worked = false;
+    for (let j = fpIdx; j < parts.length; j++) {
+      if (parts[j].role === 'user' && BORROW_SUCCESS_RE.test(parts[j].text)) { worked = true; break; }
+    }
+    if (worked) matches.push(b);
+  }
+  return { matches, borrowed };
+}
+
+// hidden · UserPromptSubmit hook 调 · stdout 干净 (跟 notify-claude 一样不污染)
+function cmdMaybeBorrowWorked(opts = {}) {
+  const { matches, borrowed } = detectBorrowedMethodWorked();
+  if (matches.length === 0) { if (opts.json) outputJson({ ok: true, fired: [] }); return; }
+  const firedIds = new Set();
+  for (const m of matches) {
+    appendPendingReminder({
+      id: 'bw-' + m.methodId, kind: 'borrowed-method-worked', at: Date.now(),
+      msg: '你借了 @' + m.owner + ' 的方法' + (m.scenario ? ' (' + m.scenario + ')' : '') + ' · 看着在对话里跑通了',
+      suggestion: '回个「用了」给 ta? ' + 'tinker used ' + m.methodId + ' -m "一句感想"',
+      methodId: m.methodId, owner: m.owner,
+    });
+    firedIds.add(m.methodId);
+  }
+  // 标 notified · 同一条方法不再重复提
+  try {
+    const updated = borrowed.map(b => firedIds.has(b.methodId) ? { ...b, notified: true } : b);
+    fs.writeFileSync(BORROWED_FILE, updated.map(e => JSON.stringify(e)).join('\n') + '\n');
+  } catch {}
+  if (opts.json) outputJson({ ok: true, fired: [...firedIds] });
+}
+
 // v0.12 方法库 · 搜 (借) 用法 · tinker borrow "supabase auth"
 async function cmdBorrow(query, opts) {
   const cfg = loadConfig();
@@ -8460,6 +8578,9 @@ async function cmdBorrow(query, opts) {
     err(errMsg); process.exit(1);
   }
   const data = await res.json();
+  // 59 捕获借:把命中的一等方法本地记一笔 · 给"借了且跑通了自动回响"那个检测器当线索
+  // (只记 methodId 的 · 那才能收 tinker used m-xxx · 自己的方法不记)
+  try { recordBorrowedMethods(cfg, q, data.hits || []); } catch {}
   if (opts.json) return outputJson({ query: q, hits: data.hits || [] });
   const hits = data.hits || [];
   if (hits.length === 0) {
@@ -8571,9 +8692,22 @@ async function cmdTinkered(arg, opts) {
 // toggle 行为:已标 → 撤回 · 没标 → 加
 async function cmdUsed(updateId, opts) {
   const cfg = mustHaveConfig();
+  // 一等方法路径 · tinker used m-xxx · 直接按 methodId 标 (59 的 AI 自动回响走这条)
+  if (updateId && updateId.startsWith('m-')) {
+    try {
+      const r = await apiAction(cfg, 'markMethodUsed', { methodId: updateId, note: (opts.text || '').trim() });
+      const action = (r && r.result && r.result.action) || 'add';
+      if (opts.json) return outputJson({ ok: true, action, methodId: updateId });
+      ok(action === 'undo' ? '撤回了"用了 · 跑通了"' : '标了"用了 · 跑通了" · 原作者会收到通知');
+    } catch (e) {
+      if (opts.json) return errJson(e.message, 'USED_FAILED');
+      err(e.message); process.exit(1);
+    }
+    return;
+  }
   if (!updateId || !updateId.startsWith('u-')) {
-    if (opts.json) return errJson('用法: tinker used <updateId>', 'NO_UPDATE_ID');
-    err('用法: ' + vermilion('tinker used <updateId>') + sepia(' (例: tinker used u-abc123 -m "我也跑通了 · 加了 retry")'));
+    if (opts.json) return errJson('用法: tinker used <updateId|methodId>', 'NO_ID');
+    err('用法: ' + vermilion('tinker used <updateId 或 methodId>') + sepia(' (例: tinker used m-abc123 -m "我也跑通了")'));
     process.exit(1);
   }
   let state;
@@ -11198,6 +11332,7 @@ async function main() {
       case 'bridge-check-inbox': await cmdBridgeCheckInbox(); break;  // hidden · SessionStart hook 用 · v0.38 改成 async (要拉 server)
       case 'notify-claude': cmdNotifyClaude(args[1]); return;  // hidden · Claude Code Notification/Stop/UserPromptSubmit hook 用 · stdout 必须干净
       case 'notify-daemon': await cmdNotifyDaemon(args[1]); return;  // hidden · 后台桥消息通知器 (run/stop/status) · SessionStart 自动 ensure
+      case 'maybe-borrow-worked': cmdMaybeBorrowWorked(opts); return;  // hidden · 59b · 借了方法且跑通了 → 提示回响 · stdout 干净
       case 'studio':
         await cmdStudio(args[1], args, opts);
         break;
@@ -11225,7 +11360,7 @@ async function main() {
     // 不在 hook / watch / check (--from-hook) / update 等后台/系统命令里显示
     // v0.36 也顺手 spawn 后台刷 cache · 这样普通用户不用 commit 也能定期 (24h TTL) 收到新版提醒
     // 之前只有 post-commit hook 触发 cmdCheck 时刷 · 不 commit 的用户永远看不到更新
-    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'notify-claude', 'notify-daemon', 'situation'].includes(cmd)) {
+    if (!['watch', 'check', 'update', undefined, 'help', '--help', '-h', 'maybe-goodnight', 'maybe-stuck', 'maybe-breakthrough', 'maybe-decision', 'maybe-subtraction', 'maybe-clever-fix', 'maybe-ship', 'maybe-handoff', 'maybe-invite', 'maybe-check', 'pending', 'bridge-check-inbox', 'notify-claude', 'notify-daemon', 'maybe-borrow-worked', 'situation'].includes(cmd)) {
       showUpdateBannerIfNeeded();
       spawnUpdateCheckAsync();
     }
