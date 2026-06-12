@@ -9545,7 +9545,9 @@ async function cmdSeek(opts) {
   }
 
   let projectId;
-  if (mine.length === 1) {
+  if (opts.projectId) {
+    projectId = opts.projectId;
+  } else if (mine.length === 1) {
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
