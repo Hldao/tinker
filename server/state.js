@@ -126,6 +126,14 @@ function buildState({ targetUserId } = {}) {
   db.prepare(`SELECT method_id, COUNT(*) AS cnt FROM borrow_log WHERE method_id IS NOT NULL GROUP BY method_id`).all()
     .forEach(r => { borrowCounts[r.method_id] = r.cnt; });
 
+  // 一等方法的「用了·跑通了」· 借用环的"还"那一半 (借了能回应) · 按 method_id 收
+  const usedByMethod = {};
+  db.prepare(`SELECT method_id, user_id, note, at FROM method_used WHERE method_id IS NOT NULL ORDER BY at DESC`).all()
+    .forEach(r => {
+      if (!usedByMethod[r.method_id]) usedByMethod[r.method_id] = [];
+      usedByMethod[r.method_id].push({ user: idToHandle[r.user_id], note: r.note || '', at: r.at });
+    });
+
   // 组装 projects · webapp 期望的形状
   const projectsOut = projectsRows.map(p => {
     const projectUpdates = (updatesByProject[p.id] || []).map(u => {
@@ -176,6 +184,7 @@ function buildState({ targetUserId } = {}) {
       sourceUpdateId: m.source_update_id || null,
       sourceDocPath: m.source_doc_path || null,
       borrowCount: borrowCounts[m.id] || 0,
+      usedBy: usedByMethod[m.id] || [],
       tags: m.tags ? (() => { try { return JSON.parse(m.tags); } catch { return []; } })() : [],
     }));
     return {
@@ -245,6 +254,7 @@ function buildState({ targetUserId } = {}) {
     sourceUpdateId: m.source_update_id || null,
     sourceDocPath: m.source_doc_path || null,
     borrowCount: borrowCounts[m.id] || 0,
+    usedBy: usedByMethod[m.id] || [],
     tags: m.tags ? (() => { try { return JSON.parse(m.tags); } catch { return []; } })() : [],
   }));
 

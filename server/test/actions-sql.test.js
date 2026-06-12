@@ -363,6 +363,37 @@ test('stashPush: 加密标志 + 超大拒绝', () => {
 });
 
 // ============================================
+// markMethodUsed · 一等方法按 methodId 收「用了」(58 借用环的"还"那半)
+// ============================================
+test('markMethodUsed by methodId: 独立方法也能收用了 + state 带 usedBy + toggle + 拒绝自己', () => {
+  const { daodao, alice } = setupBasic();
+  // daodao 建一条独立方法 (无 project)
+  const m = a.createMethod({ text: '跨人借方法时按 methodId 寻址 · 别再用 updateIdx', scenario: 'borrow 闭环' }, { currentUserId: daodao }); m.id = m.methodId;
+  assert.ok(m.id);
+
+  // 自己不能给自己标
+  assert.throws(() => a.markMethodUsed({ methodId: m.id }, { currentUserId: daodao }), /不能给自己/);
+
+  // alice 标用了
+  const r = a.markMethodUsed({ methodId: m.id, note: '我也跑通了' }, { currentUserId: alice });
+  assert.equal(r.ok, true);
+  // daodao 收到 methodUsed 通知
+  assert.equal(db.prepare(`SELECT 1 FROM notifications WHERE target_user_id=? AND type=?`).all('uid-daodao', 'methodUsed').length, 1);
+
+  // state 里这条 method 带 usedBy
+  const st = buildState({ targetUserId: daodao });
+  const mo = (st.methods || []).find(x => x.id === m.id);
+  assert.ok(mo && mo.usedBy && mo.usedBy.length === 1);
+  assert.equal(mo.usedBy[0].user, 'alice');
+  assert.equal(mo.usedBy[0].note, '我也跑通了');
+
+  // 再标一次 = 撤回
+  const r2 = a.markMethodUsed({ methodId: m.id }, { currentUserId: alice });
+  assert.equal(r2.action, 'undo');
+  assert.equal(buildState({ targetUserId: daodao }).methods.find(x => x.id === m.id).usedBy.length, 0);
+});
+
+// ============================================
 // 隐私 · buildState 只给请求者本人带 studios (别泄露全站社交图)
 // ============================================
 test('buildState: studios 只挂请求者本人 · 别人的不在 bulk dump 里', () => {

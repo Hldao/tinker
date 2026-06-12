@@ -1308,7 +1308,27 @@ function deleteTinkered({ projectId }, { currentUserId }) {
   return { ok: true };
 }
 
-function markMethodUsed({ projectId, updateIdx, note }, { currentUserId }) {
+function markMethodUsed({ projectId, updateIdx, methodId, note }, { currentUserId }) {
+  // 新路径 · 一等方法按 methodId 收「用了」(发现页卡片用 · 含独立方法)
+  if (methodId) {
+    const m = db.prepare('SELECT id, owner_id, project_id FROM methods WHERE id = ?').get(methodId);
+    if (!m) throw new Error('方法不存在');
+    if (m.owner_id === currentUserId) throw new Error('不能给自己反馈');
+    const existing = db.prepare('SELECT 1 FROM method_used WHERE method_id = ? AND user_id = ?').get(methodId, currentUserId);
+    if (existing) {
+      db.prepare('DELETE FROM method_used WHERE method_id = ? AND user_id = ?').run(methodId, currentUserId);
+      return { action: 'undo' };
+    }
+    db.prepare('INSERT INTO method_used (method_id, user_id, note, at) VALUES (?, ?, ?, ?)')
+      .run(methodId, currentUserId, (note || '').trim(), Date.now());
+    notify({
+      targetUserId: m.owner_id, fromUserId: currentUserId, type: 'methodUsed',
+      projectId: m.project_id || null, extra: (note && note.trim()) || '用了你的方法 · 跑通了', anchor: 'method-' + methodId,
+    });
+    return { ok: true };
+  }
+
+  // 老路径 · 按 (projectId, updateIdx) · 项目页时间线那种 · 不动
   const p = db.prepare('SELECT owner_id, name FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
   if (p.owner_id === currentUserId) throw new Error('不能给自己反馈');

@@ -273,6 +273,10 @@
   .method-hero-card-actions { display: flex; gap: 12px; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   .method-hero-card-copy { color: var(--moss); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
   .method-hero-card-copy:hover { color: var(--vermilion); }
+  /* 发现页卡片的「用了·跑通了」· 借用环的"还" · 已用显苔绿 */
+  .method-hero-card-used { color: var(--sepia); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+  .method-hero-card-used:hover { color: var(--moss); }
+  .method-hero-card-used.active { color: var(--moss); }
   /* v0.80 方法 first-class feed 卡片 · 跟进展同尺寸但结构不同 (scenario 主 / markdown 走 CTA) */
   .entry-method { /* 跟普通 entry 同 padding · 不降级 */ }
   .entry-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-left: 8px; font-weight: 500; }
@@ -8168,7 +8172,7 @@ function makeMethodEntryEl(e) {
         <div class="entry-method-scenario">
           <span class="entry-method-scenario-label">用于</span>${escapeHtml(e.scenario)}
         </div>
-      ` : `<div class="entry-text" style="font-style: italic; color: var(--sepia);">这条方法暂时没有用例说明 · 点开看正文</div>`}
+      ` : `<div class="entry-text" style="color: var(--sepia);">这条方法暂时没有用例说明 · 点开看正文</div>`}
       <div class="entry-meta entry-method-meta">
         <span class="entry-method-cta-copy" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown · 喂给我的 AI</span>
         <span class="entry-method-cta-view" onclick="event.stopPropagation(); showScreen('project', '${e.owner}', '${e.projectSlug}'); setTimeout(() => flashAnchor('update-${e.updateId}'), 50);">看完整方法 →</span>
@@ -8367,7 +8371,7 @@ function renderWorkshop(handle) {
         const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
         const projectLine = p
           ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
-          : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
+          : '<span style="color: var(--sepia-light);">独立方法</span>';
         const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span>` : '';
         return `
           <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
@@ -8384,6 +8388,7 @@ function renderWorkshop(handle) {
             </div>
             <div class="method-hero-card-actions">
               <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
+              ${m.owner !== currentUser.handle ? `<span class="method-hero-card-used${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?' active':''}" onclick="event.stopPropagation(); methodUsedById('${m.id}')">${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?'✓ 你用过·跑通了':'用了·跑通了'}</span>` : ''}
             </div>
           </div>
         `;
@@ -8982,7 +8987,7 @@ async function renderMethodsLibrary(initialQuery) {
     const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
     const projectLine = p
       ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
-      : '<span style="color: var(--sepia-light); font-style: italic;">独立方法</span>';
+      : '<span style="color: var(--sepia-light);">独立方法</span>';
     return `
       <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
         <div class="method-hero-card-top">
@@ -8999,6 +9004,7 @@ async function renderMethodsLibrary(initialQuery) {
         </div>
         <div class="method-hero-card-actions">
           <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
+          ${m.owner !== currentUser.handle ? `<span class="method-hero-card-used${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?' active':''}" onclick="event.stopPropagation(); methodUsedById('${m.id}')">${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?'✓ 你用过·跑通了':'用了·跑通了'}</span>` : ''}
         </div>
       </div>
     `;
@@ -9018,7 +9024,7 @@ async function renderMethodsLibrary(initialQuery) {
       const p = pid !== '__none__' ? projectsById.get(pid) : null;
       const groupLabel = p
         ? `<span class="nh" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</span> <span style="color: var(--sepia-light);">· @${escapeHtml(p.owner)}</span>`
-        : '<span style="font-style: italic; color: var(--sepia);">未关联项目</span>';
+        : '<span style="color: var(--sepia);">未关联项目</span>';
       return `
         <div class="methods-lib-group">
           <div class="methods-lib-group-head">${groupLabel} <span class="methods-lib-group-count">· ${list.length} 条</span></div>
@@ -9044,7 +9050,7 @@ async function renderMethodsLibrary(initialQuery) {
     const sortedGroups = [...byTag.entries()].sort((a, b) => b[1].length - a[1].length);
     groupedHtml = sortedGroups.map(([tag, list]) => {
       const label = tag === '__none__'
-        ? '<span style="font-style: italic; color: var(--sepia);">未打 tag</span>'
+        ? '<span style="color: var(--sepia);">未打 tag</span>'
         : `<span class="method-tag-chip" style="font-size: 13px; padding: 4px 12px;" onclick="event.stopPropagation();">${escapeHtml(tag)}</span>`;
       return `
         <div class="methods-lib-group">
@@ -9551,7 +9557,34 @@ function doSearch(q) {
 }
 
 /* ============ METHOD USED — update 级反馈 ============ */
-let currentMethodUsedCtx = null; // { projectId, updateIdx }
+let currentMethodUsedCtx = null; // { projectId, updateIdx } 或 { methodId }
+
+// 一等方法按 methodId 标「用了·跑通了」· 发现页卡片用 (feed / 方法库 / 工坊 hero)
+// 借用环的"还"那半 · 之前只挂在项目页时间线 · 发现页只有"复制"没有"用了"
+async function methodUsedById(methodId) {
+  if (!currentUser.handle) {
+    setPending('methodUsedById', { methodId });
+    openLogin('说"用了 · 跑通了"');
+    return;
+  }
+  const m = (state.methods || []).find(x => x.id === methodId);
+  if (!m) return;
+  if (m.owner === currentUser.handle) { showToast('这是你自己的方法 — 没法给自己反馈'); return; }
+  const existing = (m.usedBy || []).find(x => x.user === currentUser.handle);
+  if (existing) {
+    try {
+      await apiAction('markMethodUsed', { methodId });
+      navigateFromHash();
+      showToast('撤回了 — 没事');
+    } catch (e) { showToast(e.message); }
+    return;
+  }
+  currentMethodUsedCtx = { methodId };
+  document.getElementById('mu-quote').textContent = '"' + (m.scenario || (m.text || '').slice(0, 80)) + '"';
+  document.getElementById('mu-note').value = '';
+  document.getElementById('modal-method-used').classList.remove('hidden');
+  setTimeout(() => document.getElementById('mu-note').focus(), 50);
+}
 
 async function openMethodUsed(projectId, updateIdx) {
   if (!currentUser.handle) {
@@ -9583,11 +9616,21 @@ async function openMethodUsed(projectId, updateIdx) {
 
 async function submitMethodUsed() {
   if (!currentMethodUsedCtx) return;
-  const { projectId, updateIdx } = currentMethodUsedCtx;
-  const p = projectById(projectId);
-  if (!p) return;
   const note = document.getElementById('mu-note').value.trim();
   try {
+    // 一等方法路径 (methodId) · 发现页卡片
+    if (currentMethodUsedCtx.methodId) {
+      await apiAction('markMethodUsed', { methodId: currentMethodUsedCtx.methodId, note });
+      closeModal('modal-method-used');
+      currentMethodUsedCtx = null;
+      navigateFromHash();
+      showToast('留下了 — 作者会收到通知');
+      return;
+    }
+    // 老路径 (projectId, updateIdx) · 项目页时间线
+    const { projectId, updateIdx } = currentMethodUsedCtx;
+    const p = projectById(projectId);
+    if (!p) return;
     await apiAction('markMethodUsed', { projectId, updateIdx, note });
     closeModal('modal-method-used');
     currentMethodUsedCtx = null;
@@ -11504,6 +11547,7 @@ function dispatchPending(p) {
   else if (p.kind === 'openTinkered') { currentProjectCtx = p.projectCtx; openTinkered(); }
   else if (p.kind === 'openNote') { currentProjectCtx = p.projectCtx; openNote(p.preselectUpdateId); }
   else if (p.kind === 'openMethodUsed') { openMethodUsed(p.projectId, p.updateIdx); }
+  else if (p.kind === 'methodUsedById') { methodUsedById(p.methodId); }
   else if (p.kind === 'openNewProject') { openNewProject(p.isFirst); }
   else if (p.kind === 'openEditProject') { openEditProject(p.projectId); }
   else if (p.kind === 'openPickProject') { openPickProject(); }
