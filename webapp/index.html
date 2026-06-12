@@ -8442,7 +8442,7 @@ function renderWorkshop(handle) {
         const p = m.projectId ? projectsById.get(m.projectId) : null;
         const scenarioOrFallback = m.scenario
           ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
-          : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 180))}</div>`;
+          : `<div class="method-hero-card-untitled" style="opacity:0.4;">还没写一句说明</div>`;
         const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
         const projectLine = p
           ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
@@ -9086,7 +9086,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     const p = m.projectId ? projectsById.get(m.projectId) : null;
     const scenarioOrFallback = m.scenario
       ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
-      : `<div class="method-hero-card-untitled">${escapeHtml((m.text || '').slice(0, 180))}</div>`;
+      : `<div class="method-hero-card-untitled" style="opacity:0.4;">还没写一句说明</div>`;
     const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
     const projectLine = p
       ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
