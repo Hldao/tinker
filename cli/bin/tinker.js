@@ -9512,6 +9512,48 @@ ${nodeLines}
   return draftPath;
 }
 
+// tinker seek -m "我需要一个 X 的方法" — 发一条求方法请求
+async function cmdSeek(opts) {
+  const cfg = mustHaveConfig();
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const mine = state.projects.filter(p => p.owner === me && ['active', 'stuck', 'live'].includes(p.status));
+  if (mine.length === 0) {
+    err('你没有 active/stuck 的项目 · 去 ' + cfg.serverUrl + ' 开一个');
+    process.exit(1);
+  }
+
+  let projectId;
+  if (mine.length === 1) {
+    projectId = mine[0].id;
+    log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
+  } else {
+    const { select } = require('@inquirer/prompts');
+    projectId = await select({
+      message: '挂在哪个项目下?',
+      choices: mine.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
+    });
+  }
+
+  let seekText = opts.text;
+  if (!seekText) {
+    const { input } = require('@inquirer/prompts');
+    seekText = await input({ message: '你需要什么方法?' });
+  }
+  seekText = (seekText || '').trim();
+  if (!seekText) { err('内容不能空'); process.exit(1); }
+
+  try {
+    const r = await apiAction(cfg, 'addUpdate', { projectId, text: seekText, isSeeking: true });
+    if (opts.json) return outputJson({ ok: true, updateId: r.result?.updateId });
+    log(moss('  求方法发出去了 · 工作室的人看到会回应'));
+    log(sepia('  id: ') + (r.result?.updateId || ''));
+  } catch (e) {
+    if (opts.json) return errJson(e.message, 'SEEK_FAILED');
+    err(e.message); process.exit(1);
+  }
+}
+
 // tinker contribute <updateId> — 标自己一条 update 为方法
 // 不带参数时 · 默认拿最近一条 push 的 id
 async function cmdContribute(updateIdArg, opts) {
@@ -9835,6 +9877,7 @@ async function cmdContributeFromFile(cfg, opts) {
         projectId,
         sourceDocPath: filePath,
         tags: opts.tags && opts.tags.length > 0 ? opts.tags : undefined,
+        seekingUpdateId: opts.reply || undefined,
       });
       const newId = r.result && r.result.methodId;
       successes.push({ heading: sec.heading, methodId: newId, charCount: sec.charCount });
@@ -11039,6 +11082,7 @@ async function main() {
         await cmdBorrow(qParts.join(' '), opts);
         break;
       }
+      case 'seek': await cmdSeek(opts); break;
       case 'contribute': await cmdContribute(args[1], opts); break;
       case 'recent': await cmdRecent(opts); break;
       case 'feed': await cmdFeed(args[1], opts); break;

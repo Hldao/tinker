@@ -145,6 +145,7 @@ function buildState({ targetUserId } = {}) {
       if (u.is_experience) out.isExperience = true;
       if (u.is_learning) out.isLearning = true;
       if (u.is_decision) out.isDecision = true;
+      if (u.is_seeking) out.isSeeking = true;
       if (u.scenario) out.scenario = u.scenario;
       const imgs = updateImagesMap[u.id];
       if (imgs && imgs.length > 0) out.images = imgs;

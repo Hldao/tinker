@@ -471,7 +471,7 @@ function getProjectFlat(projectId) {
 
 // notifyTinkered: 作者主动通知"接走我 + 想试试"的人 (默认 false · 避免轰炸)
 // alsoStuck: 同时把项目改为 stuck (spec §5.3 "卡了" 进展 → 召回过往关心者)
-function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at, isMethod, scenario }, { currentUserId }) {
+function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck, seekingFeedback, feedbackAsk, at, isMethod, isSeeking, scenario }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('记一笔不能空');
   const p = db.prepare('SELECT owner_id, name, status FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
@@ -489,12 +489,14 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
   const feedbackVal = seekingFeedback ? (feedbackAsk || '').trim() : null;
   // v0.13 contribute --from-file: 创建时就标方法 · 省一次 API 调用
   const methodFlag = isMethod ? 1 : 0;
+  // v0.94 求方法请求
+  const seekingFlag = isSeeking ? 1 : 0;
   // v0.78 方法卡片 "使用场景" · 10-30 字人话描述 "这文档帮你跟 AI 合作时解决什么问题"
   const scenarioVal = scenario && scenario.trim() ? scenario.trim().slice(0, 100) : null;
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask, is_method, scenario) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal, methodFlag, scenarioVal);
+      INSERT INTO updates (id, project_id, text, prompt, at, feedback_ask, is_method, is_seeking, scenario) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(updateId, projectId, text.trim(), prompt || null, useAt, feedbackVal, methodFlag, seekingFlag, scenarioVal);
 
     if (Array.isArray(images)) {
       const insLink = db.prepare('INSERT INTO update_images (update_id, image_id, position) VALUES (?, ?, ?)');
@@ -687,7 +689,7 @@ function normalizeTags(tags) {
 }
 
 // createMethod · 新建独立方法资产
-function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath, title, tags }, { currentUserId }) {
+function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath, title, tags, seekingUpdateId }, { currentUserId }) {
   if (!text || !text.trim()) throw new Error('方法内容不能空');
   if (text.trim().length < 20) throw new Error('内容太短 · 至少写两句 (回头自己看也认得出)');
   // project 可选 · 但传了要校验是自己的
@@ -700,6 +702,13 @@ function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath
   if (sourceUpdateId) {
     const existing = db.prepare('SELECT id FROM methods WHERE source_update_id = ?').get(sourceUpdateId);
     if (existing) return { ok: true, methodId: existing.id, alreadyExists: true };
+  }
+  // v0.94 校验 seekingUpdateId 存在
+  let seekingOwnerId = null;
+  if (seekingUpdateId) {
+    const su = db.prepare('SELECT u.id, p.owner_id FROM updates u JOIN projects p ON p.id = u.project_id WHERE u.id = ? AND u.is_seeking = 1').get(seekingUpdateId);
+    if (!su) throw new Error('找不到这条求方法请求');
+    seekingOwnerId = su.owner_id;
   }
   const methodId = 'm-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
@@ -714,12 +723,23 @@ function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath
   const tagsVal = normalizeTags(tagInput);
   const txn = db.transaction(() => {
     db.prepare(`
-      INSERT INTO methods (id, owner_id, title, scenario, text, at, updated_at, project_id, source_update_id, source_doc_path, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(methodId, currentUserId, titleVal, scenarioVal, text.trim(), now, now, projectId || null, sourceUpdateId || null, sourceDocPath || null, tagsVal);
+      INSERT INTO methods (id, owner_id, title, scenario, text, at, updated_at, project_id, source_update_id, source_doc_path, tags, seeking_update_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(methodId, currentUserId, titleVal, scenarioVal, text.trim(), now, now, projectId || null, sourceUpdateId || null, sourceDocPath || null, tagsVal, seekingUpdateId || null);
     syncMethodToFts(methodId);
   });
   txn();
+  // v0.94 通知求方法的人 · 有回应了
+  if (seekingOwnerId && seekingOwnerId !== currentUserId) {
+    notify({
+      targetUserId: seekingOwnerId,
+      fromUserId: currentUserId,
+      type: 'methodReply',
+      projectId: null,
+      extra: methodId,
+      anchor: 'method-' + methodId,
+    });
+  }
   return { ok: true, methodId };
 }
 

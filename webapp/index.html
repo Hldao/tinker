@@ -506,6 +506,8 @@
      公共认证 = 被 3+ 人 "用了·跑通了" 后系统升格 (".tl-proven-badge" moss 强调 · 真实复用反馈链承担) */
   .tl-method-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); letter-spacing: 0.18em; padding: 2px 8px; border: 1px solid var(--sepia-light); border-radius: 2px; margin-bottom: 10px; font-weight: 400; }
   .tl-proven-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.22em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-bottom: 10px; font-weight: 500; }
+  .tl-seeking-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--vermilion); letter-spacing: 0.18em; padding: 2px 8px; border: 1px dashed var(--vermilion); border-radius: 2px; margin-bottom: 10px; font-weight: 400; opacity: 0.8; }
+  .tl-action-seek-reply { color: var(--vermilion) !important; }
   /* v0.13 长方法折叠 · 默认收起 · 点开看全文 */
   .tl-text-foldable { max-height: 150px; overflow: hidden; position: relative; }
   .tl-text-foldable.expanded { max-height: none; }
@@ -7647,7 +7649,7 @@ const NOTIF_TYPE_LABELS = {
 let state;
 // v0.3: currentUser 从 /api/auth/me 拉 · 不再走 localStorage handle
 const currentUser = { id: null, handle: null, email: null };
-let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null;
+let currentProjectCtx = null, currentNoteCtx = null, currentTinkeredCtx = null, currentUpdateCtx = null, currentSeekingUpdateId = null;
 // v0.70 主屏 feed 砍掉 chip filter · v0.77 砍 mode toggle · 第一性原理:
 // filter / toggle 解的都是 "信噪比下降" 问题, alpha 阶段 feed 量级不需要;
 // 求反馈的卡片自带 vermilion badge · 视觉信号已经在卡片上 · toggle 是多余强化
@@ -8717,7 +8719,8 @@ function renderProject(owner, slug) {
             <div class="tl-time">${shortAgo(u.at)}</div>
             <div>
               ${u.kind === 'ship' ? `<div class="tl-ship-badge">✦ 完工</div>` : ''}
-              ${isProven ? `<div class="tl-proven-badge">✿ 跑通过的方法</div>` : (u.isMethod ? `<div class="tl-method-badge">✤ 存了</div>` : '')}
+              ${u.isSeeking ? `<div class="tl-seeking-badge">⊙ 求方法</div>` : ''}
+              ${!u.isSeeking && isProven ? `<div class="tl-proven-badge">✿ 跑通过的方法</div>` : (!u.isSeeking && u.isMethod ? `<div class="tl-method-badge">✤ 存了</div>` : '')}
               ${u.feedbackAsk !== undefined ? `
                 <div class="tl-feedback-ask-block">
                   <div class="tl-feedback-ask-label">求反馈</div>
@@ -8741,7 +8744,8 @@ function renderProject(owner, slug) {
               ${imagesHtml}
               <div class="tl-actions">
                 ${isMethodOrProven ? `<span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>` : ''}
-                ${!isMine ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
+                ${!isMine && u.isSeeking ? `<span class="tl-action tl-action-seek-reply" onclick="openSeekReply('${u.id}', '${p.id}')">回应这个请求</span>` : ''}
+                ${!isMine && !u.isSeeking ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
                 <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
                   <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
@@ -10237,6 +10241,26 @@ async function submitTinkered() {
   } catch (e) { showToast(e.message); }
 }
 
+// v0.94 回应求方法请求 · 打开 method 形态 modal 并记住 seekingUpdateId
+function openSeekReply(seekingUpdateId, projectId) {
+  if (!currentUser.handle) { openLogin('回应求方法'); return; }
+  currentSeekingUpdateId = seekingUpdateId;
+  openAddUpdate(projectId);
+  setUpdateMode('method');
+  // 提示语
+  const head = document.getElementById('update-method-head');
+  if (head) {
+    let hint = head.querySelector('.seek-reply-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'seek-reply-hint';
+      hint.style.cssText = 'font-size:12px;color:var(--sepia);margin-bottom:8px;';
+      head.insertBefore(hint, head.firstChild);
+    }
+    hint.textContent = '回应求方法请求 · 写完会通知对方';
+  }
+}
+
 // v0.82 双形态: progress = 记一笔进展 (addUpdate) · method = 沉淀一笔方法 (createMethod)
 let currentUpdateMode = 'progress';
 
@@ -11312,12 +11336,15 @@ async function submitUpdate() {
         text,
         scenario: scenario || undefined,
         projectId: p ? p.id : undefined,
+        seekingUpdateId: currentSeekingUpdateId || undefined,
       });
+      const wasReply = !!currentSeekingUpdateId;
+      currentSeekingUpdateId = null;
       pendingImages = [];
       clearDraft('update-' + currentUpdateCtx);
       closeModal('modal-update');
       if (p) renderProject(p.owner, p.slug);
-      showToast('沉淀下来了 · 进了方法库');
+      showToast(wasReply ? '回应发出去了 · 已通知对方' : '沉淀下来了 · 进了方法库');
     } catch (e) { showToast(e.message); }
     return;
   }
