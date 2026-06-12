@@ -446,12 +446,54 @@ AI 起草过的草稿 · 作者改成下面这样了 (避免起草版那种 tell
 ${joined}`;
 }
 
+// anthropic 默认模型 · 之前硬编码在 6 处 LLM 调用里 · 收成一个常量 · 换型号只改这
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+
+// 三家 provider 的 LLM 调用收口 · fetch / header / body / 解析 / 错误全在这一处
+// provider 由调用方传 (各命令默认不同 · draft 默认 anthropic · voice analyze 默认 deepseek)
+// 返 { text, tokens } · text 是 trim 过的回复 · tokens 交给调用方按 kind 记 usage
+// 出错统一 throw · 调用方按需 try/catch (有的吞成 null · 有的 err+exit)
+async function callLLM(cfg, provider, prompt, opts = {}) {
+  const apiKey = cfg.llm.apiKey;
+  const maxTokens = opts.maxTokens || 1500;
+  if (provider === 'anthropic') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: cfg.llm.model || DEFAULT_ANTHROPIC_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
+    return { text: data.content[0].text.trim(), tokens: data.usage && (data.usage.input_tokens + data.usage.output_tokens) };
+  } else if (provider === 'openai') {
+    const body = { model: cfg.llm.model || 'gpt-4o-mini', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] };
+    if (opts.jsonMode) body.response_format = { type: 'json_object' };
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
+    return { text: data.choices[0].message.content.trim(), tokens: data.usage && data.usage.total_tokens };
+  } else if (provider === 'deepseek') {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: cfg.llm.model || 'deepseek-chat', max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
+    return { text: data.choices[0].message.content.trim(), tokens: data.usage && data.usage.total_tokens };
+  }
+  throw new Error('不支持的 LLM provider: ' + provider);
+}
+
 async function llmDraft(cfg, gitContext) {
   if (!cfg.llm || !cfg.llm.apiKey) {
     throw new Error('LLM 没配置 · 重新跑 ' + vermilion('tinker login') + ' 配一下');
   }
   const provider = cfg.llm.provider || 'anthropic';
-  const apiKey = cfg.llm.apiKey;
   const history = gitContext.log || '(没有 commit)';
   const pending = gitContext.pendingStat
     ? `当前未 commit 的改动:\n${gitContext.pendingStat}` : '';
@@ -470,53 +512,9 @@ async function llmDraft(cfg, gitContext) {
     .replaceAll('${history}', history)
     .replaceAll('${pending}', pending);
 
-  let rawText;
-  if (provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
-    rawText = data.content[0].text.trim();
-    recordLLMUsage(provider, data.usage && (data.usage.input_tokens + data.usage.output_tokens), 'draft');
-  } else if (provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'gpt-4o-mini',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
-    rawText = data.choices[0].message.content.trim();
-    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'draft');
-  } else if (provider === 'deepseek') {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'deepseek-chat',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
-    rawText = data.choices[0].message.content.trim();
-    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'draft');
-  } else {
-    throw new Error('不支持的 LLM provider: ' + provider);
-  }
+  const { text, tokens } = await callLLM(cfg, provider, prompt, { maxTokens: 2000, jsonMode: true });
+  let rawText = text;
+  recordLLMUsage(provider, tokens, 'draft');
 
   // 容错:有时 LLM 会用 ```json 包起来 · 剥掉
   rawText = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
@@ -573,7 +571,6 @@ async function llmQuickDraft(cfg, opts = {}) {
 async function llmRework(cfg, gitCtx, badDraft, violations) {
   if (!cfg.llm || !cfg.llm.apiKey) return null;
   const provider = cfg.llm.provider || 'anthropic';
-  const apiKey = cfg.llm.apiKey;
   const prompt = `你刚才写的草稿里有"伪数据论断"——作者没收集过这种数据 · 你凭空编了。
 
 你的草稿:
@@ -591,37 +588,8 @@ ${violations.map(v => '- ' + v).join('\n')}
 { "candidates": [ { "text": "...", "rationale": "..." } ] }`;
 
   try {
-    let rawText;
-    if (provider === 'anthropic') {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: cfg.llm.model || 'claude-sonnet-4-5-20250929', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
-      });
-      if (!r.ok) return null;
-      const d = await r.json();
-      rawText = d.content[0].text.trim();
-    } else if (provider === 'deepseek') {
-      const r = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: cfg.llm.model || 'deepseek-chat', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
-      });
-      if (!r.ok) return null;
-      const d = await r.json();
-      rawText = d.choices[0].message.content.trim();
-    } else if (provider === 'openai') {
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: cfg.llm.model || 'gpt-4o-mini', max_tokens: 1500, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } }),
-      });
-      if (!r.ok) return null;
-      const d = await r.json();
-      rawText = d.choices[0].message.content.trim();
-    } else return null;
-
-    rawText = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+    const { text } = await callLLM(cfg, provider, prompt, { maxTokens: 1500, jsonMode: true });
+    let rawText = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
     const parsed = JSON.parse(rawText);
     if (!parsed.candidates || parsed.candidates.length === 0) return null;
     return parsed.candidates[0].text || null;
@@ -2166,35 +2134,30 @@ fi
 ${HOOK_END}
 `;
 
-function loadPromptState() {
+// CONFIG_DIR 下一堆本地缓存/状态文件 · 读写都是同一套容错样板 · 收成两个 helper
+// 读:文件没了 / 坏了 都返 fallback · 写:失败静默 (缓存而已 · 不影响主流程)
+function loadJsonSafe(file, fallback) {
   try {
-    if (!fs.existsSync(PROMPT_STATE_FILE)) return {};
-    return JSON.parse(fs.readFileSync(PROMPT_STATE_FILE, 'utf-8'));
-  } catch { return {}; }
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, 'utf-8'));
+  } catch { return fallback; }
 }
-function savePromptState(s) {
+function saveJsonSafe(file, obj) {
   try {
     if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(PROMPT_STATE_FILE, JSON.stringify(s, null, 2));
-  } catch (e) { /* 容错 · 失败不影响 */ }
+    fs.writeFileSync(file, JSON.stringify(obj, null, 2));
+  } catch { /* 容错 · 失败不影响 */ }
 }
+
+function loadPromptState() { return loadJsonSafe(PROMPT_STATE_FILE, {}); }
+function savePromptState(s) { saveJsonSafe(PROMPT_STATE_FILE, s); }
 
 // v0.35 通知偏好闭环 · server 端 user_prefs 的本地 cache · 5min TTL
 // 设计:同步代码用 cache · 过期就后台异步刷新 · 网络/无 token 都不影响触发器
 const PREFS_CACHE_FILE = path.join(CONFIG_DIR, 'prefs-cache.json');
 const PREFS_CACHE_TTL_MS = 5 * 60 * 1000;
-function loadPrefsCache() {
-  try {
-    if (!fs.existsSync(PREFS_CACHE_FILE)) return null;
-    return JSON.parse(fs.readFileSync(PREFS_CACHE_FILE, 'utf8'));
-  } catch { return null; }
-}
-function savePrefsCache(prefs) {
-  try {
-    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(PREFS_CACHE_FILE, JSON.stringify({ prefs, fetchedAt: Date.now() }));
-  } catch { /* swallow */ }
-}
+function loadPrefsCache() { return loadJsonSafe(PREFS_CACHE_FILE, null); }
+function savePrefsCache(prefs) { saveJsonSafe(PREFS_CACHE_FILE, { prefs, fetchedAt: Date.now() }); }
 async function fetchPrefsFromServer() {
   try {
     const cfg = loadConfig();
@@ -2553,28 +2516,6 @@ function uninstallSingleGitHook(gitDir, name) {
   return true;
 }
 
-function cmdHookUninstallLegacy() {  // kept for legacy reference · unused
-  if (!inGitRepo()) { err('不在 git 仓库'); process.exit(1); }
-  const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
-  const hookFile = path.join(gitDir, 'hooks', 'post-commit');
-  if (!fs.existsSync(hookFile)) { log(sepia('  没装 hook · 直接退')); return; }
-  let content = fs.readFileSync(hookFile, 'utf-8');
-  const before = content;
-  content = content.replace(new RegExp(HOOK_BEGIN + '[\\s\\S]*?' + HOOK_END + '\\n?', 'g'), '');
-  content = content.replace(/^.*tinker post-commit hook[\s\S]*?esac\s*\n/m, '');
-  content = content.trimEnd();
-  if (content === before.trimEnd()) {
-    log(sepia('  没找到 tinker 的 hook 块 · 别人的 hook 不动'));
-    return;
-  }
-  if (content === '#!/bin/sh' || content === '') {
-    fs.unlinkSync(hookFile);
-  } else {
-    fs.writeFileSync(hookFile, content + '\n');
-  }
-  ok('hook 移除了');
-}
-
 // === 触发器评估 ===
 // 每个返回 { fired, priority, msg }; priority 大的优先 (高信号触发器盖低信号)
 // 优先级表:
@@ -2714,15 +2655,8 @@ function triggerKeywordMatch() {
 // 客户端缓存 · 24h TTL · 同 key 直接返之前的响应
 const IDEM_CACHE_FILE = path.join(CONFIG_DIR, 'idem-cache.json');
 const IDEM_TTL_MS = 24 * 60 * 60 * 1000;
-function loadIdemCache() {
-  try { return JSON.parse(fs.readFileSync(IDEM_CACHE_FILE, 'utf-8')) || {}; } catch { return {}; }
-}
-function saveIdemCache(cache) {
-  try {
-    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(IDEM_CACHE_FILE, JSON.stringify(cache, null, 2));
-  } catch {}
-}
+function loadIdemCache() { return loadJsonSafe(IDEM_CACHE_FILE, {}); }
+function saveIdemCache(cache) { saveJsonSafe(IDEM_CACHE_FILE, cache); }
 function idemGet(key) {
   if (!key) return null;
   const cache = loadIdemCache();
@@ -2760,16 +2694,8 @@ async function withIdempotency(key, fn) {
 // 数据来源: ~/.tinker/repos.json · 所有 tinker hook install 过的 repo
 // 算法: 拉所有注册 repo 今天 commit 数 · 如果当前 repo 占比 < 30% 且有别的 > 50% · 触发
 const REPOS_REGISTRY_FILE = path.join(CONFIG_DIR, 'repos.json');
-function loadReposRegistry() {
-  try { return JSON.parse(fs.readFileSync(REPOS_REGISTRY_FILE, 'utf-8')) || {}; }
-  catch { return {}; }
-}
-function saveReposRegistry(reg) {
-  try {
-    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(REPOS_REGISTRY_FILE, JSON.stringify(reg, null, 2));
-  } catch {}
-}
+function loadReposRegistry() { return loadJsonSafe(REPOS_REGISTRY_FILE, {}); }
+function saveReposRegistry(reg) { saveJsonSafe(REPOS_REGISTRY_FILE, reg); }
 function registerRepoForDrift(repoPath, repoCfg) {
   const reg = loadReposRegistry();
   reg[repoPath] = {
@@ -5071,7 +4997,6 @@ async function cmdAutopsy(situationId, lifecycleTypeArg) {
 // v0.13 按 lifecycleType 切 prompt 模板:struggle 写"踩坑经验" · learning 写"上手指南"
 async function llmAutopsy(cfg, ctx) {
   const provider = cfg.llm.provider || 'anthropic';
-  const apiKey = cfg.llm.apiKey;
 
   const lifecycleType = ctx.lifecycleType || 'struggle';
   const isLearning = lifecycleType === 'learning';
@@ -5198,52 +5123,9 @@ ${sceneSpecificConstraints.join('\n')}
 - 不要写"总结" 或 "结论" 段 · 四段就是全部
 - 不要任何 LLM 自我介绍 · 直接出正文`;
 
-  let rawText;
-  if (provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'API ' + res.status);
-    rawText = data.content[0].text.trim();
-    recordLLMUsage(provider, data.usage && (data.usage.input_tokens + data.usage.output_tokens), 'autopsy');
-  } else if (provider === 'deepseek') {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'deepseek-chat',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'API ' + res.status);
-    rawText = data.choices[0].message.content.trim();
-    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'autopsy');
-  } else if (provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'gpt-4o-mini',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'API ' + res.status);
-    rawText = data.choices[0].message.content.trim();
-    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'autopsy');
-  } else {
-    throw new Error('不支持的 LLM provider: ' + provider);
-  }
+  const { text, tokens } = await callLLM(cfg, provider, prompt, { maxTokens: 1500 });
+  let rawText = text;
+  recordLLMUsage(provider, tokens, 'autopsy');
 
   // sanitize · 去 em-dash / 多余中圆点 / ANSI / 代码块包裹
   rawText = rawText.replace(/^```(?:markdown|md)?\s*/i, '').replace(/\s*```$/, '');
@@ -8363,51 +8245,10 @@ ${joined}`;
 
   log(sepia('  调 LLM 分析中...'));
   const provider = cfg.llm.provider || 'deepseek';
-  const apiKey = cfg.llm.apiKey;
   let fingerprint;
   try {
-    if (provider === 'anthropic') {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
-          max_tokens: 3000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
-      fingerprint = data.content[0].text.trim();
-    } else if (provider === 'openai') {
-      const res = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: cfg.llm.model || 'gpt-4o-mini',
-          max_tokens: 3000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
-      fingerprint = data.choices[0].message.content.trim();
-    } else if (provider === 'deepseek') {
-      const res = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: cfg.llm.model || 'deepseek-chat',
-          max_tokens: 3000,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
-      fingerprint = data.choices[0].message.content.trim();
-    } else {
-      throw new Error('不支持的 LLM provider: ' + provider);
-    }
+    const { text } = await callLLM(cfg, provider, prompt, { maxTokens: 3000 });
+    fingerprint = text;
   } catch (e) {
     err('LLM 调用失败: ' + e.message);
     process.exit(1);
@@ -9656,53 +9497,9 @@ ${nodeLines}
 会先想清楚 W。`;
 
   const provider = cfg.llm.provider || 'anthropic';
-  const apiKey = cfg.llm.apiKey;
-  let rawText;
-  if (provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'claude-sonnet-4-5-20250929',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'Anthropic API ' + res.status);
-    rawText = data.content[0].text.trim();
-    recordLLMUsage(provider, data.usage && (data.usage.input_tokens + data.usage.output_tokens), 'timeline');
-  } else if (provider === 'deepseek') {
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'deepseek-chat',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'DeepSeek API ' + res.status);
-    rawText = data.choices[0].message.content.trim();
-    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'timeline');
-  } else if (provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.llm.model || 'gpt-4o-mini',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data.error && data.error.message) || 'OpenAI API ' + res.status);
-    rawText = data.choices[0].message.content.trim();
-    recordLLMUsage(provider, data.usage && data.usage.total_tokens, 'timeline');
-  } else {
-    throw new Error('不支持的 LLM provider: ' + provider);
-  }
+  const { text, tokens } = await callLLM(cfg, provider, prompt, { maxTokens: 1500 });
+  let rawText = text;
+  recordLLMUsage(provider, tokens, 'timeline');
 
   // 容错 · 剥可能的代码块包裹
   rawText = rawText.replace(/^```(?:markdown|md)?\s*/, '').replace(/\s*```\s*$/, '');
@@ -9816,7 +9613,6 @@ function parseMarkdownSections(content) {
 async function llmPickSections(cfg, sections) {
   if (!cfg.llm || !cfg.llm.apiKey) throw new Error('未配置 LLM · 先 tinker llm 配置 key');
   const provider = cfg.llm.provider || 'deepseek';
-  const apiKey = cfg.llm.apiKey;
   const summary = sections.map((s, i) => {
     const preview = s.fullText.slice(0, 180).replace(/\n/g, ' ');
     return `${i + 1}. 标题: ${s.heading} · ${s.charCount} 字 · 前 180 字: ${preview}${s.charCount > 180 ? '...' : ''}`;
@@ -9838,41 +9634,9 @@ ${summary}
 输出严格 JSON · 不要包 \`\`\`json:
 { "picks": [{ "heading": "完整标题原文 (字符要跟上面列表里完全一样)", "reason": "10-20 字 · 为什么值得分享" }] }`;
 
-  let rawText;
-  if (provider === 'deepseek') {
-    const r = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: cfg.llm.model || 'deepseek-chat', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error((d.error && d.error.message) || 'DeepSeek ' + r.status);
-    rawText = d.choices[0].message.content.trim();
-    recordLLMUsage(provider, d.usage && d.usage.total_tokens, 'auto-pick');
-  } else if (provider === 'anthropic') {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: cfg.llm.model || 'claude-sonnet-4-5-20250929', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error((d.error && d.error.message) || 'Anthropic ' + r.status);
-    rawText = d.content[0].text.trim();
-    recordLLMUsage(provider, d.usage && (d.usage.input_tokens + d.usage.output_tokens), 'auto-pick');
-  } else if (provider === 'openai') {
-    const r = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: cfg.llm.model || 'gpt-4o-mini', max_tokens: 1500, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' } }),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error((d.error && d.error.message) || 'OpenAI ' + r.status);
-    rawText = d.choices[0].message.content.trim();
-    recordLLMUsage(provider, d.usage && d.usage.total_tokens, 'auto-pick');
-  } else {
-    throw new Error('不支持的 LLM provider: ' + provider);
-  }
-  rawText = rawText.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  const { text, tokens } = await callLLM(cfg, provider, prompt, { maxTokens: 1500, jsonMode: true });
+  recordLLMUsage(provider, tokens, 'auto-pick');
+  let rawText = text.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
   let parsed;
   try { parsed = JSON.parse(rawText); }
   catch (e) { throw new Error('LLM 返回不是合法 JSON:\n' + rawText.slice(0, 200)); }
