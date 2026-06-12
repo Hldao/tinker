@@ -9253,18 +9253,32 @@ async function renderSeekingPage() {
       el.innerHTML = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">暂时没有人在找方法 · 用 tinker seek 发一个</div>`;
       return;
     }
-    const isMine = (handle) => handle === currentUser.handle;
-    el.innerHTML = items.map(s => `
-      <div class="seeking-card">
-        <div class="seeking-card-text">${escapeHtml(s.text)}</div>
-        <div class="seeking-card-meta">
-          <span class="nh" onclick="showScreen('workshop','${escapeHtml(s.ownerHandle)}')">@${escapeHtml(s.ownerHandle)}</span>
-          · <span class="nh" onclick="showScreen('project','${escapeHtml(s.ownerHandle)}','${escapeHtml(s.projectSlug)}')">${escapeHtml(s.projectName)}</span>
-          · <span>${shortAgo(s.at)}</span>
+    const renderSeekCard = (s) => {
+      const isMine = s.ownerHandle === currentUser.handle;
+      const replied = s.replyCount > 0
+        ? `<span style="color: var(--moss);">已有 ${s.replyCount} 条回应</span> <span style="color: var(--sepia-light);">·</span> `
+        : '';
+      return `
+        <div class="method-hero-card" style="cursor: default;">
+          <div class="method-hero-card-top">
+            <span class="method-hero-card-badge" style="color: var(--vermilion);">⊙ 求方法</span>
+          </div>
+          <div class="method-hero-card-scenario">${escapeHtml(s.text)}</div>
+          <div class="method-hero-card-meta">
+            ${replied}
+            <span class="nh" onclick="showScreen('workshop','${escapeHtml(s.ownerHandle)}')">@${escapeHtml(s.ownerHandle)}</span>
+            <span style="color: var(--sepia-light);">·</span>
+            <span class="nh" onclick="showScreen('project','${escapeHtml(s.ownerHandle)}','${escapeHtml(s.projectSlug)}')">${escapeHtml(s.projectName)}</span>
+            <span style="color: var(--sepia-light);">·</span>
+            <span>${shortAgo(s.at)}</span>
+          </div>
+          <div class="method-hero-card-actions">
+            ${!isMine ? `<span class="method-hero-card-used" onclick="openSeekReply('${escapeHtml(s.id)}','${escapeHtml(s.projectId)}')">我知道 · 来回应</span>` : '<span style="color: var(--sepia-light); font-family: JetBrains Mono, monospace; font-size: 11px;">你发的</span>'}
+          </div>
         </div>
-        ${!isMine(s.ownerHandle) ? `<span class="seeking-card-reply" onclick="openSeekReply('${escapeHtml(s.id)}','${escapeHtml(s.projectId)}')">我知道 · 来回应</span>` : ''}
-      </div>
-    `).join('');
+      `;
+    };
+    el.innerHTML = `<div class="method-hero-scroll">${items.map(renderSeekCard).join('')}</div>`;
   } catch (e) {
     el.innerHTML = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">加载失败</div>`;
   }

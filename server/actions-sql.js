@@ -1523,7 +1523,8 @@ function listSeeking({ q, limit = 20 } = {}) {
   const rows = db.prepare(`
     SELECT u.id, u.text, u.at,
            p.id AS projectId, p.name AS projectName, p.slug AS projectSlug,
-           usr.handle AS ownerHandle
+           usr.handle AS ownerHandle,
+           (SELECT COUNT(*) FROM methods m WHERE m.seeking_update_id = u.id) AS replyCount
     FROM updates u
     JOIN projects p ON p.id = u.project_id
     JOIN users usr ON usr.id = p.owner_id
@@ -1537,7 +1538,7 @@ function listSeeking({ q, limit = 20 } = {}) {
   return results.map(r => ({
     id: r.id, text: r.text, at: r.at,
     projectId: r.projectId, projectName: r.projectName, projectSlug: r.projectSlug,
-    ownerHandle: r.ownerHandle,
+    ownerHandle: r.ownerHandle, replyCount: r.replyCount || 0,
   }));
 }
 
