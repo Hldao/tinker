@@ -260,6 +260,7 @@
   .method-hero-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.05em; }
   .method-hero-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
+  .method-hero-card.no-nav { cursor: default; }  /* 独立方法(无项目)点了不跳转 · 不显示手型 */
   .method-hero-card:hover { border-color: var(--moss); transform: translateY(-1px); }
   .method-hero-card-badge { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; }
   /* v0.86 顶部一条:badge + 领域/主题 tag · 标签从正文下方挪到卡片上方 */
@@ -9038,7 +9039,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     // 被借 N:真实复用信号 · 方法库核心就是找被验证/被借过的方法(工坊卡片已有 · 这里补齐)
     const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span> ` : '';
     return `
-      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+      <div class="method-hero-card${p ? '' : ' no-nav'}" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
         <div class="method-hero-card-top">
           <span class="method-hero-card-badge">✤ 方法</span>
           ${renderMethodTagRow(m)}
@@ -9059,6 +9060,10 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     `;
   };
 
+  // 组内排序:被借多的(经验证过的)排前面 · 同被借数按新近 · 凸显方法库"找被验证方法"的价值
+  const byProven = (arr) => [...arr].sort((a, b) =>
+    (b.borrowCount || 0) - (a.borrowCount || 0) || (b.at || 0) - (a.at || 0));
+
   // 分组
   let groupedHtml = '';
   if (methodsLibraryState.groupBy === 'project') {
@@ -9077,7 +9082,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
       return `
         <div class="methods-lib-group">
           <div class="methods-lib-group-head">${groupLabel} <span class="methods-lib-group-count">· ${list.length} 条</span></div>
-          <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
+          <div class="method-hero-scroll">${byProven(list).map(renderCard).join('')}</div>
         </div>
       `;
     }).join('');
@@ -9104,7 +9109,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
       return `
         <div class="methods-lib-group">
           <div class="methods-lib-group-head">${label} <span class="methods-lib-group-count">· ${list.length} 条</span></div>
-          <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
+          <div class="method-hero-scroll">${byProven(list).map(renderCard).join('')}</div>
         </div>
       `;
     }).join('');
@@ -9119,7 +9124,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     groupedHtml = sortedGroups.map(([owner, list]) => `
       <div class="methods-lib-group">
         <div class="methods-lib-group-head"><span class="nh" onclick="showScreen('workshop','${owner}')">@${escapeHtml(owner)}</span> <span class="methods-lib-group-count">· ${list.length} 条</span></div>
-        <div class="method-hero-scroll">${list.map(renderCard).join('')}</div>
+        <div class="method-hero-scroll">${byProven(list).map(renderCard).join('')}</div>
       </div>
     `).join('');
   } else {
