@@ -1254,10 +1254,10 @@ function submitTinkered({ projectId, name, link, inspiredByUpdateId }, { current
   const p = db.prepare('SELECT owner_id, name FROM projects WHERE id = ?').get(projectId);
   if (!p) throw new Error('项目不存在');
 
-  // v0.12 新提交必填 inspiredByUpdateId · 颗粒度从项目细化到 update
+  // v0.12 新提交必填 inspiredByUpdateId · 从项目细化到具体某条 update
   // 验证 update 真属于这个 parent project (防止伪造)
   if (!inspiredByUpdateId || !inspiredByUpdateId.trim()) {
-    throw new Error('挑一条具体启发了你的进展 · 颗粒度精确到那一笔');
+    throw new Error('挑一条具体启发了你的进展 · 精确到那一笔');
   }
   const insp = db.prepare('SELECT id, project_id FROM updates WHERE id = ?').get(inspiredByUpdateId.trim());
   if (!insp) throw new Error('启发源那条进展找不到 · 可能被删了');

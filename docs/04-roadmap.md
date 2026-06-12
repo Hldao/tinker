@@ -2,23 +2,27 @@
 
 > 这份 roadmap 是判断"什么时候做什么"的备忘 · 不是承诺。
 > 优先级会随真实用户反馈调整。
+>
+> 注意 (2026-06-12 校对):下面 v0.2 / v0.3 这两段是 6 月初的快照 · 之后又跑了好几天
+> (witness 征求意见 / handoff 接力 / bridge 桥 / 工作室 / stash 暂存 等都上了)。
+> 已经做完的东西看 [`CHANGELOG.md`](../CHANGELOG.md) 跟 git log 才准 · 这份只留作早期判断的记录。
 
-## v0.2 (现在 · 2026-06)
+## v0.2
 - [x] 生产化基础设施 (atomic write / 日志 / rate limit / 健康检查)
 - [x] 多用户支持 (alpha · trust handle)
 - [x] 真实时间戳 (at instead of ago strings)
 - [x] Docker + 部署 runbook
-- [x] 20 个 actions 测试
-- [ ] 部署到真实 VPS + 真域名 (用户处理中)
-- [ ] CI 推送 `.github/workflows/ci.yml` (gh OAuth scope 问题)
+- [x] 20 个 actions 测试 (现在 46 个 · 见 `server/test/`)
+- [x] 部署到真实 VPS (阿里云 ECS · GitHub Actions 自动部署)。真域名还卡在 ICP 备案 · alpha 先用 IP 直连
+- [x] CI / 自动部署 `.github/workflows/deploy.yml` (push main 自动上线)
 
 ## v0.3 (alpha → beta 过渡 · 待小伙伴反馈后定)
 
 按优先级:
 
 ### 高优先 (用户反馈强烈才做)
-- **OAuth 真实认证**: 让多人用更安全 · GitHub OAuth 最自然
-- **SQLite 迁移**: JSON 文件多写并发瓶颈
+- [x] **SQLite 迁移**: 已落地 · `server/db.js` + 35 个 migration · JSON 版已退役
+- [x] **邮箱认证**: magic link 登录已上 (0.3.0) · 比 OAuth 更轻 · 暂不接 GitHub OAuth
 - **数据备份到对象存储**: cron + ossutil
 - **Sentry 集成**: 错误追踪
 - **UptimeRobot 监控**: 5min 健康轮询

@@ -89,7 +89,7 @@ CLI 有 voice 守门 · 所有 push 路径 (cmdPush / cmdPushFromDraft / cmdReso
 - `~/.tinker/style-pool/good/` — voice 样本池
 - `.tinker/voice-fingerprint.md` — 当前项目作者风格画像 (跟 repo)
 - `.tinker/repo.json` — repo 跟 Tinker project 的绑定
-- `cli/bin/tinker.js` — CLI 主文件 (单文件 6000+ 行)
+- `cli/bin/tinker.js` — CLI 主文件 (单文件 11000+ 行)
 - `server/` — Tinker server (Express + SQLite)
 - `webapp/index.html` — Tinker webapp 单文件
 

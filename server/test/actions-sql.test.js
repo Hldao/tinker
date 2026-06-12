@@ -56,7 +56,7 @@ test('addProject: 没 URL 拒绝', () => {
   const { daodao } = setupBasic();
   assert.throws(() => a.addProject({
     name: 'x', desc: 'y', productLink: 'not-a-url',
-  }, { currentUserId: daodao }), /产物链接/);
+  }, { currentUserId: daodao }), /可访问链接/);
 });
 
 test('addProject: 空字段拒绝', () => {
@@ -179,7 +179,8 @@ test('changeProjectStatus: active → stuck 通知 wantToTry + tinkered', () => 
   const { daodao, alice, bob } = setupBasic();
   const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
   a.reactToProject({ projectId: p.id, level: 'wantToTry' }, { currentUserId: alice });
-  a.submitTinkered({ projectId: p.id, name: 'Bob 版', link: 'https://b.com' }, { currentUserId: bob });
+  const insp = a.addUpdate({ projectId: p.id, text: '启发源' }, { currentUserId: daodao });
+  a.submitTinkered({ projectId: p.id, name: 'Bob 版', link: 'https://b.com', inspiredByUpdateId: insp.id }, { currentUserId: bob });
   a.changeProjectStatus({ projectId: p.id, newStatus: 'stuck' }, { currentUserId: daodao });
   const aN = db.prepare(`SELECT 1 FROM notifications WHERE target_user_id = ? AND type = ?`).all('uid-alice', 'projectStuck');
   const bN = db.prepare(`SELECT 1 FROM notifications WHERE target_user_id = ? AND type = ?`).all('uid-bob', 'projectStuck');
@@ -205,7 +206,8 @@ test('submitTinkered: 通知 owner · 清掉 wantToTry', () => {
   const { daodao, alice } = setupBasic();
   const p = a.addProject({ name: 'x', desc: 'y', productLink: 'https://e.com' }, { currentUserId: daodao });
   a.reactToProject({ projectId: p.id, level: 'wantToTry' }, { currentUserId: alice });
-  a.submitTinkered({ projectId: p.id, name: 'Alice 版', link: 'https://alice.com' }, { currentUserId: alice });
+  const insp = a.addUpdate({ projectId: p.id, text: '启发源' }, { currentUserId: daodao });
+  a.submitTinkered({ projectId: p.id, name: 'Alice 版', link: 'https://alice.com', inspiredByUpdateId: insp.id }, { currentUserId: alice });
   const reactions = db.prepare('SELECT 1 FROM reactions WHERE user_id = ?').all('uid-alice');
   assert.equal(reactions.length, 0, 'wantToTry 已清');
   const tinkered = db.prepare('SELECT name, link FROM tinkered WHERE user_id = ?').all('uid-alice');
@@ -501,12 +503,13 @@ test('submitTinkered: 升级承诺 · 清掉 owner 的 wantToTry 通知', () => 
   let notifs = db.prepare(`SELECT type FROM notifications WHERE target_user_id = ?`).all(daodao);
   assert.deepEqual(notifs.map(n => n.type).sort(), ['wantToTry']);
   // alice 升级成 tinkered
-  a.submitTinkered({ projectId: p.id, name: '我的版', link: 'https://my.com' }, { currentUserId: alice });
+  const insp = a.addUpdate({ projectId: p.id, text: '启发源' }, { currentUserId: daodao });
+  a.submitTinkered({ projectId: p.id, name: '我的版', link: 'https://my.com', inspiredByUpdateId: insp.id }, { currentUserId: alice });
   notifs = db.prepare(`SELECT type, anchor FROM notifications WHERE target_user_id = ?`).all(daodao);
   // 只剩 tinkered · wantToTry 被清掉了
   assert.equal(notifs.length, 1);
   assert.equal(notifs[0].type, 'tinkered');
-  assert.equal(notifs[0].anchor, 'tinkered-alice');
+  assert.equal(notifs[0].anchor, 'update-' + insp.id);
 });
 
 test('markMethodUsed: anchor 指向具体 update', () => {
@@ -562,7 +565,8 @@ test('addUpdate: notifyTinkered=true 主动广播 ownerUpdate', () => {
   const { daodao, alice, bob } = setupBasic();
   const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
   a.reactToProject({ projectId: p.id, level: 'wantToTry' }, { currentUserId: alice });
-  a.submitTinkered({ projectId: p.id, name: 'B 版', link: 'https://b.com' }, { currentUserId: bob });
+  const insp = a.addUpdate({ projectId: p.id, text: '启发源' }, { currentUserId: daodao });
+  a.submitTinkered({ projectId: p.id, name: 'B 版', link: 'https://b.com', inspiredByUpdateId: insp.id }, { currentUserId: bob });
   db.prepare('DELETE FROM notifications').run();
   const u = a.addUpdate(
     { projectId: p.id, text: '跑通了大版本', notifyTinkered: true },
@@ -579,7 +583,8 @@ test('editProject: 改 productLink 给关心者发 projectMoved 通知', () => {
   const { daodao, alice, bob } = setupBasic();
   const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://old.com' }, { currentUserId: daodao });
   a.reactToProject({ projectId: p.id, level: 'wantToTry' }, { currentUserId: alice });
-  a.submitTinkered({ projectId: p.id, name: 'B 版', link: 'https://b.com' }, { currentUserId: bob });
+  const insp = a.addUpdate({ projectId: p.id, text: '启发源' }, { currentUserId: daodao });
+  a.submitTinkered({ projectId: p.id, name: 'B 版', link: 'https://b.com', inspiredByUpdateId: insp.id }, { currentUserId: bob });
   db.prepare('DELETE FROM notifications').run();
   a.editProject({
     projectId: p.id, name: 'P', desc: 'D', productLink: 'https://new.com',
@@ -606,7 +611,8 @@ test('editProject: 没改 productLink 不发通知', () => {
 test('deleteTinkered: 撤回延伸版 + 清掉 owner 的 tinkered 通知', () => {
   const { daodao, alice } = setupBasic();
   const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
-  a.submitTinkered({ projectId: p.id, name: 'A 版', link: 'https://a.com' }, { currentUserId: alice });
+  const insp = a.addUpdate({ projectId: p.id, text: '启发源' }, { currentUserId: daodao });
+  a.submitTinkered({ projectId: p.id, name: 'A 版', link: 'https://a.com', inspiredByUpdateId: insp.id }, { currentUserId: alice });
   assert.equal(
     db.prepare(`SELECT COUNT(*) AS n FROM tinkered WHERE parent_project_id = ?`).get(p.id).n, 1
   );

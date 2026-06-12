@@ -6,7 +6,8 @@
     "tinker": "./bin/tinker.js"
   },
   "scripts": {
-    "start": "node bin/tinker.js"
+    "start": "node bin/tinker.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.2.1"
