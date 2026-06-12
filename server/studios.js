@@ -138,37 +138,29 @@ function studiosForUserWithPreview(userId) {
       ORDER BY sm.joined_at ASC
     `).all(s.id);
 
-    const memberIds = db.prepare(
-      'SELECT user_id FROM studio_members WHERE studio_id = ?'
-    ).all(s.id).map(r => r.user_id);
+    const counts = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN status IN ('active','stuck') THEN 1 ELSE 0 END) AS inFlight,
+        SUM(CASE WHEN status IN ('done','archive') THEN 1 ELSE 0 END) AS done
+      FROM projects WHERE studio_id = ?
+    `).get(s.id);
+    const projectCount = counts.total || 0;
+    const inFlightCount = counts.inFlight || 0;
+    const doneCount = counts.done || 0;
 
-    let projectCount = 0, inFlightCount = 0, doneCount = 0, recentUpdates = [];
-    if (memberIds.length > 0) {
-      const ph = memberIds.map(() => '?').join(',');
-      const counts = db.prepare(`
-        SELECT
-          COUNT(*) AS total,
-          SUM(CASE WHEN status IN ('active','stuck') THEN 1 ELSE 0 END) AS inFlight,
-          SUM(CASE WHEN status IN ('done','archive') THEN 1 ELSE 0 END) AS done
-        FROM projects WHERE owner_id IN (${ph})
-      `).get(...memberIds);
-      projectCount = counts.total || 0;
-      inFlightCount = counts.inFlight || 0;
-      doneCount = counts.done || 0;
-
-      // 最近 3 条 update · 跨成员 timeline · 过滤掉 isMethod
-      recentUpdates = db.prepare(`
-        SELECT up.id, up.kind, up.at, up.text,
-               p.slug AS projectSlug, p.name AS projectName,
-               u.handle AS ownerHandle
-        FROM updates up
-        JOIN projects p ON p.id = up.project_id
-        JOIN users u ON u.id = p.owner_id
-        WHERE p.owner_id IN (${ph}) AND (up.is_method IS NULL OR up.is_method = 0)
-        ORDER BY up.at DESC
-        LIMIT 3
-      `).all(...memberIds);
-    }
+    // 最近 3 条 update · 只取显式挂到工作室的项目 · 过滤掉 isMethod
+    const recentUpdates = db.prepare(`
+      SELECT up.id, up.kind, up.at, up.text,
+             p.slug AS projectSlug, p.name AS projectName,
+             u.handle AS ownerHandle
+      FROM updates up
+      JOIN projects p ON p.id = up.project_id
+      JOIN users u ON u.id = p.owner_id
+      WHERE p.studio_id = ? AND (up.is_method IS NULL OR up.is_method = 0)
+      ORDER BY up.at DESC
+      LIMIT 3
+    `).all(s.id);
 
     return {
       id: s.id,

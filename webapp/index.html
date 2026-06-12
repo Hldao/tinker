@@ -5426,8 +5426,10 @@
   .account-sub-text { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 14.5px; line-height: 1.6; }
   .account-empty { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 14.5px; padding: 4px 0; }
   .account-studios { margin-top: 4px; }
-  .account-studio-row { padding: 10px 0; border-bottom: 1px dotted var(--rule); font-family: 'Newsreader', serif; color: var(--ink); font-size: 15px; }
+  .account-studio-row { padding: 10px 0; border-bottom: 1px dotted var(--rule); font-family: 'Newsreader', serif; color: var(--ink); font-size: 15px; display: flex; align-items: center; justify-content: space-between; }
   .account-studio-row:last-child { border-bottom: none; }
+  .account-action-danger { color: var(--sepia); opacity: 0.5; }
+  .account-action-danger:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); opacity: 1; }
   .account-section-actions { display: flex; gap: 18px; margin-top: 12px; }
   .account-action {
     font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia);
@@ -10527,6 +10529,24 @@ async function submitAcceptInvite() {
   }
 }
 
+// ============ 离开工作室 ============
+async function leaveStudio(studioId, studioName) {
+  if (!confirm(`确定要离开「${studioName}」吗？`)) return;
+  try {
+    const res = await fetch('/api/studios/' + encodeURIComponent(studioId) + '/leave', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || '离开失败');
+    state = await fetchState();
+    renderAccount();
+    showToast('已离开 — ' + studioName);
+  } catch (e) {
+    showToast('离开失败：' + e.message);
+  }
+}
+
 // ============ API tokens ============
 async function openApiTokens() {
   if (!currentUser.handle) { openLogin('管理钥匙'); return; }
@@ -12076,7 +12096,7 @@ async function renderAccount() {
         </div>
         ${studios.length === 0
           ? `<div class="account-empty">还没挂任何工作室</div>`
-          : `<div class="account-studios">${studios.map(s => `<div class="account-studio-row"><span class="nh" onclick="showScreen('studio','${escapeHtml(s.slug)}')">${escapeHtml(s.name)}</span></div>`).join('')}</div>`}
+          : `<div class="account-studios">${studios.map(s => `<div class="account-studio-row"><span class="nh" onclick="showScreen('studio','${escapeHtml(s.slug)}')">${escapeHtml(s.name)}</span><span class="account-action account-action-danger" onclick="leaveStudio('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">离开</span></div>`).join('')}</div>`}
         <div class="account-section-actions">
           <span class="account-action" onclick="openCreateStudio()">+ 建一个</span>
           <span class="account-action" onclick="openAcceptInvite()">接受邀请</span>
