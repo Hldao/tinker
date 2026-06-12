@@ -261,8 +261,8 @@
   .method-hero-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
   .method-hero-card.no-nav { cursor: default; }  /* 独立方法(无项目)点了不跳转 · 不显示手型 */
-  /* 方法详情页(帖子页)· 顶部面包屑复用 .react-action(跟项目页一致)*/
-  .method-detail { max-width: 720px; }
+  /* 方法 / 进展 详情页(帖子页)· 顶部面包屑复用 .react-action(跟项目页一致)*/
+  .method-detail, .update-detail { max-width: 720px; }
   .method-detail-title { font-family: 'Newsreader', 'Songti SC', serif; font-size: 25px; line-height: 1.35; color: var(--ink); margin: 8px 0 10px; font-weight: 500; }
   .method-detail-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); margin: 12px 0 22px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .method-detail-body { margin-bottom: 22px; }
@@ -6780,6 +6780,7 @@
   <section class="screen" id="screen-studio"><div id="studio-content"></div></section>
   <section class="screen" id="screen-project"><div id="project-content"></div></section>
   <section class="screen" id="screen-method"><div id="method-content"></div></section>
+  <section class="screen" id="screen-update"><div id="update-content"></div></section>
 
   <!-- v0.83 方法库子页 · 跨用户跨项目 · 跟 feed / 陈列馆 同级板块 -->
   <section class="screen" id="screen-methods">
@@ -7712,6 +7713,7 @@ function renderScreen(name, ...args) {
   else if (name === 'showcase') renderShowcase(args[0]);
   else if (name === 'methods') renderMethodsLibrary(args[0]);
   else if (name === 'method') renderMethodDetail(args[0]);
+  else if (name === 'update') renderUpdateDetail(args[0]);
   else if (name === 'account') renderAccount();
   // about 是静态内容,不需要 render
   // feed/showcase 是同一个"工坊"的两个视图 · 进任一屏都记忆
@@ -7745,6 +7747,7 @@ function buildHash(name, args) {
   if (name === 'feed') return '#/';
   if (name === 'methods') return args && args[0] ? '#/m/' + encodeURIComponent(args[0]) : '#/m';
   if (name === 'method') return '#/method/' + encodeURIComponent(args[0] || '');
+  if (name === 'update') return '#/update/' + encodeURIComponent(args[0] || '');
   if (name === 'account') return '#/account';
   // 项目分组视图 · 用短 hash /g · 老链接 /showcase 也兼容 (navigateFromHash 处)
   if (name === 'showcase') return args && args[0] ? '#/g/' + encodeURIComponent(args[0]) : '#/g';
@@ -7773,6 +7776,7 @@ function navigateFromHash() {
   if (parts[0] === 'showcase') return renderScreen('showcase', parts[1]); // 老链接兼容
   if (parts[0] === 'm') return renderScreen('methods', parts[1]);        // 方法库 (跨用户) · /m/<keyword> 可选预填搜词
   if (parts[0] === 'method' && parts[1]) return renderScreen('method', parts[1]); // 单条方法详情页 (帖子页)
+  if (parts[0] === 'update' && parts[1]) return renderScreen('update', parts[1]); // 单条进展详情页 (首页帖子页)
   if (parts[0] === 'account') {
     if (!currentUser.handle) { openLogin('看账号'); return renderHome(); }
     return renderScreen('account');
@@ -8162,10 +8166,9 @@ function makeEntryEl(e) {
   entry.className = 'entry' + (e.status === 'stuck' ? ' entry-stuck' : '');
   entry.onclick = (ev) => {
     if (ev.target.classList.contains('entry-handle')) return;
-    // v0.75: feed 卡片承诺的是"这条进展" · 落地后定位到对应 update 并高亮
-    // 跟通知页跳转一致的体验 (50ms 等 render · 然后 flashAnchor 1.6s 高亮)
-    showScreen('project', e.owner, e.projectSlug);
-    if (e.updateId) setTimeout(() => flashAnchor('update-' + e.updateId), 50);
+    // v0.x: 首页点一条进展 → 进它自己的帖子页(单条详情)· 不再空降项目页时间线
+    if (e.updateId) showScreen('update', e.updateId);
+    else showScreen('project', e.owner, e.projectSlug);
   };
   const allImgs = (e.images && e.images.length > 0) ? e.images : [];
   const shownImgs = allImgs.slice(0, 2);
@@ -9243,6 +9246,55 @@ function renderMethodDetail(methodId) {
       </div>
       ${usedByHtml}
       ${p ? `<div class="method-detail-context"><span class="react-action serif italic" style="border-bottom:none; color: var(--sepia);" onclick="showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);">在「${escapeHtml(p.name)}」里看上下文 →</span></div>` : ''}
+    </article>
+  `;
+}
+
+// 进展详情页(首页帖子页):首页点一条进展进这里 · 看完整内容 + 项目上下文入口
+// 之前点首页帖子是"空降项目页时间线 + 闪 1.6 秒",落地没提示、很懵 · 改成单条帖子页
+// 数据从 state.projects[].updates 按 id 反查(连同所属项目拿作者/项目/状态等上下文)
+function renderUpdateDetail(updateId) {
+  const root = document.getElementById('update-content');
+  if (!root) return;
+  let u = null, p = null;
+  for (const pr of state.projects) {
+    const found = (pr.updates || []).find(x => x.id === updateId);
+    if (found) { u = found; p = pr; break; }
+  }
+  if (!u || !p) {
+    root.innerHTML = `<div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="history.length > 1 ? history.back() : showScreen('feed')">← 返回</a></div><div class="text-center py-16 serif italic" style="color: var(--sepia);">没找到这条进展 · 可能已被删除</div>`;
+    return;
+  }
+  const seeking = u.feedbackAsk !== undefined;
+  const imgs = (u.images && u.images.length > 0) ? u.images : [];
+  root.innerHTML = `
+    <div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${p.owner}')">← @${escapeHtml(p.owner)} 的工坊</a></div>
+    <article class="update-detail">
+      <div class="entry-headline" style="margin-bottom: 10px;">
+        <span class="entry-handle" onclick="showScreen('workshop','${p.owner}')">@${escapeHtml(p.owner)}</span>
+        <span class="entry-slash">/</span>
+        <span class="entry-project" style="cursor: pointer;" onclick="showScreen('project','${p.owner}','${p.slug}')">${escapeHtml(p.name)}</span>
+        ${seeking ? `<span class="entry-seeking-badge">求反馈</span>` : ''}
+        ${p.status !== 'active' ? `<span class="entry-status ${p.status}" title="${statusText(p.status)}">${statusText(p.status)}</span>` : ''}
+      </div>
+      <div class="mono" style="color: var(--sepia); font-size: 12px; margin-bottom: 16px;">${shortAgo(u.at)}</div>
+      ${seeking && u.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
+      <div class="entry-text" style="font-size: 17px; line-height: 1.7;">${renderRichText(u.text)}</div>
+      ${imgs.length > 0 ? `
+        <div class="feed-figure${imgs.length > 1 ? ' multi' : ''}" style="margin-top: 16px;">
+          ${imgs.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder() : `
+          <div class="feed-figure-frame" onclick="zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
+            <img loading="lazy" src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
+          </div>`).join('')}
+        </div>` : ''}
+      <div class="entry-meta" style="margin-top: 18px;">
+        <span>${(p.tools || []).slice(0, 3).join('、')}</span>
+        ${p.status === 'done' ? `<span class="entry-showcase-link" onclick="showScreen('showcase','${p.id}')">✦ 在陈列馆</span>` : ''}
+        ${seeking && p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta">去试用 →</a>` : ''}
+      </div>
+      <div class="method-detail-context" style="margin-top: 24px;">
+        <span class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('project','${p.owner}','${p.slug}'); setTimeout(() => flashAnchor('update-${u.id}'), 50);">在「${escapeHtml(p.name)}」时间线里看上下文 →</span>
+      </div>
     </article>
   `;
 }
