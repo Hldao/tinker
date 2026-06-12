@@ -9035,6 +9035,8 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     const projectLine = p
       ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
       : '<span style="color: var(--sepia-light);">独立方法</span>';
+    // 被借 N:真实复用信号 · 方法库核心就是找被验证/被借过的方法(工坊卡片已有 · 这里补齐)
+    const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span> ` : '';
     return `
       <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
         <div class="method-hero-card-top">
@@ -9043,7 +9045,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
         </div>
         ${scenarioOrFallback}
         <div class="method-hero-card-meta">
-          <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
+          ${borrowed}<span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
           <span style="color: var(--sepia-light);">·</span>
           ${projectLine}
           <span style="color: var(--sepia-light);">·</span>
