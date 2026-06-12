@@ -508,6 +508,15 @@
   .tl-proven-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.22em; padding: 2px 8px; border: 1px solid var(--moss); border-radius: 2px; margin-bottom: 10px; font-weight: 500; }
   .tl-seeking-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--vermilion); letter-spacing: 0.18em; padding: 2px 8px; border: 1px dashed var(--vermilion); border-radius: 2px; margin-bottom: 10px; font-weight: 400; opacity: 0.8; }
   .tl-action-seek-reply { color: var(--vermilion) !important; }
+  .methods-mode-bar { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid var(--rule); }
+  .methods-mode-tab { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: var(--sepia); cursor: pointer; padding: 10px 20px 10px 0; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+  .methods-mode-tab:hover { color: var(--ink); }
+  .methods-mode-tab.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+  .seeking-card { padding: 18px 0; border-bottom: 1px dotted var(--rule); }
+  .seeking-card:last-child { border-bottom: none; }
+  .seeking-card-text { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); margin-bottom: 8px; }
+  .seeking-card-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-bottom: 8px; }
+  .seeking-card-reply { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion); }
   /* v0.13 长方法折叠 · 默认收起 · 点开看全文 */
   .tl-text-foldable { max-height: 150px; overflow: hidden; position: relative; }
   .tl-text-foldable.expanded { max-height: none; }
@@ -8985,7 +8994,7 @@ function daysSinceShip(ts) {
 // - 方法是沉淀型资产 · 这里不强加排序 · 让用户自己挑维度
 // - 三种维度: 关键词搜 · 按作者分组 · 按项目分组
 // - 不做 trending / star / ranking (Tinker 反算法立场)
-let methodsLibraryState = { query: '', groupBy: 'project', remoteHits: null, lastQuery: null };
+let methodsLibraryState = { query: '', groupBy: 'project', remoteHits: null, lastQuery: null, mode: 'methods' };
 // v0.85 方法领域轴 · 跟服务端 DISCIPLINES 词表对齐 · 点一下走 #tag 精确过滤
 const METHOD_DISCIPLINES = ['产品', '设计', '数据与安全', '工程', 'AI协作'];
 // v0.86 每个领域一个颜色 · 跟陈列馆/状态色同一套土系调 · 卡片上的领域 tag 用它上色
@@ -9004,6 +9013,24 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
   if (initialQuery !== undefined) methodsLibraryState.query = initialQuery;
   const root = document.getElementById('methods-library-content');
   if (!root) return;
+  // seeking 子页面完全独立 · 跳过方法搜索流程
+  if (methodsLibraryState.mode === 'seeking') {
+    const modeTab = (key, label) =>
+      `<span class="methods-mode-tab ${methodsLibraryState.mode === key ? 'active' : ''}" onclick="methodsLibraryState.mode='${key}'; renderMethodsLibrary();">${label}</span>`;
+    root.innerHTML = `
+      <div class="mb-8">
+        <div class="methods-mode-bar">
+          ${modeTab('methods', '沉淀的方法')}
+          ${modeTab('seeking', '有人在找')}
+        </div>
+        <p class="feed-sub mb-6">还没有答案的问题 · 你知道的话可以回应</p>
+      </div>
+      <div id="methods-lib-seeking-list"><div class="text-center py-16 serif italic" style="color: var(--sepia);">加载中…</div></div>
+    `;
+    renderSeekingPage();
+    return;
+  }
+
   // 请求序号 · 防竞态:快速改词时旧搜索后到会被丢弃 · 不覆盖新结果
   const seq = (methodsLibraryState._reqSeq = (methodsLibraryState._reqSeq || 0) + 1);
 
@@ -9175,9 +9202,15 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     <span class="methods-lib-tab ${methodsLibraryState.groupBy === key ? 'active' : ''}" onclick="methodsLibraryState.groupBy='${key}'; renderMethodsLibrary();">${label}</span>
   `;
 
+  const modeTab = (key, label) =>
+    `<span class="methods-mode-tab ${methodsLibraryState.mode === key ? 'active' : ''}" onclick="methodsLibraryState.mode='${key}'; renderMethodsLibrary();">${label}</span>`;
+
   root.innerHTML = `
     <div class="mb-8">
-      <h1 class="feed-title mb-3">方法库</h1>
+      <div class="methods-mode-bar">
+        ${modeTab('methods', '沉淀的方法')}
+        ${modeTab('seeking', '有人在找')}
+      </div>
       <p class="feed-sub mb-6">vibe coder 沉淀下来的手艺 · 关键词搜 · 复制 markdown 直接喂给你的 AI</p>
       <div class="methods-lib-toolbar">
         <input type="text" id="methods-lib-q" class="methods-lib-search" placeholder="搜方法 · supabase / 邮箱登录 / 部署…" value="${escapeHtml(methodsLibraryState.query)}"
@@ -9203,6 +9236,37 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
   if (qInput && document.activeElement !== qInput && q) {
     qInput.focus();
     qInput.setSelectionRange(qInput.value.length, qInput.value.length);
+  }
+
+}
+
+async function renderSeekingPage() {
+  const el = document.getElementById('methods-lib-seeking-list');
+  if (!el) return;
+  try {
+    const url = new URL('/api/seeking', location.origin);
+    url.searchParams.set('limit', '50');
+    const res = await fetch(url.toString());
+    const data = await res.json();
+    const items = (data.items || []);
+    if (items.length === 0) {
+      el.innerHTML = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">暂时没有人在找方法 · 用 tinker seek 发一个</div>`;
+      return;
+    }
+    const isMine = (handle) => handle === currentUser.handle;
+    el.innerHTML = items.map(s => `
+      <div class="seeking-card">
+        <div class="seeking-card-text">${escapeHtml(s.text)}</div>
+        <div class="seeking-card-meta">
+          <span class="nh" onclick="showScreen('workshop','${escapeHtml(s.ownerHandle)}')">@${escapeHtml(s.ownerHandle)}</span>
+          · <span class="nh" onclick="showScreen('project','${escapeHtml(s.ownerHandle)}','${escapeHtml(s.projectSlug)}')">${escapeHtml(s.projectName)}</span>
+          · <span>${shortAgo(s.at)}</span>
+        </div>
+        ${!isMine(s.ownerHandle) ? `<span class="seeking-card-reply" onclick="openSeekReply('${escapeHtml(s.id)}','${escapeHtml(s.projectId)}')">我知道 · 来回应</span>` : ''}
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="text-center py-16 serif italic" style="color: var(--sepia);">加载失败</div>`;
   }
 }
 

@@ -8449,6 +8449,27 @@ async function cmdBorrow(query, opts) {
     log('');
   });
   log(sepia('  借了哪条记得回头 ') + vermilion('tinker contribute') + sepia(' 把自己的总结也放进去'));
+
+  // v0.94 追加匹配的求方法请求 · 低调放末尾 · 不污染方法结果
+  try {
+    const seekUrl = new URL('/api/seeking', cfg.serverUrl);
+    seekUrl.searchParams.set('q', q);
+    seekUrl.searchParams.set('limit', '3');
+    const seekRes = await fetch(seekUrl.toString());
+    if (seekRes.ok) {
+      const seekData = await seekRes.json();
+      const seekItems = (seekData.items || []).filter(s => s.ownerHandle !== cfg.handle);
+      if (seekItems.length > 0) {
+        log('');
+        log(sepia('  ⊙ 有人在找类似的:'));
+        seekItems.forEach(s => {
+          log(sepia('    · ') + s.text.slice(0, 80) + (s.text.length > 80 ? sepia('...') : ''));
+          log(sepia('      @' + s.ownerHandle + ' · ' + s.projectName + ' · id: ' + s.id));
+        });
+        log(sepia('  你知道怎么做? ') + vermilion('tinker contribute --from-file <文件> --reply <id>'));
+      }
+    }
+  } catch {}
 }
 
 // v0.14 反馈链路三件套 · 让 CLI 也能完成 Tinker 反算法的核心闭环 (借了能回应 / 启发了能反馈)

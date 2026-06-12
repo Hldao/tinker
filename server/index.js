@@ -364,6 +364,17 @@ app.get('/api/method/search', stateLimiter, (req, res) => {
   }
 });
 
+// v0.94 求方法请求列表 · 公开 · 支持关键词过滤
+app.get('/api/seeking', stateLimiter, (req, res) => {
+  const q = String(req.query.q || '').slice(0, 200);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+  try {
+    res.json({ ok: true, items: actions.listSeeking({ q, limit }) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // 作者看自己最近 N 天被借了哪些方法 (goodnight 用 · 也给 webapp 个人页用)
 // 需要登录 · 只能看自己的
 app.get('/api/method/borrows-for-me', stateLimiter, auth.requireSession, (req, res) => {

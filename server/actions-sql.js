@@ -1517,6 +1517,30 @@ function stashDrop({ id }, { currentUserId }) {
 }
 
 // ============================================
+// v0.94 求方法列表 · 支持关键词过滤 · 按时间倒序
+function listSeeking({ q, limit = 20 } = {}) {
+  const lq = (q || '').trim().toLowerCase();
+  const rows = db.prepare(`
+    SELECT u.id, u.text, u.at,
+           p.id AS projectId, p.name AS projectName, p.slug AS projectSlug,
+           usr.handle AS ownerHandle
+    FROM updates u
+    JOIN projects p ON p.id = u.project_id
+    JOIN users usr ON usr.id = p.owner_id
+    WHERE u.is_seeking = 1
+    ORDER BY u.at DESC
+    LIMIT ?
+  `).all(Math.min(limit, 50));
+  const results = lq
+    ? rows.filter(r => r.text.toLowerCase().includes(lq) || r.projectName.toLowerCase().includes(lq))
+    : rows;
+  return results.map(r => ({
+    id: r.id, text: r.text, at: r.at,
+    projectId: r.projectId, projectName: r.projectName, projectSlug: r.projectSlug,
+    ownerHandle: r.ownerHandle,
+  }));
+}
+
 // NOTIFICATIONS
 // ============================================
 
@@ -1537,7 +1561,7 @@ function markNotifRead({ notifId }, { currentUserId }) {
 }
 
 module.exports = {
-  searchMethods, getBorrowsForOwner, // 不走 action 路径 · 直接 GET 暴露
+  searchMethods, getBorrowsForOwner, listSeeking, // 不走 action 路径 · 直接 GET 暴露
   listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI 用)
   // users
   editTagline, renameHandle,
