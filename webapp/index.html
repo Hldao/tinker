@@ -264,6 +264,8 @@
   .method-hero-card-badge { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; }
   /* v0.86 顶部一条:badge + 领域/主题 tag · 标签从正文下方挪到卡片上方 */
   .method-hero-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* tag-row 自带 margin-top:6px (单独用在正文下时要) · 但在卡片顶横排里它把标签往下推 · 跟徽章错开 · 这里清零 */
+  .method-hero-card-top .method-tag-row { margin-top: 0; }
   .method-hero-card-scenario { font-family: 'Newsreader', 'Songti SC', serif; font-size: 15px; line-height: 1.5; color: var(--ink); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   /* v0.86 无场景的方法:正文去斜体 + 按行干净截断 (不再句中硬切 80 字) */
   .method-hero-card-untitled { font-family: 'Newsreader', 'Songti SC', serif; font-size: 14px; color: #44403c; line-height: 1.55; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
@@ -6808,8 +6810,8 @@
         </div>
 
         <div class="about-do-item">
-          <h3 class="about-do-title">作品必须真能玩到</h3>
-          <p>不能只贴截图加 AI 写的介绍。陌生人不联系你就能玩到的，才叫作品。</p>
+          <h3 class="about-do-title">作品要能被真的体验到</h3>
+          <p>不能只贴截图加 AI 写的介绍。网页能点开试、小程序能扫码、app 能下到，只要陌生人不联系你就能真的上手，就算。</p>
         </div>
 
         <div class="about-do-item">
@@ -8388,7 +8390,7 @@ function renderWorkshop(handle) {
             </div>
             <div class="method-hero-card-actions">
               <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
-              ${m.owner !== currentUser.handle ? `<span class="method-hero-card-used${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?' active':''}" onclick="event.stopPropagation(); methodUsedById('${m.id}')">${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?'✓ 你用过·跑通了':'用了·跑通了'}</span>` : ''}
+              ${m.owner !== currentUser.handle ? `<span class="method-hero-card-used${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?' active':''}" onclick="event.stopPropagation(); methodUsedById('${m.id}')">${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?'✓ 你用过 · 跑通了':'用了 · 跑通了'}</span>` : ''}
             </div>
           </div>
         `;
@@ -9004,7 +9006,7 @@ async function renderMethodsLibrary(initialQuery) {
         </div>
         <div class="method-hero-card-actions">
           <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="event.stopPropagation(); copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
-          ${m.owner !== currentUser.handle ? `<span class="method-hero-card-used${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?' active':''}" onclick="event.stopPropagation(); methodUsedById('${m.id}')">${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?'✓ 你用过·跑通了':'用了·跑通了'}</span>` : ''}
+          ${m.owner !== currentUser.handle ? `<span class="method-hero-card-used${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?' active':''}" onclick="event.stopPropagation(); methodUsedById('${m.id}')">${(m.usedBy||[]).some(x=>x.user===currentUser.handle)?'✓ 你用过 · 跑通了':'用了 · 跑通了'}</span>` : ''}
         </div>
       </div>
     `;
