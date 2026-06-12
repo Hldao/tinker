@@ -305,6 +305,7 @@
     display: inline-block;
     max-width: 100%;
     transition: border-color 0.15s;
+    min-height: 56px;  /* 懒加载预留空间 · 减少图片弹入时的布局抖动 */
   }
   .feed-figure-frame:hover { border-color: var(--vermilion); }
   .feed-figure-frame img {
@@ -548,6 +549,7 @@
     display: inline-block;
     max-width: 100%;
     transition: border-color 0.15s;
+    min-height: 56px;  /* 懒加载预留空间 · 减少布局抖动 */
   }
   .tl-figure-frame:hover { border-color: var(--vermilion); }
   .tl-figure-frame img { display: block; max-width: 100%; height: auto; }
@@ -608,6 +610,7 @@
     cursor: zoom-in;
     display: inline-block;
     transition: border-color 0.15s;
+    min-height: 48px;  /* 懒加载预留空间 · 减少布局抖动 */
   }
   .note-image-frame:hover { border-color: var(--vermilion); }
   .note-image-frame img { display: block; max-width: 100%; max-height: 160px; height: auto; }
@@ -941,6 +944,8 @@
   .btn-act:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
   .btn-act-primary { background: var(--ink); color: var(--bg); padding: 8px 16px; border: none; font-family: 'Newsreader', serif; font-size: 15px; cursor: pointer; transition: all 0.15s; }
   .btn-act-primary:hover { background: var(--vermilion); }
+  /* 提交进行中:guardSubmit 置 is-busy/disabled · 变灰 + 挡住再次点击 */
+  .btn-act-primary:disabled, .btn-act-primary.is-busy, .is-busy { opacity: 0.5; cursor: default; pointer-events: none; }
 
   .modal-back { background: rgba(28, 25, 23, 0.4); }
   .modal-paper { background: var(--bg); border: 1px solid var(--ink); padding: 28px 32px; max-width: 520px; }
@@ -6933,7 +6938,7 @@
 
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-note')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitNote()" class="btn-act-primary">留下</button>
+      <button onclick="guardSubmit(this, submitNote)" class="btn-act-primary">留下</button>
     </div>
   </div>
 </div>
@@ -6959,7 +6964,7 @@
     </div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-tinkered')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitTinkered()" class="btn-act-primary">挂上 · 告诉 ta 启发了你</button>
+      <button onclick="guardSubmit(this, submitTinkered)" class="btn-act-primary">挂上 · 告诉 ta 启发了你</button>
     </div>
   </div>
 </div>
@@ -7024,7 +7029,7 @@
 
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-update')" class="btn-act" style="border-bottom: none;">先不记</button>
-      <button id="update-submit-btn" onclick="submitUpdate()" class="btn-act-primary">✎ 记上</button>
+      <button id="update-submit-btn" onclick="guardSubmit(this, submitUpdate)" class="btn-act-primary">✎ 记上</button>
     </div>
   </div>
 </div>
@@ -7082,7 +7087,7 @@
     <div id="cs-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-create-studio')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitCreateStudio()" class="btn-act-primary">建好 →</button>
+      <button onclick="guardSubmit(this, submitCreateStudio)" class="btn-act-primary">建好 →</button>
     </div>
   </div>
 </div>
@@ -7119,7 +7124,7 @@
       <div id="inv-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
       <div class="flex justify-end gap-4 mt-6">
         <button onclick="closeModal('modal-invite-member')" class="btn-act" style="border-bottom: none;">取消</button>
-        <button onclick="submitInvite()" class="btn-act-primary">生成 token →</button>
+        <button onclick="guardSubmit(this, submitInvite)" class="btn-act-primary">生成 token →</button>
       </div>
     </div>
     <div id="invite-state-token" class="hidden">
@@ -7152,7 +7157,7 @@
     <div id="ai-error" class="hidden mb-4" style="color: var(--vermilion); font-size: 13px;"></div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-accept-invite')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitAcceptInvite()" class="btn-act-primary">加入 →</button>
+      <button onclick="guardSubmit(this, submitAcceptInvite)" class="btn-act-primary">加入 →</button>
     </div>
   </div>
 </div>
@@ -7171,8 +7176,8 @@
       </div>
       <div class="flex justify-end gap-4 mt-6 items-center">
         <button onclick="closeModal('modal-login')" class="btn-act" style="border-bottom: none;">取消</button>
-        <span id="login-dev-action" class="hidden react-action serif" style="color: var(--moss); cursor: pointer; font-size: 13px; border-bottom: 1px dotted var(--moss);" onclick="submitLoginEmailDev()" title="仅本地开发 · 生产环境没这个口">本地直接进 (跳过邮件)</span>
-        <button id="login-send-btn" onclick="submitLoginEmail()" class="btn-act-primary">发链接到我邮箱 →</button>
+        <span id="login-dev-action" class="hidden react-action serif" style="color: var(--moss); cursor: pointer; font-size: 13px; border-bottom: 1px dotted var(--moss);" onclick="guardSubmit(this, submitLoginEmailDev)" title="仅本地开发 · 生产环境没这个口">本地直接进 (跳过邮件)</span>
+        <button id="login-send-btn" onclick="guardSubmit(this, submitLoginEmail)" class="btn-act-primary">发链接到我邮箱 →</button>
       </div>
       <p class="text-xs serif" style="color: var(--sepia); margin-top: 14px; font-style: italic;">
         不会发广告 · 不会卖给第三方 · alpha 期连密码都不要
@@ -7211,7 +7216,7 @@
       <input id="sh-tagline" class="input-bare" placeholder="比如 用 AI 帮我妈做小红书">
     </div>
     <div class="flex justify-end gap-4 mt-6">
-      <button id="sh-submit-btn" onclick="submitWelcome()" class="btn-act-primary">开张 →</button>
+      <button id="sh-submit-btn" onclick="guardSubmit(this, submitWelcome)" class="btn-act-primary">开张 →</button>
     </div>
   </div>
 </div>
@@ -7232,7 +7237,7 @@
     </div>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-edit-workshop')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitEditWorkshop()" class="btn-act-primary">保存</button>
+      <button onclick="guardSubmit(this, submitEditWorkshop)" class="btn-act-primary">保存</button>
     </div>
   </div>
 </div>
@@ -7249,7 +7254,7 @@
       <label class="mono text-xs block mb-2" style="color: var(--sepia); letter-spacing: 0.05em;">生成一把新钥匙</label>
       <div class="flex gap-3 items-center">
         <input id="new-token-label" class="input-bare flex-1" placeholder="给它起个名 · 比如 Cursor / 我的笔记本">
-        <button onclick="submitNewToken()" class="btn-act-primary">生成 →</button>
+        <button onclick="guardSubmit(this, submitNewToken)" class="btn-act-primary">生成 →</button>
       </div>
     </div>
 
@@ -7299,7 +7304,7 @@
     <p class="field-hint" id="msp-hint"></p>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-status-picker')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitStatusChange()" class="btn-act-primary">保存</button>
+      <button onclick="guardSubmit(this, submitStatusChange)" class="btn-act-primary">保存</button>
     </div>
   </div>
 </div>
@@ -7358,7 +7363,7 @@
 
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-ship-ceremony')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitShipCeremony()" id="exhibit-submit-btn" class="btn-act-primary">✦ 进陈列馆</button>
+      <button onclick="guardSubmit(this, submitShipCeremony)" id="exhibit-submit-btn" class="btn-act-primary">✦ 进陈列馆</button>
     </div>
   </div>
 </div>
@@ -7376,7 +7381,7 @@
     <textarea id="mu-note" class="input-bare" rows="3" placeholder="比如: 用类似思路解决了我的 X · 或者接到了 Y 项目" style="font-size: 16px; resize: vertical;"></textarea>
     <div class="flex justify-end gap-4 mt-6">
       <button onclick="closeModal('modal-method-used')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button onclick="submitMethodUsed()" class="btn-act-primary">留下 · 通知作者</button>
+      <button onclick="guardSubmit(this, submitMethodUsed)" class="btn-act-primary">留下 · 通知作者</button>
     </div>
   </div>
 </div>
@@ -7451,7 +7456,7 @@
 
     <div class="flex justify-end gap-4 mt-6">
       <button id="np-cancel-btn" onclick="closeModal('modal-new-project')" class="btn-act" style="border-bottom: none;">取消</button>
-      <button id="np-submit-btn" onclick="submitNewProject()" class="btn-act-primary">挂上 · 开始捣鼓</button>
+      <button id="np-submit-btn" onclick="guardSubmit(this, submitNewProject)" class="btn-act-primary">挂上 · 开始捣鼓</button>
     </div>
   </div>
 </div>
@@ -11388,6 +11393,16 @@ function closeOpenModals() {
   return open.length > 0;
 }
 
+// 防重复提交:提交进行中禁用按钮 · 期间再点无效 · 完成或失败自动恢复
+// 用法 onclick="guardSubmit(this, submitX)" · 挡住网慢时双击导致的重复发 update / 重复建项目
+function guardSubmit(btn, fn) {
+  if (btn && btn.dataset.busy === '1') return;
+  if (btn) { btn.dataset.busy = '1'; btn.disabled = true; btn.classList.add('is-busy'); }
+  Promise.resolve().then(fn).catch(err => console.error('submit 出错:', err)).finally(() => {
+    if (btn) { btn.dataset.busy = ''; btn.disabled = false; btn.classList.remove('is-busy'); }
+  });
+}
+
 // 分享当前项目页 (Tinker URL) · spec §5.3 "离开路径"
 function shareProject(platform) {
   const p = projectById(currentProjectCtx);
@@ -11497,6 +11512,13 @@ document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
     e.preventDefault();
     openSearch();
+  }
+  // 回车提交:在弹窗的输入框里按回车 = 点该弹窗的主按钮
+  // textarea 不拦(留作换行)· isComposing 时不拦(中文输入法选词的回车)
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.target.tagName === 'INPUT') {
+    const m = document.querySelector('[id^="modal-"]:not(.hidden)');
+    const primary = m && m.querySelector('.btn-act-primary');
+    if (primary && !primary.disabled) { e.preventDefault(); primary.click(); }
   }
 });
 
@@ -11981,7 +12003,7 @@ async function renderAccount() {
         <div id="account-tokens-list" style="margin-top: 14px;"><div class="serif" style="color: var(--sepia); font-size: 14px;">读取中...</div></div>
         <div style="margin-top: 14px;">
           <input id="account-new-token-label" class="input-bare" placeholder="给这把钥匙起个名 · 比如 我的 MacBook" style="margin-bottom: 10px;">
-          <button class="btn-act-primary" onclick="submitAccountNewToken()">生成新钥匙</button>
+          <button class="btn-act-primary" onclick="guardSubmit(this, submitAccountNewToken)">生成新钥匙</button>
         </div>
         <div id="account-new-token-revealed" class="hidden" style="margin-top: 14px; padding: 12px; background: var(--paper); border: 1px dashed var(--vermilion); border-radius: 4px;">
           <div class="mono text-xs" style="color: var(--vermilion); margin-bottom: 6px;">这把钥匙只显示这一次 · 关掉就看不见了</div>
