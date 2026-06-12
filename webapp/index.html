@@ -261,6 +261,17 @@
   .method-hero-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
   .method-hero-card.no-nav { cursor: default; }  /* 独立方法(无项目)点了不跳转 · 不显示手型 */
+  /* 方法详情页(帖子页)*/
+  .method-detail-back { font-family: 'Newsreader', serif; font-style: italic; color: var(--sepia); font-size: 15px; cursor: pointer; padding: 4px 0; margin-bottom: 18px; display: inline-block; }
+  .method-detail-back:hover { color: var(--ink); }
+  .method-detail { max-width: 720px; }
+  .method-detail-title { font-family: 'Newsreader', 'Songti SC', serif; font-size: 25px; line-height: 1.35; color: var(--ink); margin: 8px 0 10px; font-weight: 500; }
+  .method-detail-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); margin: 12px 0 22px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .method-detail-body { margin-bottom: 22px; }
+  .method-detail-actions { display: flex; gap: 18px; font-family: 'JetBrains Mono', monospace; font-size: 12px; padding-top: 16px; border-top: 1px solid var(--rule); }
+  .method-detail-usedby { margin-top: 20px; font-size: 13px; color: var(--sepia); line-height: 1.75; }
+  .method-detail-usedby-head { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--moss); margin-bottom: 4px; letter-spacing: 0.05em; }
+  .method-detail-context { margin-top: 22px; }
   .method-hero-card:hover { border-color: var(--moss); transform: translateY(-1px); }
   .method-hero-card-badge { display: inline-flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.18em; }
   /* v0.86 顶部一条:badge + 领域/主题 tag · 标签从正文下方挪到卡片上方 */
@@ -6768,6 +6779,7 @@
   <section class="screen" id="screen-account"><div id="account-content"></div></section>
   <section class="screen" id="screen-studio"><div id="studio-content"></div></section>
   <section class="screen" id="screen-project"><div id="project-content"></div></section>
+  <section class="screen" id="screen-method"><div id="method-content"></div></section>
 
   <!-- v0.83 方法库子页 · 跨用户跨项目 · 跟 feed / 陈列馆 同级板块 -->
   <section class="screen" id="screen-methods">
@@ -7699,6 +7711,7 @@ function renderScreen(name, ...args) {
   else if (name === 'notifications') renderNotifications();
   else if (name === 'showcase') renderShowcase(args[0]);
   else if (name === 'methods') renderMethodsLibrary(args[0]);
+  else if (name === 'method') renderMethodDetail(args[0]);
   else if (name === 'account') renderAccount();
   // about 是静态内容,不需要 render
   // feed/showcase 是同一个"工坊"的两个视图 · 进任一屏都记忆
@@ -7731,6 +7744,7 @@ function buildHash(name, args) {
   if (name === 'onboard') return '#/onboard';
   if (name === 'feed') return '#/';
   if (name === 'methods') return args && args[0] ? '#/m/' + encodeURIComponent(args[0]) : '#/m';
+  if (name === 'method') return '#/method/' + encodeURIComponent(args[0] || '');
   if (name === 'account') return '#/account';
   // 项目分组视图 · 用短 hash /g · 老链接 /showcase 也兼容 (navigateFromHash 处)
   if (name === 'showcase') return args && args[0] ? '#/g/' + encodeURIComponent(args[0]) : '#/g';
@@ -7746,7 +7760,6 @@ function renderHome() {
 // 跟 showScreen 分开:这条只渲染 · 否则返回触发的渲染又会 pushState · 压栈成死循环
 function navigateFromHash() {
   const h = location.hash || '#/';
-  if (h === _renderedHash) return;  // 已在显示 · 去重 popstate 与 hashchange 的双触发
   if (h === '#/' || h === '#') return renderHome();
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   if (parts[0] === 'w' && parts[1]) return renderScreen('workshop', parts[1]);
@@ -7759,6 +7772,7 @@ function navigateFromHash() {
   if (parts[0] === 'g') return renderScreen('showcase', parts[1]);       // 新短 hash
   if (parts[0] === 'showcase') return renderScreen('showcase', parts[1]); // 老链接兼容
   if (parts[0] === 'm') return renderScreen('methods', parts[1]);        // 方法库 (跨用户) · /m/<keyword> 可选预填搜词
+  if (parts[0] === 'method' && parts[1]) return renderScreen('method', parts[1]); // 单条方法详情页 (帖子页)
   if (parts[0] === 'account') {
     if (!currentUser.handle) { openLogin('看账号'); return renderHome(); }
     return renderScreen('account');
@@ -7766,7 +7780,13 @@ function navigateFromHash() {
   return renderHome();
 }
 
-window.addEventListener('hashchange', navigateFromHash);
+// 只给 popstate/hashchange 事件用 · 同 hash 跳过 (去重双触发)。
+// navigateFromHash 本身不再去重 · 这样 methodUsedById 等"原地刷新当前屏"的直调还能工作。
+function routeFromEvent() {
+  if ((location.hash || '#/') === _renderedHash) return;
+  navigateFromHash();
+}
+window.addEventListener('hashchange', routeFromEvent);
 // 返回键(手机/浏览器)优先关弹窗:有弹窗开着就关掉、把当前屏 hash 压回,
 // 这样返回栈不丢、屏幕不切;没弹窗才正常逐屏返回。
 window.addEventListener('popstate', () => {
@@ -7776,7 +7796,7 @@ window.addEventListener('popstate', () => {
     }
     return;
   }
-  navigateFromHash();
+  routeFromEvent();
 });
 
 function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
@@ -9039,7 +9059,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     // 被借 N:真实复用信号 · 方法库核心就是找被验证/被借过的方法(工坊卡片已有 · 这里补齐)
     const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span> ` : '';
     return `
-      <div class="method-hero-card${p ? '' : ' no-nav'}" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+      <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; showScreen('method','${m.id}');">
         <div class="method-hero-card-top">
           <span class="method-hero-card-badge">✤ 方法</span>
           ${renderMethodTagRow(m)}
@@ -9177,6 +9197,53 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     qInput.focus();
     qInput.setSelectionRange(qInput.value.length, qInput.value.length);
   }
+}
+
+// 方法详情页(帖子页):点方法卡进这里看完整内容 + 复用反馈 · hash #/method/<id> 可分享可返回
+// 数据从 state.methods 取(方法库已全量加载)· 返回走 history.back 回方法库
+function renderMethodDetail(methodId) {
+  const root = document.getElementById('method-content');
+  if (!root) return;
+  const back = `<div class="method-detail-back" onclick="history.length > 1 ? history.back() : showScreen('methods')">← 返回</div>`;
+  const m = (state.methods || []).find(x => x.id === methodId);
+  if (!m) {
+    root.innerHTML = `${back}<div class="text-center py-16 serif italic" style="color: var(--sepia);">没找到这条方法 · 可能已被删除</div>`;
+    return;
+  }
+  const p = m.projectId ? state.projects.find(pp => pp.id === m.projectId) : null;
+  const isMine = m.owner === currentUser.handle;
+  const usedByList = m.usedBy || [];
+  const meUsed = usedByList.some(x => x.user === currentUser.handle);
+  const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
+  const borrowed = (m.borrowCount || 0) > 0
+    ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span> ` : '';
+  const usedByHtml = usedByList.length ? `
+    <div class="method-detail-usedby">
+      <div class="method-detail-usedby-head">跑通了 · ${usedByList.length}</div>
+      ${usedByList.map(u => `<div>· <span class="nh" onclick="showScreen('workshop','${u.user}')">@${escapeHtml(u.user)}</span>${u.note ? ' 「' + renderMentions(u.note) + '」' : ''}</div>`).join('')}
+    </div>` : '';
+  root.innerHTML = `
+    ${back}
+    <article class="method-detail">
+      <div class="tl-method-badge">✤ 方法</div>
+      ${m.scenario ? `<h1 class="method-detail-title">${escapeHtml(m.scenario)}</h1>` : ''}
+      ${renderMethodTagRow(m)}
+      <div class="method-detail-meta">
+        ${borrowed}<span class="nh" onclick="showScreen('workshop','${m.owner}')">@${escapeHtml(m.owner)}</span>
+        ${p
+          ? ` <span style="color: var(--sepia-light);">·</span> <span class="nh" onclick="showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
+          : ` <span style="color: var(--sepia-light);">· 独立方法</span>`}
+        <span style="color: var(--sepia-light);">·</span> ${shortAgo(m.at)}
+      </div>
+      <div class="tl-text method-detail-body">${renderRichText(m.text)}</div>
+      <div class="method-detail-actions">
+        <span class="method-hero-card-copy" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${textJson})">${ICONS.copy}复制 markdown</span>
+        ${!isMine ? `<span class="method-hero-card-used${meUsed ? ' active' : ''}" onclick="methodUsedById('${m.id}')">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
+      </div>
+      ${usedByHtml}
+      ${p ? `<div class="method-detail-context"><span class="react-action serif italic" style="border-bottom:none; color: var(--sepia);" onclick="showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);">在「${escapeHtml(p.name)}」里看上下文 →</span></div>` : ''}
+    </article>
+  `;
 }
 
 function renderShowcase(focusId) {
