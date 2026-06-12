@@ -261,9 +261,7 @@
   .method-hero-scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
   .method-hero-card { padding: 16px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; cursor: pointer; transition: border-color 0.15s, transform 0.1s; display: flex; flex-direction: column; gap: 8px; }
   .method-hero-card.no-nav { cursor: default; }  /* 独立方法(无项目)点了不跳转 · 不显示手型 */
-  /* 方法详情页(帖子页)*/
-  .method-detail-back { font-family: 'Newsreader', serif; font-style: italic; color: var(--sepia); font-size: 15px; cursor: pointer; padding: 4px 0; margin-bottom: 18px; display: inline-block; }
-  .method-detail-back:hover { color: var(--ink); }
+  /* 方法详情页(帖子页)· 顶部面包屑复用 .react-action(跟项目页一致)*/
   .method-detail { max-width: 720px; }
   .method-detail-title { font-family: 'Newsreader', 'Songti SC', serif; font-size: 25px; line-height: 1.35; color: var(--ink); margin: 8px 0 10px; font-weight: 500; }
   .method-detail-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sepia); margin: 12px 0 22px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -9204,12 +9202,13 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
 function renderMethodDetail(methodId) {
   const root = document.getElementById('method-content');
   if (!root) return;
-  const back = `<div class="method-detail-back" onclick="history.length > 1 ? history.back() : showScreen('methods')">← 返回</div>`;
   const m = (state.methods || []).find(x => x.id === methodId);
   if (!m) {
-    root.innerHTML = `${back}<div class="text-center py-16 serif italic" style="color: var(--sepia);">没找到这条方法 · 可能已被删除</div>`;
+    root.innerHTML = `<div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="history.length > 1 ? history.back() : showScreen('methods')">← 返回</a></div><div class="text-center py-16 serif italic" style="color: var(--sepia);">没找到这条方法 · 可能已被删除</div>`;
     return;
   }
+  // 顶部面包屑跟项目页(工坊帖子)一致:← @作者 的工坊 · 点它去作者工坊(手机返回键照样回方法库)
+  const back = `<div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${m.owner}')">← @${escapeHtml(m.owner)} 的工坊</a></div>`;
   const p = m.projectId ? state.projects.find(pp => pp.id === m.projectId) : null;
   const isMine = m.owner === currentUser.handle;
   const usedByList = m.usedBy || [];
