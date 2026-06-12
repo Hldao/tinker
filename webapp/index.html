@@ -7676,7 +7676,11 @@ function switchMainView(v) {
   else showScreen('feed');
 }
 
-function showScreen(name, ...args) {
+// 记当前已渲染的 hash · 给 popstate/hashchange 去重 (返回时避免重复渲染 / 死循环)
+let _renderedHash = null;
+
+// 只渲染屏幕 DOM · 不碰 history · 给 showScreen 和 popstate/hash 路由共用
+function renderScreen(name, ...args) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const t = document.getElementById('screen-' + name);
   if (t) t.classList.add('active');
@@ -7691,14 +7695,24 @@ function showScreen(name, ...args) {
   else if (name === 'methods') renderMethodsLibrary(args[0]);
   else if (name === 'account') renderAccount();
   // about 是静态内容,不需要 render
-  // 更新 hash · 让 URL 可分享 + back/forward 工作
-  const newHash = buildHash(name, args);
-  if (location.hash !== newHash) {
-    history.replaceState(null, '', newHash);
-  }
   // feed/showcase 是同一个"工坊"的两个视图 · 进任一屏都记忆
   if (name === 'feed') setStoredMainView('stream');
   else if (name === 'showcase') setStoredMainView('gallery');
+  _renderedHash = buildHash(name, args);
+}
+
+// 用户主动前进导航 → 渲染 + pushState 压一条 history
+// (旧版这里用 replaceState · 整个 app 永远只有 1 条 history 记录 · 手机/浏览器点返回直接退出整站 · 这是返回 bug 的根源)
+function showScreen(name, ...args) {
+  renderScreen(name, ...args);
+  const newHash = buildHash(name, args);
+  try {
+    if ((location.hash || '#/') !== newHash) history.pushState({ screen: name }, '', newHash);
+    else history.replaceState({ screen: name }, '', newHash);
+  } catch (e) {
+    // file:// 等环境 pushState 可能抛错 · 退回直接改 hash (至少能导航 · 只损失逐屏返回栈)
+    if (location.hash !== newHash) location.hash = newHash;
+  }
 }
 
 // hash 路由 — 让项目页 / 工作室页有可分享 URL
@@ -7717,28 +7731,37 @@ function buildHash(name, args) {
   return '#/';
 }
 
+// 入站默认走记忆里的视图 · 只渲染不压栈
+function renderHome() {
+  renderScreen(getStoredMainView() === 'gallery' ? 'showcase' : 'feed');
+}
+
+// 渲染当前 hash 对应的屏幕 · 不碰 history · 供初始加载 + 浏览器/手机返回前进用
+// 跟 showScreen 分开:这条只渲染 · 否则返回触发的渲染又会 pushState · 压栈成死循环
 function navigateFromHash() {
-  const h = location.hash || '';
-  if (!h || h === '#/' || h === '#') return goHome();  // 入站默认走记忆里的视图
+  const h = location.hash || '#/';
+  if (h === _renderedHash) return;  // 已在显示 · 去重 popstate 与 hashchange 的双触发
+  if (h === '#/' || h === '#') return renderHome();
   const parts = h.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
-  if (parts[0] === 'w' && parts[1]) return showScreen('workshop', parts[1]);
-  if (parts[0] === 's' && parts[1]) return showScreen('studio', parts[1]);
-  if (parts[0] === 'join') { goHome(); openAcceptInvite(parts[1] || ''); return; }
-  if (parts[0] === 'p' && parts[1] && parts[2]) return showScreen('project', parts[1], parts[2]);
-  if (parts[0] === 'notifications') return showScreen('notifications');
-  if (parts[0] === 'about') return showScreen('about');
-  if (parts[0] === 'onboard') return showScreen('onboard');
-  if (parts[0] === 'g') return showScreen('showcase', parts[1]);       // 新短 hash
-  if (parts[0] === 'showcase') return showScreen('showcase', parts[1]); // 老链接兼容
-  if (parts[0] === 'm') return showScreen('methods', parts[1]);        // 方法库 (跨用户) · /m/<keyword> 可选预填搜词
+  if (parts[0] === 'w' && parts[1]) return renderScreen('workshop', parts[1]);
+  if (parts[0] === 's' && parts[1]) return renderScreen('studio', parts[1]);
+  if (parts[0] === 'join') { renderHome(); openAcceptInvite(parts[1] || ''); return; }
+  if (parts[0] === 'p' && parts[1] && parts[2]) return renderScreen('project', parts[1], parts[2]);
+  if (parts[0] === 'notifications') return renderScreen('notifications');
+  if (parts[0] === 'about') return renderScreen('about');
+  if (parts[0] === 'onboard') return renderScreen('onboard');
+  if (parts[0] === 'g') return renderScreen('showcase', parts[1]);       // 新短 hash
+  if (parts[0] === 'showcase') return renderScreen('showcase', parts[1]); // 老链接兼容
+  if (parts[0] === 'm') return renderScreen('methods', parts[1]);        // 方法库 (跨用户) · /m/<keyword> 可选预填搜词
   if (parts[0] === 'account') {
-    if (!currentUser.handle) { openLogin('看账号'); return goHome(); }
-    return showScreen('account');
+    if (!currentUser.handle) { openLogin('看账号'); return renderHome(); }
+    return renderScreen('account');
   }
-  return goHome();
+  return renderHome();
 }
 
 window.addEventListener('hashchange', navigateFromHash);
+window.addEventListener('popstate', navigateFromHash);
 
 function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
 function projectById(id){ return state.projects.find(p=>p.id===id); }
