@@ -8,6 +8,22 @@ const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
 const EMAIL_FROM = process.env.EMAIL_FROM || (SMTP_USER ? `Tinker <${SMTP_USER}>` : 'Tinker <noreply@example.com>');
+// 信封发件人 (Return-Path / MAIL FROM) · 默认用认证账号 · 让 SPF/DMARC 对齐
+// 进垃圾箱多半是这条跟 From 域名对不上 · 阿里云邮件推送要求信封发件人就是验证过的发信地址
+const EMAIL_ENVELOPE_FROM = process.env.EMAIL_ENVELOPE_FROM || SMTP_USER;
+// 回信地址 · 设一个真人能收的地址比纯 noreply 更可信 (没配就不带)
+const EMAIL_REPLY_TO = process.env.EMAIL_REPLY_TO || '';
+
+// 可选 DKIM 自签 · 只在显式配了私钥时开
+// 阿里云邮件推送是它自己在服务端签 DKIM (控制台验证域名后给你 DNS 记录) · 不用配这个
+// 这组 env 是留给裸 SMTP / 自建邮件服务用的 · 配了就在客户端签
+const dkim = (process.env.DKIM_DOMAIN && process.env.DKIM_SELECTOR && process.env.DKIM_PRIVATE_KEY)
+  ? {
+      domainName: process.env.DKIM_DOMAIN,
+      keySelector: process.env.DKIM_SELECTOR,
+      privateKey: process.env.DKIM_PRIVATE_KEY,
+    }
+  : null;
 
 // SMTP 准备好时建一个连接池 · 否则 null (走 dev fallback)
 const transporter = SMTP_HOST && SMTP_USER && SMTP_PASSWORD
@@ -21,6 +37,7 @@ const transporter = SMTP_HOST && SMTP_USER && SMTP_PASSWORD
       pool: true,            // 连接池 · 避免每封信都重新握手
       maxConnections: 3,
       maxMessages: 100,
+      ...(dkim ? { dkim } : {}),
     })
   : null;
 
@@ -71,6 +88,9 @@ async function sendLoginEmail(toEmail, magicLink) {
     from: EMAIL_FROM,
     to: toEmail,
     subject, html, text,
+    ...(EMAIL_REPLY_TO ? { replyTo: EMAIL_REPLY_TO } : {}),
+    // 信封发件人显式跟认证账号对齐 · Return-Path 对上 From 域名 · SPF/DMARC 才过
+    ...(EMAIL_ENVELOPE_FROM ? { envelope: { from: EMAIL_ENVELOPE_FROM, to: toEmail } } : {}),
   });
   return { id: info.messageId };
 }
