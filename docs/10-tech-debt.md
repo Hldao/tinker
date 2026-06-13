@@ -123,16 +123,17 @@ alpha 阶段用户极少 · feed 量级根本不需要分页。现在做分页 +
 
 - **砍写放大 (2026-06-13 · commit cf435da)**:`POST /api/action` 以前每次写都 `buildState()` 把整个 179KB 重算重发回。CLI 根本不渲染这坨。现在 CLI 发 `x-tinker-no-state: 1` 头 · server 见到就跳过 buildState 只回 `result`。webapp 不带这个头 · 照常拿 state 重渲染。省的是每次写的 cpu + 带宽 (尤其 CLI 那条)。部署错位安全:旧 server 忽略未知头 · 新 server 遇旧 CLI 照常返。效果随 CLI `tinker update` 逐步生效。
 
-**还剩的大头 · updates 懒加载 (真正能压过网体积的一刀 · 没做 · 留专门时段)**
+- **updates 懒加载 (2026-06-13 · 三阶段 commit 2b3327b/f6ec1ae/634934b)**:首屏体积大头那一刀。update 全文 103KB 是**独一无二**的内容 · 压缩救不了 · 只能懒加载。做法:
+  - `/api/state` 的 `project.updates[].text` 只返**前 400 字预览 + truncated 标记** (`mapUpdateRow(preview:true)` · buildState 和单项目共用一份形状映射 · 防漂移)。
+  - 新端点 `GET /api/project/:id/updates` 拉单项目全量 updates 全文 · `GET /api/updates/search` 后端搜全文 (懒加载后全站搜索框走这个 · 不降级)。
+  - webapp:`renderProject` / `renderUpdateDetail` 进页 async hydrate 全文 · 全站搜索「进展」组改走后端。feed 本来就 CSS 钳到 6 行 · 预览无体感差。
+  - **三阶段推**:A 纯加端点 (零风险) → B 前端改用端点 (state 仍带全文 · 验改对没崩) → C 才砍全文成预览。风险最大的砍放最后。
+  - **实测降幅**:原始 149KB → 96KB (-36%) · **br 过网 54.2KB → 43.5KB (-20% · 真降了 11KB · 不像方法去重那样被压缩吃掉)** · gzip 77.7KB → 44KB (-43%)。(注:长正文压缩率有 ~5 倍 · 所以过网省的没原始省的多 · 之前估的"压到 20KB"乐观了。)
+  - **隐患排查 (砍之前确认全覆盖)**:陈列馆反思本就截 280 < 400 ✓ · 便签引用截 60 字 ✓ · 通知屏不读 update 全文 ✓ · 复制 markdown / 编辑框都在项目页 hydrate 之后 ✓。
 
-updates 全文 103KB 是**独一无二**的内容 (不是重复) · 这才是压缩救不了、懒加载能真省的部分。设计:
+**这条 ① 还剩的部分 (没那么急了)**
 
-1. **server**:`/api/state` 的 `project.updates[]` 只返**摘要** —— `id / at / kind / flags (isMethod/isSeeking/...) / scenario / 正文前 ~120 字 + hasMore 布尔`。**不返全文 text**。
-2. **新 endpoint**:`GET /api/project/:id/updates?since=&limit=` 或 `GET /api/update/:id` 拉单条/整页全文 · 进项目详情页时按需拉。
-3. **webapp 取数改造 (这是难点 · 碰核心渲染路径)**:
-   - feed (`getFeedEvents`) 初屏用摘要渲染 · 长正文显示"展开↓" · 点开才 fetch 全文填进 DOM。
-   - 项目详情页进入时拉该项目全量 updates (一次一个项目 · 不再全站一把吐)。
-   - 注意 feed 是跨项目混合时间线 · 摘要要够渲染卡片 (kind badge / scenario / 预览)。
-4. **预估**:首屏 raw 从 149KB 砍到 ~50KB 以内 · 过网 br 从 54KB 砍到 ~20KB 上下 (因为砍的是真·唯一内容)。
-
-**为什么留着不做**:爆炸半径最大 (动 feed + 项目页核心渲染 · 猫猫热区) · 且当前 54KB 过网不痛。值得一个专门时段 + 充分眼验 · 不在批量任务尾巴盲改。**得 server + webapp 一起改 · 会碰 webapp/index.html。**
+acute 的体积痛 (103KB update 全文) 已解。剩下随更大规模才咬人的:
+- **feed 分页 / windowing**:现在首屏仍遍历所有项目的所有 update (虽然只是预览) · 几千条后预览本身也会堆。要做 cursor/since 分页 · 首屏只拿最近 N 条。
+- **用户资料懒加载**:`state.users` 仍 dump 全部 (handle/name/tagline) · 几千用户时该按需拉 (类似 `/api/users/:handle/studios-preview`)。
+- 这两条现在完全不痛 (3 用户 / 71 update) · 等真到几百几千再说。
