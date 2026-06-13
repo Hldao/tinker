@@ -7,7 +7,8 @@
 <!-- tailwind 静态构建 (扫 index.html 只出用到的类 · 替代 Play CDN 运行时编译 · 大陆访问稳)
      改了 class 后重新生成: cd /tmp && npx tailwindcss@3 -c <(echo "module.exports={content:['$(pwd)/webapp/index.html']}") -i <(echo '@tailwind base;@tailwind components;@tailwind utilities;') -o webapp/tailwind.css --minify -->
 <link rel="stylesheet" href="tailwind.css">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- 字体自托管 (123 个 woff2 切片 · 摸掉 google fonts 外链 · 大陆访问稳 · 按 unicode-range 浏览器只加载需要的 · 重新生成见 docs/10-tech-debt ③) -->
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
   :root {
     --bg:          #faf8f3;
