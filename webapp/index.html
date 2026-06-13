@@ -7691,6 +7691,7 @@ const NOTIF_TEMPLATES = {
   wantToTry:    (n) => ({ verb:'想试试',         verbColor:'var(--ink)' }),
   noted:        (n) => ({ verb:'在你的项目留了便签', verbColor:'var(--sepia)' }),
   noteResolved: (n) => ({ verb:'处理了你留的便签 · 你提的那条 ta 动手了', verbColor:'var(--moss)' }),
+  methodReply:  (n) => ({ verb:'回应了你的求方法 · 给了你一条方法', verbColor:'var(--vermilion)' }),
 };
 
 // v0.58 通知 type chip 简短 label · 跨 type 一致排版
@@ -7706,6 +7707,7 @@ const NOTIF_TYPE_LABELS = {
   wantToTry: '想试试',
   noted: '留便签',
   noteResolved: '处理了',
+  methodReply: '求方法回应',
 };
 
 let state;
@@ -9793,9 +9795,9 @@ function renderNotifications() {
           <div class="notif-text">
             <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${n.fromUser}')">@${n.fromUser}</span>
             <span style="color: ${tmpl.verbColor};"> ${tmpl.verb} </span>
-            <span class="npj">「${escapeHtml(n.projectName || '(项目已删除)')}」</span>
+            ${n.type === 'methodReply' ? '' : `<span class="npj">「${escapeHtml(n.projectName || '(项目已删除)')}」</span>`}
           </div>
-          ${n.extra ? `<div class="notif-extra">${n.type === 'tinkered' ? '做了 「' + escapeHtml(n.extra) + '」' : (n.type === 'projectMoved' ? '新链接 ' + escapeHtml(n.extra) : '"' + escapeHtml(n.extra) + '"')}</div>` : ''}
+          ${n.extra && n.type !== 'methodReply' ? `<div class="notif-extra">${n.type === 'tinkered' ? '做了 「' + escapeHtml(n.extra) + '」' : (n.type === 'projectMoved' ? '新链接 ' + escapeHtml(n.extra) : '"' + escapeHtml(n.extra) + '"')}</div>` : ''}
           ${n.type === 'projectDone' && (() => {
             const proj = state.projects.find(pr => pr.id === n.projectId);
             return proj && !proj.reactions.tinkered.some(t => t.user === me);
