@@ -8535,7 +8535,7 @@ function renderWorkshop(handle) {
           : '<span style="color: var(--sepia-light);">独立方法</span>';
         const borrowed = (m.borrowCount || 0) > 0 ? `<span style="color: var(--moss);">被借 ${m.borrowCount}</span> <span style="color: var(--sepia-light);">·</span>` : '';
         return `
-          <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; ${p ? `showScreen('project','${m.owner}','${p.slug}'); setTimeout(() => flashAnchor('method-${m.id}'), 50);` : ''}">
+          <div class="method-hero-card" onclick="if (event.target.closest('.method-hero-card-copy')||event.target.closest('.nh')||event.target.closest('.method-tag-chip')) return; showScreen('method','${m.id}');">
             <div class="method-hero-card-top">
               <span class="method-hero-card-badge">✤ 方法</span>
               ${renderMethodTagRow(m)}
