@@ -9471,7 +9471,7 @@ async function renderUpdateDetail(updateId) {
   const uIdx = (p.updates || []).findIndex(x => x.id === u.id);
   const notesForThis = (p.notes || []).filter(n => n.updateId === u.id);
   root.innerHTML = `
-    <div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${p.owner}')">← @${escapeHtml(p.owner)} 的工坊</a></div>
+    <div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${p.owner}')">@${escapeHtml(p.owner)} 的工坊</a></div>
     <article class="update-detail">
       <div class="entry-headline" style="margin-bottom: 10px;">
         <span class="entry-handle" onclick="showScreen('workshop','${p.owner}')">@${escapeHtml(p.owner)}</span>
