@@ -260,6 +260,18 @@ app.get('/api/user/prefs', auth.requireSession, (req, res) => {
   }
 });
 
+// 轻量未读数 · 给 webapp 轮询红点用 · 不回整个 state (那个一拉 250KB+)
+app.get('/api/notifications/unread-count', auth.requireSession, (req, res) => {
+  try {
+    const row = db.prepare(
+      'SELECT COUNT(*) AS n FROM notifications WHERE target_user_id = ? AND read_at IS NULL'
+    ).get(req.user.id);
+    res.json({ ok: true, count: row ? row.n : 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/user/prefs', auth.requireSession, (req, res) => {
   try {
     const body = req.body || {};

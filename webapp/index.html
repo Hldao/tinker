@@ -9863,9 +9863,11 @@ async function markAllNotifsRead() {
   } catch (e) { showToast(e.message); }
 }
 
+let _lastUnread = -1;   // 轮询用 · 本地已知未读数 (跟服务端比 · 变了才拉全量)
 function updateUnreadBadge() {
   const me = currentUser.handle;
   const unread = (state.notifications || []).filter(n => n.target === me && !n.read).length;
+  _lastUnread = unread;
   const mark = document.getElementById('nav-unread-mark');
   if (!mark) return;
   if (unread > 0) {
@@ -9876,6 +9878,27 @@ function updateUnreadBadge() {
     mark.classList.add('hidden');
     mark.textContent = '●';   // hide 状态恢复默认 · 避免下次显示有残留数字
   }
+}
+
+// 通知红点近实时 · 每 30 秒轮询轻量未读数接口 · 数变了才拉一次全量 state 同步列表
+// (原来只在整页加载时拉一次 · 别人发的消息不刷新看不到 · 这里补上轮询)
+async function pollUnread() {
+  if (!currentUser.handle || document.hidden) return;   // 没登录 / 标签页在后台就不打扰
+  try {
+    const r = await fetch('/api/notifications/unread-count', { credentials: 'same-origin' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (typeof d.count !== 'number' || d.count === _lastUnread) return;
+    await refreshState();              // 数变了才拉一次全量 · 把真实通知同步进来
+    updateUnreadBadge();               // 内部刷新 _lastUnread + 红点
+    if (location.hash === '#/notifications') renderNotifications();   // 正看着通知页就重渲染
+  } catch (e) { /* 网络抖动忽略 · 下一轮再试 */ }
+}
+
+function setupUnreadPoll() {
+  setInterval(pollUnread, 30000);
+  // 切回标签页立刻查一次 · 不用等下一轮 30 秒
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollUnread(); });
 }
 
 // 点开通知 · 1) 标已读 (后端单条) 2) 跳到项目页 3) 滚到 anchor + flash
@@ -12167,6 +12190,7 @@ function setupBackToTop() {
 
 (async function init() {
   setupBackToTop();
+  setupUnreadPoll();
   try {
     const [user, st] = await Promise.all([apiMe(), fetchState()]);
     state = st;
