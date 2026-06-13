@@ -8437,10 +8437,9 @@ function renderWorkshop(handle) {
   const benchLeft = benchCount > 0
     ? `工作台上在打磨 <span class="num">${benchCount}</span> 个`
     : '工作台还空着';
-  const benchRight = lastShipAt > 0
-    ? `最近一次开张 ${shortAgo(lastShipAt)}`
-    : '还没开过张';
-  const benchHtml = `<div class="workshop-bench">${benchLeft} · ${benchRight}</div>`;
+  // 没 ship 过就别显示 "还没开过张" · 跟 "在打磨 N 个" 并排看着矛盾 · 直接省掉这半句
+  const benchRight = lastShipAt > 0 ? `最近一次开张 ${shortAgo(lastShipAt)}` : '';
+  const benchHtml = `<div class="workshop-bench">${benchLeft}${benchRight ? ' · ' + benchRight : ''}</div>`;
   const toolsHtml = topTools.length > 0
     ? `<div class="workshop-tools-line">常用 · ${topTools.join(' · ')}</div>`
     : '';
