@@ -11862,22 +11862,28 @@ function showToast(msg) {
 
 /* ============ PASTE 支持 ============ */
 document.addEventListener('paste', (e) => {
-  const items = e.clipboardData ? e.clipboardData.items : [];
+  if (!e.clipboardData) return;
   const updateOpen = !document.getElementById('modal-update').classList.contains('hidden');
   const noteOpen = !document.getElementById('modal-note').classList.contains('hidden');
   const shipOpen = !document.getElementById('modal-ship-ceremony').classList.contains('hidden');
   if (!updateOpen && !noteOpen && !shipOpen) return;
-  for (const item of items) {
-    if (item.type && item.type.startsWith('image/')) {
-      const file = item.getAsFile();
-      if (file) {
-        if (updateOpen) addImageFile(file);
-        else if (noteOpen) addNoteImageFile(file);
-        else if (shipOpen) addShipImageFile(file);
-        e.preventDefault();
-      }
+  // 粘贴的图可能在 items 也可能在 files 里 (跨浏览器不一致) · 两边都收 · Array.from 防 DataTransferItemList 不可迭代
+  const imgFiles = [];
+  for (const item of Array.from(e.clipboardData.items || [])) {
+    if (item.kind === 'file' && item.type && item.type.startsWith('image/')) {
+      const f = item.getAsFile();
+      if (f) imgFiles.push(f);
     }
   }
+  if (imgFiles.length === 0) {
+    for (const f of Array.from(e.clipboardData.files || [])) {
+      if (f.type && f.type.startsWith('image/')) imgFiles.push(f);
+    }
+  }
+  if (imgFiles.length === 0) return;  // 剪贴板里没图 (比如 macOS 截图存成了文件没进剪贴板) · 放行默认粘贴
+  e.preventDefault();
+  const add = updateOpen ? addImageFile : (noteOpen ? addNoteImageFile : addShipImageFile);
+  imgFiles.forEach(add);
 });
 
 /* ============ 键盘快捷键 ============ */
