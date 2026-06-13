@@ -11,15 +11,31 @@ const db = require('./db');
 // 主入口 · 返回完整 state (给 /api/state 用)
 // ====================================================
 function buildState({ targetUserId } = {}) {
-  // 一次性抓所有 users · 建 id → handle 的映射
+  // 一次性抓所有 users · 建 id → handle 的映射 (内部用 · 不暴露)
   const usersRows = db.prepare(`
     SELECT id, handle, name, tagline FROM users
   `).all();
   const idToHandle = {};
+
+  // 隐私:usersOut 只放"被公开内容引用到的" handle · 纯潜水用户 (零项目/便签/方法/反馈) 不进 dump
+  //   不然一个匿名 GET 就能拉走全站用户清单 (含从没发过东西的人的昵称+签名)。
+  //   想按 handle/tagline 找工坊走 /api/workshops/search 服务端单查。
+  const referencedIds = new Set();
+  db.prepare('SELECT DISTINCT owner_id AS id FROM projects').all().forEach(r => referencedIds.add(r.id));
+  db.prepare('SELECT DISTINCT user_id AS id FROM notes').all().forEach(r => referencedIds.add(r.id));
+  db.prepare('SELECT DISTINCT resolved_by AS id FROM notes WHERE resolved_by IS NOT NULL').all().forEach(r => referencedIds.add(r.id));
+  db.prepare('SELECT DISTINCT user_id AS id FROM method_used').all().forEach(r => referencedIds.add(r.id));
+  db.prepare('SELECT DISTINCT user_id AS id FROM reactions').all().forEach(r => referencedIds.add(r.id));
+  db.prepare('SELECT DISTINCT user_id AS id FROM tinkered').all().forEach(r => referencedIds.add(r.id));
+  db.prepare('SELECT DISTINCT owner_id AS id FROM methods').all().forEach(r => referencedIds.add(r.id));
+  if (targetUserId) referencedIds.add(targetUserId); // 请求者本人永远带上 · 自己的页要用
+
   const usersOut = {};
   for (const u of usersRows) {
     idToHandle[u.id] = u.handle;
-    usersOut[u.handle] = { name: u.name || u.handle, tagline: u.tagline || '' };
+    if (referencedIds.has(u.id)) {
+      usersOut[u.handle] = { name: u.name || u.handle, tagline: u.tagline || '' };
+    }
   }
 
   // 工作室挂靠关系 · 只给"请求者本人"带上 (隐私:别在全站 dump 里把每个人的工作室成员关系
@@ -138,8 +154,9 @@ function buildState({ targetUserId } = {}) {
   const projectsOut = projectsRows.map(p => {
     // v1.0 瘦身: 首屏 update 只给预览 (前 400 字 + truncated 标记) · 全文走 /api/project/:id/updates
     // 全文是首屏体积大头 (103KB · 占整个 state 70%) · 且是独一无二内容 · 压缩救不了 · 只能懒加载
+    const isOwner = !!targetUserId && p.owner_id === targetUserId;
     const projectUpdates = (updatesByProject[p.id] || []).map(u =>
-      mapUpdateRow(u, updateImagesMap[u.id], usedByMap[u.id], { preview: true })
+      mapUpdateRow(u, updateImagesMap[u.id], usedByMap[u.id], { preview: true, includePrompt: isOwner })
     );
     const projectNotes = (notesByProject[p.id] || []).map(n => {
       const out = { id: n.id, user: idToHandle[n.user_id], text: n.text, at: n.at };
@@ -262,9 +279,12 @@ function buildState({ targetUserId } = {}) {
 // /api/state 里 update 只带预览 · 进项目详情页时按需拉这个拿全文
 // 形状跟 buildState 的 projectUpdates 完全一致 (共用 mapUpdateRow)
 // ====================================================
-function buildProjectUpdates(projectId) {
+function buildProjectUpdates(projectId, { targetUserId } = {}) {
   const updatesRows = db.prepare('SELECT * FROM updates WHERE project_id = ? ORDER BY at DESC').all(projectId);
   if (updatesRows.length === 0) return [];
+  // prompt 只给作者本人 · 跟 buildState 一致 (看请求者是不是这个项目的 owner)
+  const proj = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(projectId);
+  const isOwner = !!targetUserId && !!proj && proj.owner_id === targetUserId;
   const updateIds = updatesRows.map(u => u.id);
   const placeholders = updateIds.map(() => '?').join(',');
 
@@ -292,13 +312,31 @@ function buildProjectUpdates(projectId) {
     usedByMap[r.update_id].push({ user: idToHandle[r.user_id], note: r.note || '', at: r.at });
   });
 
-  return updatesRows.map(u => mapUpdateRow(u, updateImagesMap[u.id], usedByMap[u.id], { preview: false }));
+  return updatesRows.map(u => mapUpdateRow(u, updateImagesMap[u.id], usedByMap[u.id], { preview: false, includePrompt: isOwner }));
+}
+
+// 搜工坊 · 给 /api/workshops/search 用 (替代前端从全量 state.users 本地过滤)
+// 只返"有公开足迹的"用户 (≥1 项目或方法) · 纯潜水账号不出现 · 也不暴露全量名单
+function searchWorkshops({ q, limit = 10 } = {}) {
+  const query = String(q || '').trim().toLowerCase();
+  if (!query) return [];
+  const like = '%' + query + '%';
+  const rows = db.prepare(`
+    SELECT u.handle, u.name, u.tagline
+    FROM users u
+    WHERE (LOWER(u.handle) LIKE ? OR LOWER(IFNULL(u.tagline,'')) LIKE ? OR LOWER(IFNULL(u.name,'')) LIKE ?)
+      AND (EXISTS (SELECT 1 FROM projects p WHERE p.owner_id = u.id)
+           OR EXISTS (SELECT 1 FROM methods m WHERE m.owner_id = u.id))
+    ORDER BY u.handle ASC
+    LIMIT ?
+  `).all(like, like, like, Math.min(limit, 30));
+  return rows.map(r => ({ handle: r.handle, name: r.name || r.handle, tagline: r.tagline || '' }));
 }
 
 // 共享的 update 行 → webapp 形状映射 · buildState 和 buildProjectUpdates 共用 · 防形状漂移
 // preview=true 时 text 只给前 N 字预览 + truncated 标记 (首屏瘦身用 · 全文走 /api/project/:id/updates)
 const UPDATE_PREVIEW_CHARS = 400;
-function mapUpdateRow(u, imgs, usedBy, { preview } = {}) {
+function mapUpdateRow(u, imgs, usedBy, { preview, includePrompt } = {}) {
   let text = u.text || '';
   let truncated = false;
   if (preview && text.length > UPDATE_PREVIEW_CHARS) {
@@ -307,7 +345,8 @@ function mapUpdateRow(u, imgs, usedBy, { preview } = {}) {
   }
   const out = { id: u.id, text, at: u.at };
   if (truncated) out.truncated = true;
-  if (u.prompt) out.prompt = u.prompt;
+  // prompt (AI 提示词原文) 只给作者本人 · 不进公开 dump (反"提示词博物馆" · 见产品立场)
+  if (u.prompt && includePrompt) out.prompt = u.prompt;
   if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
   if (u.kind) out.kind = u.kind;
   if (u.is_method) out.isMethod = true;
@@ -373,4 +412,4 @@ function userIdFromHandle(handle) {
   return row?.id || null;
 }
 
-module.exports = { buildState, userIdFromHandle, buildProjectUpdates, searchUpdates };
+module.exports = { buildState, userIdFromHandle, buildProjectUpdates, searchUpdates, searchWorkshops };

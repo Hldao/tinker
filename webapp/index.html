@@ -10040,10 +10040,13 @@ async function doSearch(q) {
   const seq = ++_searchSeq;
   const ql = q.toLowerCase();
 
-  // 工坊 (按 handle / tagline) · 字段都在 state 里 · 本地即时
-  const users = Object.entries(state.users).filter(([h, u]) =>
-    h.toLowerCase().includes(ql) || (u.tagline || '').toLowerCase().includes(ql)
-  );
+  // 工坊 (按 handle / tagline / name) · 走服务端 · state.users 不再全量下发 (隐私 · 不暴露潜水用户)
+  let users = [];
+  try {
+    const r = await fetchJSON('/api/workshops/search?q=' + encodeURIComponent(q) + '&limit=8');
+    if (seq !== _searchSeq) return; // 期间又敲了新词 · 丢弃旧结果
+    if (r && r.ok && Array.isArray(r.items)) users = r.items;
+  } catch (e) { if (seq !== _searchSeq) return; }
 
   // 项目 (按 name / desc / tools) · 字段都在 state 里 · 本地即时
   const projects = state.projects.filter(p =>
@@ -10064,9 +10067,9 @@ async function doSearch(q) {
   if (users.length > 0) {
     html += `<div class="search-result-group">
       <div class="search-result-label">工坊 (${users.length})</div>
-      ${users.map(([h, u]) => `
-        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('workshop','${h}');">
-          <div><span class="sri-name">@${h}</span></div>
+      ${users.map(u => `
+        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('workshop','${escapeHtml(u.handle)}');">
+          <div><span class="sri-name">@${escapeHtml(u.handle)}</span></div>
           <div class="sri-tagline">「${escapeHtml(u.tagline || '')}」</div>
         </div>
       `).join('')}

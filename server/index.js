@@ -23,7 +23,7 @@ const path = require('path');
 
 const { logger } = require('./logger');
 const db = require('./db');                  // SQLite · 启动时自动跑 migrations
-const { buildState, buildProjectUpdates, searchUpdates } = require('./state');
+const { buildState, buildProjectUpdates, searchUpdates, searchWorkshops } = require('./state');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
 const blobs = require('./blobs');
@@ -358,7 +358,7 @@ app.get('/api/state', stateLimiter, (req, res) => {
 // 公开 · 不需要登录 (跟 /api/state 一致 · 看的是公开进展)
 app.get('/api/project/:id/updates', stateLimiter, (req, res) => {
   try {
-    res.json({ ok: true, updates: buildProjectUpdates(req.params.id) });
+    res.json({ ok: true, updates: buildProjectUpdates(req.params.id, { targetUserId: req.user?.id }) });
   } catch (e) {
     req.log.warn({ err: e.message }, 'project updates failed');
     res.status(400).json({ error: e.message });
@@ -374,6 +374,19 @@ app.get('/api/updates/search', stateLimiter, (req, res) => {
     res.json({ ok: true, items: searchUpdates({ q, limit }) });
   } catch (e) {
     req.log.warn({ err: e.message }, 'updates search failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 搜工坊 · 按 handle/tagline/name 找有公开足迹的用户 (替代前端从全量 state.users 过滤)
+// ?q=<关键词>&limit=8 · 公开 · 只返有项目/方法的用户 · 纯潜水账号不出现
+app.get('/api/workshops/search', stateLimiter, (req, res) => {
+  const q = String(req.query.q || '').slice(0, 200);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 8, 30);
+  try {
+    res.json({ ok: true, items: searchWorkshops({ q, limit }) });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'workshops search failed');
     res.status(400).json({ error: e.message });
   }
 });
