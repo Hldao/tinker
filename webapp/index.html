@@ -7737,9 +7737,7 @@ function setStoredMainView(v) {
 
 // 主屏入口 (顶 nav 的 "工坊" 按钮 + brand logo 点击)
 function goHome() {
-  const v = getStoredMainView();
-  if (v === 'gallery') showScreen('showcase');
-  else showScreen('feed');
+  showScreen('feed');  // 工坊 / brand = 回首页动静 · 陈列馆走视图切换 pill 或 #/g · 不再"记住主视图"
 }
 
 // 视图切换 pill 点了走这里 · 切到对应屏 + 记忆
@@ -7770,9 +7768,9 @@ function renderScreen(name, ...args) {
   else if (name === 'update') renderUpdateDetail(args[0]);
   else if (name === 'account') renderAccount();
   // about 是静态内容,不需要 render
-  // feed/showcase 是同一个"工坊"的两个视图 · 进任一屏都记忆
-  if (name === 'feed') setStoredMainView('stream');
-  else if (name === 'showcase') setStoredMainView('gallery');
+  // 主视图偏好只由显式点视图切换器 (switchMainView · 它自己已 setStoredMainView) 改
+  // 之前"进任一屏都记忆": 每次渲染 showcase 都记成 gallery · 点项目的"在陈列馆"/直接开 #/g 后
+  //   "工坊"主页就被粘在陈列馆 · 回不到 feed (用户反馈的 bug)
   _renderedHash = buildHash(name, args);
 }
 
@@ -7808,9 +7806,9 @@ function buildHash(name, args) {
   return '#/';
 }
 
-// 入站默认走记忆里的视图 · 只渲染不压栈
+// 入站默认进首页动静 (feed 是工坊主页 · A 方案不再记忆主视图) · 陈列馆走 #/g 或视图切换 pill · 只渲染不压栈
 function renderHome() {
-  renderScreen(getStoredMainView() === 'gallery' ? 'showcase' : 'feed');
+  renderScreen('feed');
 }
 
 // 渲染当前 hash 对应的屏幕 · 不碰 history · 供初始加载 + 浏览器/手机返回前进用
