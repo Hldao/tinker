@@ -9426,6 +9426,14 @@ function renderMethodDetail(methodId) {
 // 进展详情页(首页帖子页):首页点一条进展进这里 · 看完整内容 + 项目上下文入口
 // 之前点首页帖子是"空降项目页时间线 + 闪 1.6 秒",落地没提示、很懵 · 改成单条帖子页
 // 数据从 state.projects[].updates 按 id 反查(连同所属项目拿作者/项目/状态等上下文)
+// 留便签 / 编辑 进展后重渲染当前所在的屏 · 在单条详情页就刷详情 · 否则刷项目页
+// (删除不走这个 · 因为这条没了 · 留详情页会显示"没找到" · 删除仍回项目页)
+function rerenderAfterUpdateAction(p) {
+  const parts = (location.hash || '').replace(/^#\/?/, '').split('/');
+  if (parts[0] === 'update' && parts[1]) renderUpdateDetail(decodeURIComponent(parts[1]));
+  else renderProject(p.owner, p.slug);
+}
+
 async function renderUpdateDetail(updateId) {
   const root = document.getElementById('update-content');
   if (!root) return;
@@ -9438,6 +9446,7 @@ async function renderUpdateDetail(updateId) {
     root.innerHTML = `<div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="history.length > 1 ? history.back() : showScreen('feed')">← 返回</a></div><div class="text-center py-16 serif italic" style="color: var(--sepia);">没找到这条进展 · 可能已被删除</div>`;
     return;
   }
+  currentProjectCtx = p.id;  // 让 openNote 等动作落到这个项目 (否则用上一个项目页的 ctx)
   // 懒加载: state 里这条只有预览 · 单条详情要全文 · 拉该项目全量 updates 把这条换成全文
   if (u.truncated) {
     try {
@@ -9451,6 +9460,9 @@ async function renderUpdateDetail(updateId) {
   }
   const seeking = u.feedbackAsk !== undefined;
   const imgs = (u.images && u.images.length > 0) ? u.images : [];
+  const isMine = p.owner === currentUser.handle;
+  const uIdx = (p.updates || []).findIndex(x => x.id === u.id);
+  const notesForThis = (p.notes || []).filter(n => n.updateId === u.id);
   root.innerHTML = `
     <div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${p.owner}')">← @${escapeHtml(p.owner)} 的工坊</a></div>
     <article class="update-detail">
@@ -9475,6 +9487,38 @@ async function renderUpdateDetail(updateId) {
         <span>${(p.tools || []).slice(0, 3).join('、')}</span>
         ${p.status === 'done' ? `<span class="entry-showcase-link" onclick="showScreen('showcase','${p.id}')">✦ 在陈列馆</span>` : ''}
         ${seeking && p.productLink ? `<a href="${escapeHtml(safeUrl(p.productLink))}" target="_blank" rel="noopener" class="entry-seeking-cta">去试用 →</a>` : ''}
+      </div>
+      <div class="tl-actions" style="margin-top: 22px;">
+        <span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>
+        ${u.isSeeking && !isMine ? `<span class="tl-action tl-action-seek-reply" onclick="openSeekReply('${u.id}', '${p.id}')">回应这个请求</span>` : ''}
+        <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
+        ${isMine ? `
+          <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
+          <span class="small-action" onclick="deleteUpdate('${p.id}', ${uIdx})">${ICONS.trash}删</span>
+        ` : ''}
+      </div>
+
+      <div class="mt-12">
+        <div class="section-label flex items-center justify-between">
+          <span>便签 (${notesForThis.length})</span>
+          <span class="react-action" style="font-family: Newsreader, serif; text-transform: none; letter-spacing: 0;" onclick="openNote('${u.id}')">+ 说一句</span>
+        </div>
+        ${notesForThis.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人说话 · 你先说一句</p>' : ''}
+        ${notesForThis.map(n => {
+          const resolved = !!n.resolvedAt;
+          const nIdx = (p.notes || []).indexOf(n);
+          return `
+          <div class="note-entry${resolved ? ' is-resolved' : ''}" id="note-${n.id}">
+            <div class="note-head">
+              <span class="nu">@${n.user}</span> · ${timeAgo(n.at)}
+              ${resolved ? `<span class="note-resolved-chip" title="${n.resolvedBy ? '@' + escapeHtml(n.resolvedBy) + ' 处理了' : '已处理'}">✓ 已处理</span>` : ''}
+              ${n.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteNote('${p.id}', ${nIdx})">${ICONS.undo}撤回</span>` : ''}
+              ${isMine ? `<span class="small-action" style="margin-left: 12px;" onclick="resolveNote('${p.id}', '${n.id}')">${resolved ? '撤销处理' : '✓ 处理了'}</span>` : ''}
+            </div>
+            <div class="note-text">"${renderMentions(n.text)}"</div>
+            ${n.images && n.images.length > 0 ? `<div class="note-images">${n.images.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder({small: true}) : `<div class="note-image-frame" onclick="zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})"><img loading="lazy" src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)"></div>`).join('')}</div>` : ''}
+          </div>
+        `;}).join('')}
       </div>
       <div class="method-detail-context" style="margin-top: 24px;">
         <span class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('project','${p.owner}','${p.slug}'); setTimeout(() => flashAnchor('update-${u.id}'), 50);">在「${escapeHtml(p.name)}」时间线里看上下文 →</span>
@@ -10370,7 +10414,7 @@ async function submitNote() {
     notePendingImages = [];
     clearDraft('note-' + p.id);
     closeModal('modal-note');
-    renderProject(p.owner, p.slug);
+    rerenderAfterUpdateAction(p);
     showToast('便签留下了');
   } catch (e) { showToast(e.message); }
 }
@@ -11546,7 +11590,7 @@ async function submitUpdate() {
       isEditingUpdate = null;
       pendingImages = [];
       closeModal('modal-update');
-      renderProject(p.owner, p.slug);
+      rerenderAfterUpdateAction(p);  // 详情页编辑就刷详情 · 项目页编辑就刷项目
       showToast('改好了');
     } else {
       const p = projectById(currentUpdateCtx);
