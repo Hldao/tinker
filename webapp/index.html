@@ -12330,7 +12330,7 @@ async function renderAccount() {
         <div class="account-row"><span class="account-label">招牌 (昵称)</span><span class="account-value">@${escapeHtml(currentUser.handle)}</span></div>
         <div class="account-row"><span class="account-label">一句话介绍</span><span class="account-value">${escapeHtml(u.tagline || '(还没写)')}</span></div>
         <div class="account-row"><span class="account-label">邮箱</span><span class="account-value">${escapeHtml(email)}</span></div>
-        <div class="account-hint">改邮箱要重发 magic link · 还没接通 · 后续做</div>
+        <div class="account-hint">邮箱是你的登录身份 · 暂时不支持自助更换</div>
       </div>
 
       <div class="account-section">
@@ -12372,7 +12372,7 @@ async function renderAccount() {
           <span class="account-section-title">通知偏好</span>
           <span class="prefs-status-chip" id="prefs-status-chip">读取中</span>
         </div>
-        <p class="account-sub-text">站内通知 · CLI 触发器 · bridge 自动 ping 都看这一份偏好 · 多台机器同步。</p>
+        <p class="account-sub-text">站内通知 · CLI 提醒 · 队友的自动提醒都走这一份偏好 · 多台机器同步。</p>
         <div id="prefs-panel" style="margin-top: 14px;">
           <div style="color: var(--sepia); font-size: 13px;">读取中...</div>
         </div>
