@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 
 const db = require('../db');
 const a = require('../actions-sql');
-const { buildState } = require('../state');
+const { buildState, buildProjectUpdates, searchUpdates } = require('../state');
 
 // ============================================
 // 测试工具
@@ -668,4 +668,111 @@ test('buildState: project.updates / notes 带 id 字段 (锚点用)', () => {
   const proj = s.projects[0];
   assert.equal(proj.updates[0].id, u.id);
   assert.match(proj.notes[0].id, /^n-/);
+});
+
+// ============================================
+// buildProjectUpdates · 单项目全量 updates (懒加载全文端点 /api/project/:id/updates)
+// ============================================
+test('buildProjectUpdates: 返回该项目全部 update · 全文不截断', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  const longText = '起' + 'x'.repeat(600); // > 400
+  a.addUpdate({ projectId: p.id, text: longText }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '短的' }, { currentUserId: daodao });
+  const ups = buildProjectUpdates(p.id);
+  assert.equal(ups.length, 2);
+  const long = ups.find(u => u.text.length > 400);
+  assert.ok(long, '应有全文 update');
+  assert.equal(long.text.length, longText.length, '全文一字不少');
+  assert.ok(!long.truncated, '端点全文不带 truncated 标记');
+});
+
+test('buildProjectUpdates: 空项目 / 不存在的 id 返回 []', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  assert.deepEqual(buildProjectUpdates(p.id), []);
+  assert.deepEqual(buildProjectUpdates('p-不存在'), []);
+});
+
+test('buildProjectUpdates: 按 at 倒序 · 带 scenario 和 flag', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '老的一条进展记录在这里', at: 1000 }, { currentUserId: daodao });
+  const u2 = a.addUpdate({ projectId: p.id, text: '新的一条 · 这条要标成踩坑经验所以得写够二十个字', scenario: '用于测试', at: 2000 }, { currentUserId: daodao });
+  a.markAsExperience({ updateId: u2.id }, { currentUserId: daodao });
+  const ups = buildProjectUpdates(p.id);
+  assert.equal(ups[0].id, u2.id, '最新在最前');
+  assert.equal(ups[0].scenario, '用于测试');
+  assert.ok(ups[0].isExperience, '带 experience flag');
+});
+
+// ============================================
+// 懒加载分工 · buildState 给预览 · buildProjectUpdates 给全文
+// ============================================
+test('懒加载: 长 update 在 state 里截到 400 + truncated · 端点给全文', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: 'A'.repeat(600) }, { currentUserId: daodao });
+  const stUp = buildState({}).projects.find(x => x.id === p.id).updates[0];
+  assert.equal(stUp.text.length, 400, 'state 预览截到 400');
+  assert.ok(stUp.truncated, 'state 带 truncated 标记');
+  const full = buildProjectUpdates(p.id)[0];
+  assert.equal(full.text.length, 600, '端点给全文');
+  assert.ok(!full.truncated);
+});
+
+test('懒加载: 短 update (<400) 不截断 · 不带 truncated', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '就一句话' }, { currentUserId: daodao });
+  const stUp = buildState({}).projects.find(x => x.id === p.id).updates[0];
+  assert.equal(stUp.text, '就一句话');
+  assert.ok(!stUp.truncated);
+});
+
+// ============================================
+// searchUpdates · 后端全文搜索 (懒加载后全站搜索框走这个 · 不降级)
+// ============================================
+test('searchUpdates: 命中正文子串 · 不分大小写 · 带项目上下文', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P项目', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '今天搞定了 SQLite 迁移' }, { currentUserId: daodao });
+  const hits = searchUpdates({ q: 'sqlite' });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].projectOwner, 'daodao');
+  assert.equal(hits[0].projectName, 'P项目');
+  assert.ok(hits[0].updateId);
+  assert.ok(hits[0].preview.includes('SQLite'));
+});
+
+test('searchUpdates: 空 query 返回 []', () => {
+  setupBasic();
+  assert.deepEqual(searchUpdates({ q: '' }), []);
+  assert.deepEqual(searchUpdates({ q: '   ' }), []);
+});
+
+test('searchUpdates: 排除 method update', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '独特词zzz 的方法正文', isMethod: true }, { currentUserId: daodao });
+  assert.equal(searchUpdates({ q: 'zzz' }).length, 0, 'method update 不进搜索');
+});
+
+test('searchUpdates: 排除 archive 项目', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '归档前的独特词qqq' }, { currentUserId: daodao });
+  a.changeProjectStatus({ projectId: p.id, newStatus: 'archive' }, { currentUserId: daodao });
+  assert.equal(searchUpdates({ q: 'qqq' }).length, 0, 'archive 项目不进搜索');
+});
+
+test('searchUpdates: 尊重 limit · preview 不超 120 字', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  for (let i = 0; i < 5; i++) {
+    a.addUpdate({ projectId: p.id, text: '关键词kkk 第' + i + '条 ' + 'y'.repeat(200) }, { currentUserId: daodao });
+  }
+  const hits = searchUpdates({ q: 'kkk', limit: 3 });
+  assert.equal(hits.length, 3, '尊重 limit');
+  assert.ok(hits.every(h => h.preview.length <= 120), 'preview ≤ 120');
 });
