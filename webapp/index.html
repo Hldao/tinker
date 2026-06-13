@@ -7511,6 +7511,13 @@ async function fetchState() {
   return res.json();
 }
 
+// 通用 GET · 懒加载按需拉数据用 (项目全量 updates / 后端搜索等)
+async function fetchJSON(path) {
+  const res = await fetch(path, { credentials: 'same-origin' });
+  if (!res.ok) throw new Error('fetch failed: ' + path);
+  return res.json();
+}
+
 async function apiAction(type, payload) {
   const res = await fetch('/api/action', {
     method: 'POST',
@@ -8570,12 +8577,19 @@ async function renderStudio(slug) {
 }
 
 /* ============ PROJECT ============ */
-function renderProject(owner, slug) {
+async function renderProject(owner, slug) {
   const p = projectByOwnerSlug(owner, slug);
   const root = document.getElementById('project-content');
   if (!p) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这个项目</p>'; return; }
-  const isMine = owner === currentUser.handle;
   currentProjectCtx = p.id;
+  // 懒加载: /api/state 里 update 只带预览 (前 400 字) · 进项目页拉这个项目的全量 updates 全文
+  // 拉回来替换 p.updates · 时间线/复制 markdown/编辑 都读 p.updates · 一次到位
+  try {
+    const r = await fetchJSON('/api/project/' + p.id + '/updates');
+    if (r && r.ok && Array.isArray(r.updates)) p.updates = r.updates;
+  } catch (e) { /* 拉失败就用 state 里的预览兜底 · 不至于空白 */ }
+  if (currentProjectCtx !== p.id) return; // 拉取期间用户已经切走 · 别拿旧项目覆盖当前屏
+  const isMine = owner === currentUser.handle;
   const me = currentUser.handle;
   const myReaction =
     p.reactions.tinkered.find(t=>t.user===me) ? 'tinkered' :
@@ -9344,7 +9358,7 @@ function renderMethodDetail(methodId) {
 // 进展详情页(首页帖子页):首页点一条进展进这里 · 看完整内容 + 项目上下文入口
 // 之前点首页帖子是"空降项目页时间线 + 闪 1.6 秒",落地没提示、很懵 · 改成单条帖子页
 // 数据从 state.projects[].updates 按 id 反查(连同所属项目拿作者/项目/状态等上下文)
-function renderUpdateDetail(updateId) {
+async function renderUpdateDetail(updateId) {
   const root = document.getElementById('update-content');
   if (!root) return;
   let u = null, p = null;
@@ -9355,6 +9369,17 @@ function renderUpdateDetail(updateId) {
   if (!u || !p) {
     root.innerHTML = `<div class="mb-6"><a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="history.length > 1 ? history.back() : showScreen('feed')">← 返回</a></div><div class="text-center py-16 serif italic" style="color: var(--sepia);">没找到这条进展 · 可能已被删除</div>`;
     return;
+  }
+  // 懒加载: state 里这条只有预览 · 单条详情要全文 · 拉该项目全量 updates 把这条换成全文
+  if (u.truncated) {
+    try {
+      const r = await fetchJSON('/api/project/' + p.id + '/updates');
+      if (r && r.ok && Array.isArray(r.updates)) {
+        p.updates = r.updates;
+        const full = r.updates.find(x => x.id === updateId);
+        if (full) u = full;
+      }
+    } catch (e) { /* 拉失败用预览兜底 */ }
   }
   const seeking = u.feedbackAsk !== undefined;
   const imgs = (u.images && u.images.length > 0) ? u.images : [];
@@ -9747,31 +9772,35 @@ function openSearch() {
   }, 50);
 }
 
-function doSearch(q) {
+let _searchSeq = 0;
+async function doSearch(q) {
   const root = document.getElementById('search-results');
   if (!q) {
     root.innerHTML = '<div class="search-hint">输入关键词找东西...</div>';
     return;
   }
+  const seq = ++_searchSeq;
   const ql = q.toLowerCase();
 
-  // 工作室 (按 handle / tagline)
+  // 工坊 (按 handle / tagline) · 字段都在 state 里 · 本地即时
   const users = Object.entries(state.users).filter(([h, u]) =>
     h.toLowerCase().includes(ql) || (u.tagline || '').toLowerCase().includes(ql)
   );
 
-  // 项目 (按 name / desc / tools)
+  // 项目 (按 name / desc / tools) · 字段都在 state 里 · 本地即时
   const projects = state.projects.filter(p =>
     p.name.toLowerCase().includes(ql) ||
     (p.desc || '').toLowerCase().includes(ql) ||
     (p.tools || []).some(t => t.toLowerCase().includes(ql))
   );
 
-  // 进展 (按 text)
-  const updates = [];
-  state.projects.forEach(p => p.updates.forEach((u, idx) => {
-    if (u.text.toLowerCase().includes(ql)) updates.push({ p, u, idx });
-  }));
+  // 进展 (按全文) · 懒加载后全文不在 state 了 · 走后端搜索 · 不降级 (照样全文匹配)
+  let updateItems = [];
+  try {
+    const r = await fetchJSON('/api/updates/search?q=' + encodeURIComponent(q) + '&limit=8');
+    if (seq !== _searchSeq) return; // 期间又敲了新词 · 丢弃这次旧结果
+    if (r && r.ok && Array.isArray(r.items)) updateItems = r.items;
+  } catch (e) { if (seq !== _searchSeq) return; }
 
   let html = '';
   if (users.length > 0) {
@@ -9798,26 +9827,18 @@ function doSearch(q) {
     </div>`;
   }
 
-  if (updates.length > 0) {
-    const shown = updates.slice(0, 8);
-    // v0.13 三种标签排序 · 踩坑经验/上手指南 优先 · 方法次之
-    shown.sort((a, b) => {
-      const aw = (a.u.isDecision ? 4 : 0) + (a.u.isExperience ? 3 : 0) + (a.u.isLearning ? 2 : 0) + (a.u.isMethod ? 1 : 0);
-      const bw = (b.u.isDecision ? 4 : 0) + (b.u.isExperience ? 3 : 0) + (b.u.isLearning ? 2 : 0) + (b.u.isMethod ? 1 : 0);
-      return bw - aw;
-    });
+  if (updateItems.length > 0) {
     html += `<div class="search-result-group">
-      <div class="search-result-label">进展 (${updates.length}${updates.length > 8 ? ' · 显示前 8 条' : ''})</div>
-      ${shown.map(({p, u}) => {
+      <div class="search-result-label">进展 (${updateItems.length}${updateItems.length >= 8 ? '+' : ''})</div>
+      ${updateItems.map(it => {
         const tags = [];
-        if (u.isDecision) tags.push('<span class="sri-tag sri-tag-decision">决策推演</span>');
-        if (u.isExperience) tags.push('<span class="sri-tag sri-tag-experience">踩坑经验</span>');
-        if (u.isLearning) tags.push('<span class="sri-tag sri-tag-learning">上手指南</span>');
-        if (u.isMethod) tags.push('<span class="sri-tag sri-tag-method">方法</span>');
+        if (it.isDecision) tags.push('<span class="sri-tag sri-tag-decision">决策推演</span>');
+        if (it.isExperience) tags.push('<span class="sri-tag sri-tag-experience">踩坑经验</span>');
+        if (it.isLearning) tags.push('<span class="sri-tag sri-tag-learning">上手指南</span>');
         return `
-        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('project','${p.owner}','${p.slug}');">
-          <div><span class="sri-meta">@${p.owner} / ${escapeHtml(p.name)} · ${shortAgo(u.at)}</span>${tags.join(' ')}</div>
-          <div class="sri-text">${escapeHtml(u.text.length > 120 ? u.text.slice(0, 120) + '...' : u.text)}</div>
+        <div class="search-result-item" onclick="closeModal('modal-search'); showScreen('update','${it.updateId}');">
+          <div><span class="sri-meta">@${it.projectOwner} / ${escapeHtml(it.projectName)} · ${shortAgo(it.at)}</span>${tags.join(' ')}</div>
+          <div class="sri-text">${escapeHtml((it.preview || '').length >= 120 ? it.preview + '...' : (it.preview || ''))}</div>
         </div>
       `;}).join('')}
     </div>`;
