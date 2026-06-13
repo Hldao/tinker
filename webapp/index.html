@@ -5416,13 +5416,18 @@
   .workshop-studio-recent-row:hover .workshop-studio-recent-text { color: var(--vermilion); }
   .workshop-studio-recent-time {
     font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    color: var(--sepia); min-width: 70px; flex-shrink: 0; padding-top: 2px;
+    color: var(--sepia); min-width: 44px; flex-shrink: 0; padding-top: 2px;
   }
   .workshop-studio-recent-handle {
     color: var(--ink-soft); flex-shrink: 0;
     font-family: 'JetBrains Mono', monospace; font-size: 12px;
   }
-  .workshop-studio-recent-text { color: var(--ink); flex: 1; transition: color 0.15s; }
+  /* min-width:0 + nowrap/ellipsis · 正文严格单行 · 不靠 JS 切字符兜底 · 窄屏也不折行打乱行高 */
+  .workshop-studio-recent-text {
+    color: var(--ink); flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: color 0.15s;
+  }
   .workshop-studio-actions {
     display: flex; gap: 18px; margin-top: 16px;
     padding-top: 14px; border-top: 1px dotted var(--rule);
