@@ -136,23 +136,11 @@ function buildState({ targetUserId } = {}) {
 
   // 组装 projects · webapp 期望的形状
   const projectsOut = projectsRows.map(p => {
-    const projectUpdates = (updatesByProject[p.id] || []).map(u => {
-      const out = { id: u.id, text: u.text, at: u.at };
-      if (u.prompt) out.prompt = u.prompt;
-      if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
-      if (u.kind) out.kind = u.kind;
-      if (u.is_method) out.isMethod = true;
-      if (u.is_experience) out.isExperience = true;
-      if (u.is_learning) out.isLearning = true;
-      if (u.is_decision) out.isDecision = true;
-      if (u.is_seeking) out.isSeeking = true;
-      if (u.scenario) out.scenario = u.scenario;
-      const imgs = updateImagesMap[u.id];
-      if (imgs && imgs.length > 0) out.images = imgs;
-      const usedBy = usedByMap[u.id];
-      if (usedBy && usedBy.length > 0) out.usedBy = usedBy;
-      return out;
-    });
+    // v1.0 瘦身: 首屏 update 只给预览 (前 400 字 + truncated 标记) · 全文走 /api/project/:id/updates
+    // 全文是首屏体积大头 (103KB · 占整个 state 70%) · 且是独一无二内容 · 压缩救不了 · 只能懒加载
+    const projectUpdates = (updatesByProject[p.id] || []).map(u =>
+      mapUpdateRow(u, updateImagesMap[u.id], usedByMap[u.id], { preview: true })
+    );
     const projectNotes = (notesByProject[p.id] || []).map(n => {
       const out = { id: n.id, user: idToHandle[n.user_id], text: n.text, at: n.at };
       if (n.update_id) out.updateId = n.update_id;
