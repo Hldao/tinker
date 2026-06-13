@@ -2361,6 +2361,8 @@ function buildAgentsBlock() {
     '- 用户说"完工 / 上线 / 发出去了"(真发布) → 建议 `tinker ship -m "一句话感想"` 进陈列馆',
     '- 做工具 / 方案决策 → 建议 `tinker push -m "..."` 记下为什么选这个',
     '',
+    '**session / 对话开头**:跑 `tinker bridge-check-inbox --json` 看队友有没有发接力(handoff)、工作室邀请、征求意见(witness)过来。有就 `cat ~/.tinker/inbox/<id>/README.md` 看完整说明,跟用户确认要不要处理,处理完 `tinker inbox done <id>`。(Claude Code 靠 SessionStart hook 自动跑这个,你这边要主动跑,不然会漏掉队友发来的东西。)',
+    '',
     '**对话内触发器 (跨 AI 通用入口)**:看到用户消息像顿悟/卡住/决策/砍/完工,Bash 跑:',
     '`tinker maybe-check --text "<用户最近一条消息>" --json`',
     '看返回的 `fired` 数组,按里面的 reminder 跟用户对话(仍看上下文判断,不每次都弹)。',
