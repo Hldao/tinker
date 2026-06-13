@@ -86,8 +86,11 @@ jobs:
             if [ "${{ steps.check.outputs.needs_rebuild }}" = "true" ]; then
               echo "--- 3. 重新打包 docker 镜像 ---"
               docker compose build
-              echo "--- 4. 启动新容器 ---"
-              docker compose up -d --force-recreate
+              echo "--- 4. 换上新容器 (down + up · 不用 --force-recreate) ---"
+              # 历史坑: up -d --force-recreate 撞"cannot remove container: container is running"
+              # (僵尸/半成品容器删不掉)。改成先 down 干净移除再 up · 短暂停服换取可靠 (build 已先做好 · down 很快)
+              docker compose down --remove-orphans
+              docker compose up -d
             else
               echo "--- 3. 只重启容器 (webapp 走 volume 挂载) ---"
               docker compose restart tinker
