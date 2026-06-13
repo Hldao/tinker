@@ -6769,6 +6769,33 @@
   /* ===============================================================
      END v0.68 两个发布 modal 深度设计升级
      =============================================================== */
+
+  /* 回到顶部浮标 · 长页 (便签墙在底 / 帖子页) 滚下去后一键回顶 · 滚过约一屏才出现 */
+  .back-to-top {
+    position: fixed;
+    right: 24px;
+    bottom: 28px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--paper);
+    color: var(--sepia);
+    border: 1px solid var(--rule);
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.2s, transform 0.2s, color 0.15s, border-color 0.15s;
+    z-index: 45;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  }
+  .back-to-top.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .back-to-top:hover { color: var(--vermilion); border-color: var(--vermilion); }
 </style>
 </head>
 <body class="min-h-screen">
@@ -6990,6 +7017,8 @@
   </section>
 
 </main>
+
+<button id="back-to-top" class="back-to-top" title="回到顶部" aria-label="回到顶部" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">↑</button>
 
 <!-- MODALS -->
 <div id="modal-note" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
@@ -12097,7 +12126,17 @@ function dispatchPending(p) {
 }
 
 // 初始化 — 拉 /api/auth/me + /api/state · spec §5.3 匿名浏览全部
+// 回到顶部浮标 · 滚过约一屏才出现 · 点了平滑回顶
+function setupBackToTop() {
+  const btn = document.getElementById('back-to-top');
+  if (!btn) return;
+  const onScroll = () => btn.classList.toggle('visible', window.scrollY > 600);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+}
+
 (async function init() {
+  setupBackToTop();
   try {
     const [user, st] = await Promise.all([apiMe(), fetchState()]);
     state = st;
