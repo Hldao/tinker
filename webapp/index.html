@@ -4632,7 +4632,7 @@
   /* —— dateline 行右侧组合 · 日期 + 找 —— */
   .masthead .masthead-dateline .dateline-right {
     display: inline-flex;
-    align-items: center;
+    align-items: baseline;   /* 不用 center · 否则 · 和 找 会被 22px 大日期数字撑高居中 · 飘在文字基线上方 · 改踩同一条基线 */
     gap: 12px;
   }
   .masthead .masthead-dateline .dateline-sep {
