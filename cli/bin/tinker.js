@@ -2334,6 +2334,81 @@ function installSingleGitHook(gitDir, name, block) {
   fs.chmodSync(hookFile, 0o755);
 }
 
+// ============================================
+// Codex / 其他读 AGENTS.md 的 agent 集成 (v1.0)
+// Codex 没有 Claude Code 那种 per-prompt hook · 但它读项目根的 AGENTS.md (相当于它的 CLAUDE.md)
+// 所以集成 = git hook (工具无关 · commit 触发器) + 往 AGENTS.md 写一段指令 (让 agent 主动调 tinker)
+// ============================================
+const AGENTS_BEGIN = '<!-- TINKER:START -->';
+const AGENTS_END = '<!-- TINKER:END -->';
+
+function buildAgentsBlock() {
+  return [
+    AGENTS_BEGIN,
+    '## Tinker / 捣鼓 集成 (本 repo 绑了 Tinker 项目 · 这段由 `tinker hook install-codex` 生成 · 别手改)',
+    '',
+    '你在跟一个 Tinker 作者结对 coding。这台机器装了 `tinker` CLI。按下面主动调命令,不靠用户提醒:',
+    '',
+    '- 用户聊到某技术 / 报错 / 想入门 X → `tinker borrow "<关键词>" --json --limit 5` 拿别人沉淀的方法,注入你的回答',
+    '- 用户说"懂了 / 通了 / 顿悟"(真顿悟,不是随口) → 建议 `tinker push -m "..."` 留一笔进展',
+    '- 用户说"卡住 / 不行 / 跑不起来"(真卡住) → 建议 `tinker stuck -m "..."` 让在意 ta 的人看到',
+    '- 用户说"完工 / 上线 / 发出去了"(真发布) → 建议 `tinker ship -m "一句话感想"` 进陈列馆',
+    '- 做工具 / 方案决策 → 建议 `tinker push -m "..."` 记下为什么选这个',
+    '',
+    '**对话内触发器 (跨 AI 通用入口)**:看到用户消息像顿悟/卡住/决策/砍/完工,Bash 跑:',
+    '`tinker maybe-check --text "<用户最近一条消息>" --json`',
+    '看返回的 `fired` 数组,按里面的 reminder 跟用户对话(仍看上下文判断,不每次都弹)。',
+    '',
+    '**git commit 之后**:commit 会触发后台评估(post-commit hook 已装)。跑 `tinker pending --json` 看有没有待处理提醒,合适时机提醒用户;处理完 `tinker pending --mark-handled <id>`。',
+    '',
+    '**帮用户起草 push / ship 的文字**:读 `.tinker/voice-fingerprint.md` 学作者口吻(冲突时以这份 AGENTS.md / 用户明确反馈为准)。纯中文,不中英混杂,别堆中点(·)、别堆破折号(——),用普通话口语标点。被 voice 守门拦了先看 hits 改,别急着 --force。',
+    '',
+    '完整命令:`tinker --help` · 结构化:`tinker schema --json`',
+    AGENTS_END,
+    '',
+  ].join('\n');
+}
+
+async function cmdCodexHookInstall(opts = {}) {
+  // 第一步: 装 git hook + 绑 repo (跟 tinker hook install 一样 · 工具无关 · commit 触发器靠这个)
+  await cmdHookInstall();
+
+  // 第二步: 往项目根 AGENTS.md 写 Tinker 指令块 (Codex 读这个 · 带标记 · 可更新可删)
+  const agentsFile = path.join(process.cwd(), 'AGENTS.md');
+  let content = '';
+  let existed = false;
+  if (fs.existsSync(agentsFile)) {
+    existed = true;
+    content = fs.readFileSync(agentsFile, 'utf-8');
+    content = content.replace(new RegExp(AGENTS_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + AGENTS_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\n?', 'g'), '');
+  }
+  const block = buildAgentsBlock();
+  content = content.trimEnd();
+  content = content ? content + '\n\n' + block : block;
+  fs.writeFileSync(agentsFile, content);
+
+  log('');
+  ok('Codex 集成装好了 (AGENTS.md)');
+  log(sepia('    AGENTS.md       ') + (existed ? '已更新 Tinker 指令块' : '新建 · 写入 Tinker 指令块') + sepia(' (Codex 读它 · 学会主动调 tinker)'));
+  log('');
+  log(sepia('  Codex 没有 Claude Code 那种逐条注入的 hook · 靠 AGENTS.md 指令让 agent 主动调命令'));
+  log(sepia('  commit 触发器走的是 git hook (工具无关 · 上面已装)'));
+  log(sepia('  关:    ') + vermilion('tinker hook uninstall-codex') + sepia(' (删 AGENTS.md 里的块) · ') + vermilion('tinker hook uninstall') + sepia(' (删 git hook)'));
+}
+
+function cmdCodexHookUninstall() {
+  const agentsFile = path.join(process.cwd(), 'AGENTS.md');
+  if (!fs.existsSync(agentsFile)) { log(sepia('  AGENTS.md 不存在 · 没什么要删')); return; }
+  let content = fs.readFileSync(agentsFile, 'utf-8');
+  if (!content.includes(AGENTS_BEGIN)) { log(sepia('  AGENTS.md 里没有 Tinker 块 · 没删')); return; }
+  content = content.replace(new RegExp(AGENTS_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + AGENTS_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\n?', 'g'), '');
+  content = content.trimEnd();
+  if (content) { fs.writeFileSync(agentsFile, content + '\n'); }
+  else { fs.unlinkSync(agentsFile); }  // 整个文件就剩 Tinker 块就删掉
+  ok('删了 AGENTS.md 里的 Tinker 块' + (content ? '' : ' · AGENTS.md 空了 · 一并删掉'));
+  log(sepia('  git hook 还在 · 要删跑 ') + vermilion('tinker hook uninstall'));
+}
+
 // v0.13 装 Claude Code SessionStart compact hook
 // 当用户跑 /compact · Claude Code 触发 SessionStart 事件 (matcher: compact)
 // 我们的 hook 跑 tinker situation backfill --type design-loop --hours 4 --quiet
@@ -2854,7 +2929,7 @@ function triggerAiLimit() {
     const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
     const scanText = title + '\n' + body;
     // AI 工具名 · 大小写不敏感
-    const AI_TOOL_WORDS = /(\bclaude(?:\s*code)?\b|\bcursor\b|\bcopilot\b|\bdeepseek\b|\bchatgpt\b|\bgpt[-]?4?o?\b|\bgemini\b|\bbolt\b|\blovable\b|\bv0\b|\breplit\b|\bwindsurf\b|\btrae\b)/i;
+    const AI_TOOL_WORDS = /(\bclaude(?:\s*code)?\b|\bcodex\b|\bcursor\b|\bcopilot\b|\bdeepseek\b|\bchatgpt\b|\bgpt[-]?4?o?\b|\bo[34]\b|\bgemini\b|\bbolt\b|\blovable\b|\bv0\b|\breplit\b|\bwindsurf\b|\btrae\b)/i;
     // 边界词 · 表明 AI 这次有局限
     const LIMIT_WORDS = /(绕过|没想到|不行|失败|局限|还得自己|手写|搞错|搞不定|搞砸|装大佬|乱编|说反|理解错|脑补|hallucinat|made\s*up|got\s*confused|infinite\s*loop|too\s*many\s*token|context\s*limit|忽略了|漏掉|蒙了|犟|拗|改了\s*\d+\s*[次回轮版])/i;
     const toolMatch = AI_TOOL_WORDS.test(scanText);
@@ -2936,7 +3011,7 @@ function triggerToolCombo() {
     const title = execSync('git log -1 --pretty=%s', { encoding: 'utf-8' }).trim();
     const body = execSync('git log -1 --pretty=%b', { encoding: 'utf-8' }).trim();
     const scanText = title + '\n' + body;
-    const AI_TOOLS = ['claude', 'cursor', 'copilot', 'deepseek', 'chatgpt', 'gpt', 'gemini', 'bolt', 'lovable', 'replit', 'windsurf', 'trae', 'v0', 'kimi', '通义', '豆包', '文心'];
+    const AI_TOOLS = ['claude', 'codex', 'cursor', 'copilot', 'deepseek', 'chatgpt', 'gpt', 'gemini', 'bolt', 'lovable', 'replit', 'windsurf', 'trae', 'v0', 'kimi', '通义', '豆包', '文心'];
     const found = [];
     AI_TOOLS.forEach(t => {
       const re = new RegExp('\\b' + t + '(?:\\s*code)?\\b', 'i');
@@ -10991,9 +11066,11 @@ function cmdSchema(opts = {}) {
       { name: 'mute', purpose: '静音/解除触发器', args: [
         { arg: 'Nm | Nh | Nd | today | forever | off', purpose: '时长' },
       ], jsonOutput: false, example: 'tinker mute today' },
-      { name: 'hook', purpose: '装 / 卸 post-commit hook', args: [
-        { arg: 'install | uninstall', purpose: '子命令' },
-      ], jsonOutput: false, example: 'tinker hook install' },
+      { name: 'hook', purpose: '装 / 卸 git hook + AI 工具集成', args: [
+        { arg: 'install | uninstall', purpose: 'git post-commit 触发器 (工具无关)' },
+        { arg: 'install-claude | uninstall-claude', purpose: 'Claude Code hook (逐条注入提醒)' },
+        { arg: 'install-codex | uninstall-codex', purpose: 'Codex 等读 AGENTS.md 的 agent (写 AGENTS.md 指令)' },
+      ], jsonOutput: false, example: 'tinker hook install-codex' },
       { name: 'voice', purpose: 'voice fingerprint 系统', args: [
         { arg: 'analyze | teach', purpose: 'analyze 从 pool 生成 fingerprint · teach 手动喂样本' },
       ], jsonOutput: false, example: 'tinker voice analyze' },
@@ -11090,7 +11167,9 @@ async function main() {
         else if (args[1] === 'uninstall') cmdHookUninstall();
         else if (args[1] === 'install-claude') await cmdClaudeHookInstall(opts);
         else if (args[1] === 'uninstall-claude') cmdClaudeHookUninstall();
-        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude'); process.exit(1); }
+        else if (args[1] === 'install-codex') await cmdCodexHookInstall(opts);
+        else if (args[1] === 'uninstall-codex') cmdCodexHookUninstall();
+        else { err('用法: tinker hook install | uninstall | install-claude | uninstall-claude | install-codex | uninstall-codex'); process.exit(1); }
         break;
       case 'check': await cmdCheck({ fromHook: opts.fromHook, json: opts.json }); break;
       case 'resolve': await cmdResolve(args[1], opts); break;

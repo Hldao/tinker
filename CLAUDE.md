@@ -107,6 +107,8 @@ Tinker 的对话内触发器有两条路径:
 
 **Claude Code 用户**:hook 自动跑 (`tinker hook install-claude` 装好后) · LLM 不用做任何事 · reminder 会自动 inject。
 
+**Codex 用户 (及其它读 `AGENTS.md` 的 agent)**:跑 `tinker hook install-codex` · 它装 git hook (工具无关 · commit 触发器) + 往项目根 `AGENTS.md` 写一段 Tinker 指令块 (带 `<!-- TINKER:START/END -->` 标记 · 不覆盖用户已有内容)。Codex 读 `AGENTS.md` 后就知道主动调 maybe-check / pending / borrow / push。注意:Codex 没有 Claude Code 那种逐条注入的 hook · 是"指令驱动"不是"自动注入" · 没那么无感 · 但 git hook + AGENTS.md 指令覆盖大部分。
+
 **其他 AI 用户 (Cursor / Aider / Continue / Cline 等)**:Claude Code 那套 UserPromptSubmit hook 不通用 · LLM 需要主动调:
 
 ```bash
