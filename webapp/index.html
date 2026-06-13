@@ -5450,6 +5450,11 @@
   .account-row:last-child { border-bottom: none; }
   .account-label { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia); letter-spacing: 0.08em; min-width: 110px; padding-top: 3px; }
   .account-value { font-family: 'Newsreader', serif; color: var(--ink); font-size: 15.5px; flex: 1; word-break: break-all; }
+  /* 点击复制 · 标识符类的值 (邮箱 / 招牌 / 钥匙) · hover 出 ⧉ 提示能点 */
+  .copyable { cursor: pointer; transition: color 0.15s; }
+  .copyable:hover { color: var(--vermilion); }
+  .copyable::after { content: '⧉'; font-family: 'JetBrains Mono', monospace; font-size: 0.72em; color: var(--sepia-light); margin-left: 7px; opacity: 0; transition: opacity 0.15s; vertical-align: 1px; }
+  .copyable:hover::after { opacity: 0.9; color: var(--vermilion); }
   .account-hint { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia-light); letter-spacing: 0.04em; }
   .account-sub-text { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 14.5px; line-height: 1.6; }
   .account-empty { font-family: 'Newsreader', serif; color: var(--sepia); font-size: 14.5px; padding: 4px 0; }
@@ -11810,6 +11815,14 @@ function copyText(el, text) {
     setTimeout(() => { el.textContent = orig; }, 1500);
   });
 }
+// 点击复制"值"元素 (邮箱 / 招牌 / 钥匙等) · 不改 textContent (值要留着) · 靠 toast 反馈
+// 复制 data-copy-value (有就用 · 比如想去掉 @) · 否则用显示文本
+function copyValue(el, ev) {
+  if (ev) ev.stopPropagation();
+  const text = (el.dataset.copyValue || el.textContent || '').trim();
+  if (!text) return;
+  safeCopy(text, '已复制', '复制失败 · 手动选中复制');
+}
 // http+IP (insecure context) 下 navigator.clipboard 是 undefined · 直接调会同步抛 TypeError
 // fallback 走老办法 · 临时 textarea + execCommand('copy')
 async function safeCopy(text, okMsg, errMsg) {
@@ -12341,9 +12354,9 @@ async function renderAccount() {
           <span class="account-section-title">基本资料</span>
           <span class="account-section-action" onclick="openEditWorkshop()">改 →</span>
         </div>
-        <div class="account-row"><span class="account-label">招牌 (昵称)</span><span class="account-value">@${escapeHtml(currentUser.handle)}</span></div>
+        <div class="account-row"><span class="account-label">招牌 (昵称)</span><span class="account-value copyable" data-copy-value="${escapeHtml(currentUser.handle)}" onclick="copyValue(this, event)" title="点击复制招牌">@${escapeHtml(currentUser.handle)}</span></div>
         <div class="account-row"><span class="account-label">一句话介绍</span><span class="account-value">${escapeHtml(u.tagline || '(还没写)')}</span></div>
-        <div class="account-row"><span class="account-label">邮箱</span><span class="account-value">${escapeHtml(email)}</span></div>
+        <div class="account-row"><span class="account-label">邮箱</span>${currentUser.email ? `<span class="account-value copyable" onclick="copyValue(this, event)" title="点击复制邮箱">${escapeHtml(email)}</span>` : `<span class="account-value">${escapeHtml(email)}</span>`}</div>
         <div class="account-hint">邮箱是你的登录身份 · 暂时不支持自助更换</div>
       </div>
 
@@ -12372,7 +12385,7 @@ async function renderAccount() {
         </div>
         <div id="account-new-token-revealed" class="hidden" style="margin-top: 14px; padding: 12px; background: var(--paper); border: 1px dashed var(--vermilion); border-radius: 4px;">
           <div class="mono text-xs" style="color: var(--vermilion); margin-bottom: 6px;">这把钥匙只显示这一次 · 关掉就看不见了</div>
-          <code id="account-new-token-value" style="display: block; padding: 8px; background: white; word-break: break-all; font-family: 'JetBrains Mono', monospace; font-size: 13px;"></code>
+          <code id="account-new-token-value" class="copyable" onclick="copyValue(this, event)" title="点击复制钥匙" style="display: block; padding: 8px; background: white; word-break: break-all; font-family: 'JetBrains Mono', monospace; font-size: 13px;"></code>
           <div style="margin-top: 8px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
             <span class="react-action" onclick="copyAccountAiInstall(this)" style="color: var(--vermilion); border-bottom-color: var(--vermilion);">复制 AI 安装指令</span>
             <span class="react-action" onclick="copyAccountToken(this)" style="color: var(--ink-soft); font-size: 12px;" title="单独复制 tk_xxx · 已装过 CLI 想换钥匙时用">只要钥匙</span>
