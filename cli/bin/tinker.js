@@ -2358,6 +2358,8 @@ function buildAgentsBlock() {
     '- 用户聊到某技术 / 报错 / 想入门 X → `tinker borrow "<关键词>" --json --limit 5` 拿别人沉淀的方法,注入你的回答',
     '- 用户说"懂了 / 通了 / 顿悟"(真顿悟,不是随口) → 建议 `tinker push -m "..."` 留一笔进展',
     '- 用户说"卡住 / 不行 / 跑不起来"(真卡住) → 建议 `tinker stuck -m "..."` 让在意 ta 的人看到',
+    '- 用户说"帮我发个求方法 / 我缺个 X 的方法 / 求人指路" → `tinker seek -m "缺什么方法"` 发一条求方法(进方法库「有人在找」· 注意不是 ship 的求反馈)',
+    '- 用户说"把这个沉淀成方法 / 存成方法"(做通了别人能复用的事) → `tinker contribute [updateId]` 把某条 update 标成方法(进方法库「沉淀的方法」)',
     '- 用户说"完工 / 上线 / 发出去了"(真发布) → 建议 `tinker ship -m "一句话感想"` 进陈列馆',
     '- 做工具 / 方案决策 → 建议 `tinker push -m "..."` 记下为什么选这个',
     '',
@@ -10437,6 +10439,7 @@ function help() {
   log(sepia('  ') + vermilion('方法库 · 让别人借 / 借别人的'));
   log('  ' + vermilion('tinker borrow "<关键词>"') + sepia('            搜方法库 (作者标方法的排前)'));
   log('  ' + vermilion('tinker borrow ... --methods-only') + sepia('    只看作者标方法的'));
+  log('  ' + vermilion('tinker seek -m "..."') + sepia('               发一条求方法 · 进方法库「有人在找」(跟 ship 的求反馈不是一回事)'));
   log('  ' + vermilion('tinker contribute [updateId]') + sepia('        标自己一条 update 为方法'));
   log('  ' + vermilion('tinker contribute --from-file <md>') + sepia('  从 markdown 按段交互选 contribute · 隐私扫描'));
   log('  ' + vermilion('tinker contribute --from-file <md> --auto') + sepia(' LLM 看完帮挑 3 段 · 一键确认'));
