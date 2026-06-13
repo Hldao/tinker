@@ -1740,6 +1740,11 @@ async function cmdEditShip(opts) {
   const shipUpdate = project.updates[shipIdx];
 
   let newText = (opts.text || shipUpdate.text || '').trim();
+  // v1.0 改了感想文字才走 voice 守门 (只改图/反馈时 newText 是旧文 · 不查)
+  if (opts.text) {
+    const gate = await gateVoiceCheck(newText, opts);
+    if (!gate.ok) { if (opts.json) return errJson(gate.reason || 'voice 守门拒绝', gate.code || 'VOICE_GATE_BLOCK'); process.exit(1); }
+  }
   let seekingFeedback;
   let feedbackAsk;
 
@@ -7620,8 +7625,9 @@ const VOICE_PROFILE_REGISTRY = {
   ship:             'for_humans_public',
   resolve:          'for_humans_public',
   contribute:       'for_humans_public',
-  'edit-update':    'for_humans_public',
+  edit:             'for_humans_public',
   'edit-ship':      'for_humans_public',
+  'edit-method':    'for_humans_public',
 
   // 给人看 · 队友 (含队友 AI 配合读)
   handoff:          'for_humans_team',
@@ -9096,6 +9102,12 @@ async function cmdEditUpdate(updateId, opts) {
     if (opts.json) return errJson('找不到你的 update: ' + updateId, 'NOT_FOUND');
     err('找不到你的 update: ' + updateId); process.exit(1);
   }
+  // v1.0 edit 也走 voice 守门 (跟 push 一致 · 编辑同样能引入 AI 直出腔 · 之前漏了)
+  const gate = await gateVoiceCheck((opts.text || '').trim(), opts);
+  if (!gate.ok) {
+    if (opts.json) return errJson(gate.reason || 'voice 守门拒绝', gate.code || 'VOICE_GATE_BLOCK');
+    process.exit(1);
+  }
   const payload = { projectId: found.project.id, updateIdx: found.idx, text: opts.text };
   if (opts.scenario !== undefined) payload.scenario = opts.scenario;
   try {
@@ -9165,6 +9177,11 @@ async function cmdEditMethod(methodId, opts) {
     if (opts.json) return errJson('至少给一个字段: -m / --scenario / --title / --tag', 'NO_FIELD');
     err('至少给一个字段: -m / --scenario / --title / --tag');
     process.exit(1);
+  }
+  // v1.0 改了方法正文才走 voice 守门 (方法正文是公开可借的 · 只改 scenario/title/tag 不查)
+  if (opts.text) {
+    const gate = await gateVoiceCheck(opts.text.trim(), opts);
+    if (!gate.ok) { if (opts.json) return errJson(gate.reason || 'voice 守门拒绝', gate.code || 'VOICE_GATE_BLOCK'); process.exit(1); }
   }
   try {
     await apiAction(cfg, 'editMethod', payload);
