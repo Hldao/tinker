@@ -57,6 +57,24 @@
 
 ---
 
+## ⑥ 自动部署对大文件不可靠 · git pull 静默没拉全 · 2026-06-13 字体那次踩到
+
+**问题**
+2026-06-13 推字体自托管 (7MB · 123 个 woff2)。GitHub Actions 跑完报 success · 但 ECS 上 `git pull` 没真把那 7MB 拉下来 (ECS 还停在上一个 commit · fonts/ 目录是空的)。结果线上 fonts.css 一直 404 · Actions 却显示绿。最后手动 ssh 上去 `git pull` + `chmod -R a+rX webapp` + `restart` 才补上。
+
+**为什么会这样 (推测 · 没坐实根因)**
+大概率是 ECS 拉 GitHub 大对象时网络抖 / 超时 · 但 workflow 里那步 `git pull` 没检查 exit code 就往下走 (或 pull 部分成功不报错) · 健康检查又只看容器 200 (容器还是旧的 · 当然 200) · 所以绿得很假。小文件 (state.js / index.html 那种几 KB) 没这问题 · 这次后面两个 commit 都正常。
+
+**怎么做 (要做时)**
+- workflow 的 `git pull` 后加校验:比对 `git rev-parse HEAD` 跟触发这次 run 的 `$GITHUB_SHA` · 不一致就 fail (别让它假绿)。
+- 或者大资源别走 git:字体 / 大静态资源考虑放对象存储 (oss) · git 里只留引用。
+- 健康检查升级成"换了新代码"判定:比 image id / 比 `/api/cli-version` 返回的 sha · 不只看 200 (这条 ② 里也提了)。
+
+**什么时候做**
+下次又要推大文件前。平时小改动不触发这个坑 · 不急。但**记着:推大资源后一定手动核验 ECS 真拉到了 · 别信 Actions 的绿**。
+
+---
+
 ## ② 部署提速 · server JS 也 bind-mount (想做没做成)
 
 **问题**
@@ -92,17 +110,29 @@ alpha 阶段用户极少 · feed 量级根本不需要分页。现在做分页 +
 **什么时候做**
 用户数到几百 · 或 `/api/state` 响应超过 ~200KB / 首屏明显变慢时。
 
-**大概怎么做**
-- feed 分页 (cursor / since) · 首屏只拿最近 N 条
-- 用户资料懒加载 · 不在首屏 dump 全部 users · 进谁的页再拉谁的 (类似已有的 `/api/users/:handle/studios-preview` 模式)
-- 方法库 / 陈列馆同理 · 按需拉
-- 注意:这是 webapp 渲染模型的重构 · 不只是后端加个 limit · 得一起改前端取数
+**实测 (2026-06-13 · review 时量的)**
+- 当前 7 项目 / 3 用户 / 71 条 update:原始 179KB · br 压缩后过网 54KB (压缩比只有 3.3x · 中文文本压不动)。所以网络开销目前不算痛 · 还没到上面写的 "超过 200KB" 那条线。
+- 拆字段看胖在哪:`projects` 144KB (占 81%) · 里头 `updates` 全文 103KB (所有项目所有 update 全文一把塞首屏) · 方法全文重复 27KB (全局 `state.methods` + 每个 `project.methods` 各一份) · 其余零头。
 
-**已经做了的相关收口 (2026-06-11)**
-- 工作室成员关系不再在 bulk dump 里逐个用户暴露 (只挂请求者本人) · 看别人走 `/api/users/:handle/studios-preview` 按需取。见 server/state.js。这是 ② · 已修。① 还挂着。
+**已经做了的几刀**
 
-**最新实测 (2026-06-13 · review 时量的)**
-- 当前 7 项目 / 3 用户 / 70 条 update:原始 167KB · br 压缩后过网 52KB (压缩比只有 3.2x · 不如 html · 中文文本压不动)。所以网络开销目前不算痛 · 还没到上面写的 "超过 200KB" 那条线。
-- 拆字段看胖在哪:`updates` 107KB (占整个 state 的 63% · 所有项目所有 update 全文一把塞首屏) · `methods` 装了两份 (全局 `state.methods` + 每个 `project.methods` · 同一批方法全文重复 · 多 ~25KB) · 其余字段都是零头。
-- 真要做时的靶心:updates 懒加载 (首屏只拿摘要 / 最近 N 条 · 进项目详情再拉全量) + methods 去重 (project 内只挂 method id · 全文从全局 methods map 查)。
-- **坑 (为什么不是纯后端活)**:feed 的 `getFeedEvents` 和方法库浏览页都在初屏直接渲染 `u.text` / `m.text` · 裁 server 字段必须同步改前端取数。所以这条得 server + webapp 一起改 · 跟 ③ 一样会碰 webapp/index.html。
+- **工作室成员关系收口 (2026-06-11)**:bulk dump 不再逐个用户暴露成员关系 (只挂请求者本人) · 看别人走 `/api/users/:handle/studios-preview` 按需取。见 server/state.js。
+
+- **方法去重 (2026-06-13 · commit d11dd6d)**:`project.methods` 从完整对象数组改成 **id 引用数组** · 全文只在全局 `state.methods` 存一份单一真相 · webapp 按 id 去查 (renderProject 里建 `methodsById` map · 兼容 id / 完整对象两种形状防部署错位)。原始体积 179KB → 149KB (-16%)。
+  - **诚实结论**:压缩后过网体积几乎没变 (54261 → 54240 · 省 21 字节)。因为重复的那 27KB 跟全局那份逐字节相同 · br/gzip 的字典本来就把重复内容压成几个回指字节了。**这刀省的是服务端序列化 cpu + 客户端 JSON.parse + 内存 (少 hold 一份重复对象) + 数据模型干净 (两份 text 不会跑偏) · 但下载体积没动**。教训:要压"过网体积"得砍**独一无二**的内容 · 砍重复内容压缩器早替你做了。
+
+- **砍写放大 (2026-06-13 · commit cf435da)**:`POST /api/action` 以前每次写都 `buildState()` 把整个 179KB 重算重发回。CLI 根本不渲染这坨。现在 CLI 发 `x-tinker-no-state: 1` 头 · server 见到就跳过 buildState 只回 `result`。webapp 不带这个头 · 照常拿 state 重渲染。省的是每次写的 cpu + 带宽 (尤其 CLI 那条)。部署错位安全:旧 server 忽略未知头 · 新 server 遇旧 CLI 照常返。效果随 CLI `tinker update` 逐步生效。
+
+**还剩的大头 · updates 懒加载 (真正能压过网体积的一刀 · 没做 · 留专门时段)**
+
+updates 全文 103KB 是**独一无二**的内容 (不是重复) · 这才是压缩救不了、懒加载能真省的部分。设计:
+
+1. **server**:`/api/state` 的 `project.updates[]` 只返**摘要** —— `id / at / kind / flags (isMethod/isSeeking/...) / scenario / 正文前 ~120 字 + hasMore 布尔`。**不返全文 text**。
+2. **新 endpoint**:`GET /api/project/:id/updates?since=&limit=` 或 `GET /api/update/:id` 拉单条/整页全文 · 进项目详情页时按需拉。
+3. **webapp 取数改造 (这是难点 · 碰核心渲染路径)**:
+   - feed (`getFeedEvents`) 初屏用摘要渲染 · 长正文显示"展开↓" · 点开才 fetch 全文填进 DOM。
+   - 项目详情页进入时拉该项目全量 updates (一次一个项目 · 不再全站一把吐)。
+   - 注意 feed 是跨项目混合时间线 · 摘要要够渲染卡片 (kind badge / scenario / 预览)。
+4. **预估**:首屏 raw 从 149KB 砍到 ~50KB 以内 · 过网 br 从 54KB 砍到 ~20KB 上下 (因为砍的是真·唯一内容)。
+
+**为什么留着不做**:爆炸半径最大 (动 feed + 项目页核心渲染 · 猫猫热区) · 且当前 54KB 过网不痛。值得一个专门时段 + 充分眼验 · 不在批量任务尾巴盲改。**得 server + webapp 一起改 · 会碰 webapp/index.html。**
