@@ -9846,6 +9846,14 @@ function onNotifClick(notifId, projectOwner, projectSlug, anchor) {
   apiAction('markNotifRead', { notifId }).catch(() => {});
   updateUnreadBadge();
 
+  // methodReply: 有人用一条方法回应了你的求方法 · 这条通知 projectId 是 null
+  // (回应方法可能独立于任何项目) · extra 存的是 methodId · 直接进方法详情页
+  // 否则会落进下面"项目已删"的死链分支 · 点了不跳还误报项目删除
+  if (localN && localN.type === 'methodReply' && localN.extra) {
+    showScreen('method', localN.extra);
+    return;
+  }
+
   // 项目已删 · 死链通知也算已读 · re-render 让它从 unread 视觉消失 · 不跳转
   if (!projectOwner || !projectSlug) {
     showToast('这个项目已经被删了 · 通知已标已读');
