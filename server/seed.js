@@ -2,10 +2,12 @@
 // daodao 是 maintainer · 其他 user / 项目 / 通知都从空开始 · 由真实用户填充
 // 测试用全套 mock 数据见 test/fixtures.js
 
+// 跟 migrations/100_more_tools.sql 保持同步 (一个给空库 seed · 一个给已有库迁移)
 const AVAILABLE_TOOLS = [
-  'Claude Code', 'Cursor', 'Claude', 'v0', 'Bolt', 'Lovable', 'Replit', 'Windsurf',
-  'Trae', '通义灵码', 'CodeGeex', '文心 Comate',
-  'ChatGPT', 'DeepSeek', '豆包', 'Kimi', '通义千问',
+  'Claude Code', 'Codex', 'Cursor', 'GitHub Copilot', 'Gemini', 'Aider', 'Cline',
+  'v0', 'Bolt', 'Lovable', 'Replit', 'Windsurf', 'Trae',
+  '通义灵码', 'CodeGeex', '文心 Comate',
+  'Claude', 'ChatGPT', 'DeepSeek', '豆包', 'Kimi', '通义千问',
   'Node.js', 'Docker', 'Tailwind', 'Supabase', 'Vercel',
 ];
 
