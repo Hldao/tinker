@@ -177,9 +177,11 @@ async function apiMe(cfg) {
   return res.json();
 }
 async function apiAction(cfg, type, payload) {
+  // x-tinker-no-state: CLI 不渲染全站 state · 让 server 跳过 buildState 别回 179KB
+  // (webapp 需要回 state 重渲染 · 不带这个头)
   const res = await safeFetch(cfg, '/api/action', {
     method: 'POST',
-    headers: authHeaders(cfg),
+    headers: { ...authHeaders(cfg), 'x-tinker-no-state': '1' },
     body: JSON.stringify({ type, payload }),
   });
   return res.json();
@@ -3401,7 +3403,7 @@ async function cmdWatch(taskFile) {
     // 当前这条刚 push · 应该就是 0
     const r = await fetch(task.serverUrl + '/api/action', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + task.token, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': 'Bearer ' + task.token, 'Content-Type': 'application/json', 'x-tinker-no-state': '1' },
       body: JSON.stringify({
         type: 'editUpdate',
         payload: {

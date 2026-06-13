@@ -449,6 +449,11 @@ app.post('/api/action', actionLimiter, auth.requireSession, async (req, res) => 
   if (!action) return res.status(400).json({ error: 'Unknown action: ' + type });
   try {
     const result = action(payload || {}, { currentUserId: req.user.id });
+    // v1.0 写放大优化: 客户端带 x-tinker-no-state 就不回全量 state (CLI 不渲染 · 白发 179KB)
+    // webapp 不带这个头 · 照常回 state 重渲染
+    if (req.get('x-tinker-no-state') === '1') {
+      return res.json({ ok: true, result });
+    }
     const newState = buildState({ targetUserId: req.user.id });
     res.json({ ok: true, result, state: newState });
   } catch (e) {
