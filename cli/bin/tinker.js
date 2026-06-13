@@ -4197,80 +4197,6 @@ async function cmdLlm(sub, opts = {}) {
   ok('LLM 配好了 · 下次 prompt 选"发"就能看到自动起草');
 }
 
-// 解 Claude Code 的 jsonl session 文件 · 拉今天的 token 用量
-// ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
-// 每条 assistant message 都有 usage + timestamp · 按今日 (4am 算一天) 过滤
-function getClaudeCodeUsageToday(opts = {}) {
-  const claudeRoot = path.join(os.homedir(), '.claude', 'projects');
-  if (!fs.existsSync(claudeRoot)) return null;
-
-  // 默认"今天" 4am 起 · daysBack 支持周/月扫
-  const daysBack = opts.daysBack || 1;
-  const dayStart = beijingDayStart(-(daysBack - 1), 4);
-  const now = Date.now();
-
-  const byModel = {};
-  let totalMessages = 0;
-  let sessionFiles = new Set();
-
-  try {
-    const projDirs = fs.readdirSync(claudeRoot).filter(d => {
-      try { return fs.statSync(path.join(claudeRoot, d)).isDirectory(); } catch { return false; }
-    });
-    for (const projDir of projDirs) {
-      const fullProjDir = path.join(claudeRoot, projDir);
-      let files;
-      try { files = fs.readdirSync(fullProjDir).filter(f => f.endsWith('.jsonl')); } catch { continue; }
-      for (const f of files) {
-        const fullPath = path.join(fullProjDir, f);
-        // 文件 mtime 在今天 4am 之前 · 整个文件跳过
-        try {
-          const stat = fs.statSync(fullPath);
-          if (stat.mtimeMs < dayStart) continue;
-        } catch { continue; }
-        // 流式逐行扫 · 大文件 (10MB+) 也能跑
-        let content;
-        try { content = fs.readFileSync(fullPath, 'utf-8'); } catch { continue; }
-        const lines = content.split('\n');
-        let sawTodayMessage = false;
-        for (const line of lines) {
-          if (!line || line[0] !== '{') continue;
-          let obj;
-          try { obj = JSON.parse(line); } catch { continue; }
-          if (obj.type !== 'assistant' || !obj.message || !obj.message.usage) continue;
-          const ts = obj.timestamp ? new Date(obj.timestamp).getTime() : 0;
-          if (ts < dayStart || ts > now) continue;
-          const model = obj.message.model || 'unknown';
-          // 跳过 Claude Code 内部 synthetic / system 消息 · 不是真实 LLM 调用
-          if (model === '<synthetic>' || model.startsWith('<')) continue;
-          sawTodayMessage = true;
-          totalMessages++;
-          const u = obj.message.usage;
-          if (!byModel[model]) byModel[model] = { input: 0, cacheCreate: 0, cacheRead: 0, output: 0 };
-          byModel[model].input += u.input_tokens || 0;
-          byModel[model].cacheCreate += u.cache_creation_input_tokens || 0;
-          byModel[model].cacheRead += u.cache_read_input_tokens || 0;
-          byModel[model].output += u.output_tokens || 0;
-        }
-        if (sawTodayMessage) sessionFiles.add(fullPath);
-      }
-    }
-  } catch { return null; }
-
-  if (totalMessages === 0) return { messages: 0, models: {}, sessions: 0 };
-
-  // v0.40 砍掉成本估算 · 之前按 Anthropic 标准价 + 1M context premium + 汇率乘 7.2 算出来的数
-  // 跟用户在 Anthropic console 看到的实际账单差得太远 (cache 读单价 1/10 是已扣折扣 ·
-  // 加上各种企业 / 教育 / 量级折扣不可预测)。误导用户比不报更差,直接砍。
-  // 想看真账单去 https://console.anthropic.com/settings/usage
-
-  return {
-    messages: totalMessages,
-    models: byModel,
-    sessions: sessionFiles.size,
-  };
-}
-
 // `tinker goodnight` · 今日总结 · 给 sleepy 时刻收个尾
 // 也被 GOODNIGHT 关键词触发器命中时自动出现
 async function cmdGoodnight(opts = {}) {
@@ -4333,9 +4259,6 @@ async function cmdGoodnight(opts = {}) {
     lastAt = new Date(gitCommits[0].at);
   }
 
-  // Claude Code 今日 token (已统一拉了 · JSON 也要用)
-  const ccUsageEarly = getClaudeCodeUsageToday({ daysBack });
-
   // JSON 输出 (AI agent 用 · 跳过人类可读)
   if (opts.json) {
     const projectCounts = {};
@@ -4352,13 +4275,6 @@ async function cmdGoodnight(opts = {}) {
         firstCommit: gitCommits.length > 0 ? gitCommits[gitCommits.length - 1].msg : null,
         lastCommit: gitCommits.length > 0 ? gitCommits[0].msg : null,
       },
-      claudeCode: ccUsageEarly && ccUsageEarly.messages > 0 ? {
-        messages: ccUsageEarly.messages,
-        sessions: ccUsageEarly.sessions,
-        models: ccUsageEarly.models,
-        estimatedUsd: +ccUsageEarly.totalUsd.toFixed(2),
-        estimatedRmb: +ccUsageEarly.totalRmb.toFixed(2),
-      } : null,
       tinker: {
         updates: todayUpdates.length,
         byProject: projectCounts,
@@ -4383,24 +4299,6 @@ async function cmdGoodnight(opts = {}) {
     log(sepia('    最后一条: ') + sepia(gitCommits[0].msg.slice(0, 60)));
   }
   log('');
-
-  // Claude Code 今日 token 用量 (复用上面 ccUsageEarly · 避免重新扫一遍 jsonl)
-  const ccUsage = ccUsageEarly;
-  if (ccUsage && ccUsage.messages > 0) {
-    // v0.40 token 紧凑显示 · < 1k 原数 · < 1M 用 k · ≥ 1M 用 M · 一位小数
-    const fmtTok = (n) => {
-      if (n < 1000) return String(n);
-      if (n < 1000000) return (n / 1000).toFixed(1) + 'k';
-      return (n / 1000000).toFixed(1) + 'M';
-    };
-    log('  ' + bold('Coding 跟 AI'));
-    log(sepia('    Claude Code ') + bold(ccUsage.messages + ' 条 assistant') + sepia(' · 跨 ') + bold(ccUsage.sessions + ' 个 session'));
-    for (const [model, u] of Object.entries(ccUsage.models)) {
-      const totalInput = u.input + u.cacheCreate + u.cacheRead;
-      log(sepia('      · ') + model + sepia(' · 入 ') + bold(fmtTok(totalInput)) + sepia(' (cache 读 ') + sepia(fmtTok(u.cacheRead)) + sepia(') · 出 ') + bold(fmtTok(u.output)));
-    }
-    log('');
-  }
 
   log('  ' + bold('Tinker'));
   if (todayUpdates.length === 0) {
@@ -10547,7 +10445,7 @@ function help() {
   log('  ' + vermilion('tinker screenshot <provider> <key>') + sepia('   换截图后端 (apiflash / screenshotone · 默认 microlink 免费档) · test 验一张'));
   log('');
   log(sepia('  ') + vermilion('收尾 · 沉淀'));
-  log('  ' + vermilion('tinker goodnight') + sepia('                   今日总结 (commit + push + Claude Code token + 方法被借)'));
+  log('  ' + vermilion('tinker goodnight') + sepia('                   今日总结 (commit + push + 方法被借)'));
   log('  ' + vermilion('tinker goodnight --week') + sepia(' / ') + vermilion('--month') + sepia('     周报 / 月报'));
   log('  ' + vermilion('tinker goodnight --narrate') + sepia('          让 LLM 替你说一句'));
   log('');
@@ -11059,7 +10957,7 @@ function cmdSchema(opts = {}) {
         { arg: 'set | status | off | usage', purpose: '子命令' },
         { flag: '--json', purpose: '结构化' },
       ], jsonOutput: true, example: 'tinker llm usage --json' },
-      { name: 'goodnight', alias: 'recap', purpose: '今日总结 (commits / Tinker push / Claude Code token)', args: [
+      { name: 'goodnight', alias: 'recap', purpose: '今日总结 (commits / Tinker push / 方法被借)', args: [
         { flag: '--json', purpose: '结构化' },
         { flag: '--narrate', purpose: '让 LLM 朋友式说一句' },
       ], jsonOutput: true, example: 'tinker goodnight --json' },
@@ -11344,8 +11242,6 @@ module.exports = {
   // LLM
   llmDraft, llmQuickDraft, sanitizeDraft, validateDraft,
   recordLLMUsage, getTodayLLMUsage,
-  // Claude Code 用量
-  getClaudeCodeUsageToday,
   // 触发器
   evaluateAllTriggers, loadRepoConfig,
   // pending (AI agent 路径)
