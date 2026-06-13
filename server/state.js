@@ -173,21 +173,10 @@ function buildState({ targetUserId } = {}) {
       at: t.at,
       inspiredByUpdateId: t.inspired_by_update_id || null,
     }));
-    const projectMethods = (methodsByProject[p.id] || []).map(m => ({
-      id: m.id,
-      owner: idToHandle[m.owner_id],
-      title: m.title || null,
-      scenario: m.scenario || null,
-      text: m.text,
-      at: m.at,
-      updatedAt: m.updated_at,
-      projectId: m.project_id,
-      sourceUpdateId: m.source_update_id || null,
-      sourceDocPath: m.source_doc_path || null,
-      borrowCount: borrowCounts[m.id] || 0,
-      usedBy: usedByMethod[m.id] || [],
-      tags: m.tags ? (() => { try { return JSON.parse(m.tags); } catch { return []; } })() : [],
-    }));
+    // v1.0 去重 · 方法全文只在顶层 methods[] 存一份 (单一真相)
+    // 这里项目只挂 id 引用 · webapp 按 id 去 state.methods 取完整对象
+    // 之前每条方法的 text 在 顶层 + 项目里各发一份 · 27KB 白白重复
+    const projectMethodIds = (methodsByProject[p.id] || []).map(m => m.id);
     return {
       id: p.id,
       owner: idToHandle[p.owner_id],
@@ -206,7 +195,7 @@ function buildState({ targetUserId } = {}) {
       tools: (tools[p.id] || []).map(t => t.tool),
       updates: projectUpdates,
       notes: projectNotes,
-      methods: projectMethods,
+      methods: projectMethodIds,
       reactions: { wantToTry, tinkered: tinkeredList },
     };
   });

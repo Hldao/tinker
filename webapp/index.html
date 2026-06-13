@@ -8696,7 +8696,12 @@ function renderProject(owner, slug) {
       // 解法: methods 是独立 entity (v0.81) · 时间线只渲染 updates · 沉淀方法区读 p.methods
       // proven (usedBy ≥3) 留在时间线 · 因为它原本就是真实进展 · 只是被认证为方法
       const indexOf = new Map(p.updates.map((u, i) => [u.id, i]));
-      const projectMethods = p.methods || [];
+      // v1.0 去重后 p.methods 是 id 数组 · 去顶层 state.methods 取完整对象
+      // 兼容老形状: 万一拿到的还是完整对象 (部署/缓存错位窗口) 直接用
+      const methodsById = new Map((state.methods || []).map(m => [m.id, m]));
+      const projectMethods = (p.methods || [])
+        .map(m => (typeof m === 'string' ? methodsById.get(m) : m))
+        .filter(Boolean);
       const methodUpdates = p.updates.filter(u => u.isMethod); // 老数据兼容 (v0.81 之前的 update.is_method)
       const timelineUpdates = p.updates.filter(u => !u.isMethod);
 
@@ -11312,7 +11317,7 @@ async function deleteMethodEntity(methodId) {
     showToast('删了');
     // 重新渲染当前项目页
     for (const p of state.projects) {
-      if ((p.methods || []).some(x => x.id === methodId)) {
+      if ((p.methods || []).some(x => (typeof x === 'string' ? x : x.id) === methodId)) {
         renderProject(p.owner, p.slug);
         return;
       }
