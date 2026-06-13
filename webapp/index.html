@@ -9357,7 +9357,7 @@ async function renderSeekingPage() {
         ? `<span style="color: var(--moss);">已有 ${s.replyCount} 条回应</span> <span style="color: var(--sepia-light);">·</span> `
         : '';
       return `
-        <div class="method-hero-card" style="cursor: default;">
+        <div class="method-hero-card" onclick="if (event.target.closest('.nh')||event.target.closest('.method-hero-card-used')) return; showScreen('update','${escapeHtml(s.id)}');">
           <div class="method-hero-card-top">
             <span class="method-hero-card-badge" style="color: var(--vermilion);">⊙ 求方法</span>
           </div>
