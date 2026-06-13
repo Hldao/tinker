@@ -2483,11 +2483,14 @@ async function cmdClaudeHookInstall(opts = {}) {
   // SessionEnd · 用户 Cmd+Q 或 session 终止时触发
   installClaudeHookEntry(settings.hooks.SessionEnd, null, backfillCmd, 'session-end');
 
+  // 砍掉收工时间提醒 (旧版 maybe-deep-summary hook) · 用户嫌"现在北京时间 X 点"那句烦
+  // 旧版本装过的 · 这里主动摘除孤儿 entry · 让所有已安装的下次 install / update 自愈
+  settings.hooks.UserPromptSubmit = settings.hooks.UserPromptSubmit.filter(
+    h => !(h && h.hooks && h.hooks.some(x => x.command && /tinker maybe-(deep-summary|goodnight)/.test(x.command)))
+  );
+
   // v0.16 词典统一:matcher 词从 MAYBE_KINDS 拿 · 改词只动 MAYBE_KINDS 一处 · DRY
   // 跨 AI 通用入口 `tinker maybe-check --text "..."` 跟这里共用同一份词典
-  // tinker maybe-goodnight 走单独的 GOODNIGHT_MATCHER · 自己判断今天值不值得收尾
-  installClaudeHookEntry(settings.hooks.UserPromptSubmit, GOODNIGHT_MATCHER, 'tinker maybe-deep-summary 2>/dev/null || true', 'deep-summary');
-
   // 6 组 maybe-X · 每组 matcher 词从 MAYBE_KINDS 取
   // kind camelCase → shell command kebab-case (cleverFix → clever-fix)
   const KIND_TO_CMD = { stuck: 'stuck', breakthrough: 'breakthrough', decision: 'decision', subtraction: 'subtraction', cleverFix: 'clever-fix', ship: 'ship', handoff: 'handoff', invite: 'invite' };
@@ -2516,7 +2519,6 @@ async function cmdClaudeHookInstall(opts = {}) {
   log(sepia('    SessionStart bridge-inbox         · 每次启动 · 看 inbox 有未处理 handoff'));
   log(sepia('    SessionEnd                         · 关 Claude Code / 系统 sleep 时'));
   log(sepia('    UserPromptSubmit pending-check    · 每次用户 prompt · 检查 hook 触发的待处理 reminder'));
-  log(sepia('    UserPromptSubmit deep-summary     · 说收工类的话 · 建议跑 tinker deep-summary'));
   log(sepia('    UserPromptSubmit stuck            · 说卡住类的话'));
   log(sepia('    UserPromptSubmit breakthrough     · 说顿悟类的话'));
   log(sepia('    UserPromptSubmit decision         · 做工具/方案选择'));
@@ -4426,30 +4428,11 @@ async function cmdGoodnight(opts = {}) {
   log('');
 }
 
-// v0.88 `tinker maybe-goodnight` · 静默检查"今天值得收尾吗"
-// 给 Claude Code user-prompt-submit-hook 调用 · 听到"晚安/收工"等词时跑这个
-// 命中条件 → stdout 输出一行 reminder 给 hook 注入对话
-// 不命中 → 静默退出 · stdout 空
+// 砍了 · 收工时间提醒 ("现在北京时间 X 点...") 用户嫌烦
+// 留个空壳 · 接住已安装但还没 update 的旧 hook 调用 (静默 · 不再冒提醒)
+// hook install 那边已不再装这条 · 且会主动摘除旧的孤儿 entry
 function cmdMaybeGoodnight() {
-  // 今日已 goodnight 过 → 静默
-  const ps = loadPromptState();
-  if (ps.lastGoodnightDate === workdayKey()) return;
-  // 时间窗:北京时间 23 点之后或凌晨 0-4 点才提收尾 · 19 点附近是下班 · 不算晚安
-  // 晚饭后说"歇会儿/累了"不该当 goodnight 信号 · 时间没到直接静默
-  const hour = beijingHour();
-  if (hour >= 5 && hour < 23) return;
-  // 不在 git repo → 静默 · 没法判断今日活动
-  if (!inGitRepo()) return;
-  // "工作日" commit 数 · 凌晨 0-4 算前一天 (不然 since=今日4am 是未来时间 · git 返回 0)
-  let commitCount = 0;
-  try {
-    const since = `${workdayKey()} 04:00`;
-    const out = execSync(`git log --since="${since}" --no-merges --oneline`, { encoding: 'utf-8' }).toString().trim();
-    commitCount = out ? out.split('\n').length : 0;
-  } catch { return; }
-  if (commitCount === 0) return;
-  // 文案不再陈述 commit 数 · 之前那版读起来像"做了这么多该收尾了" · commit 数不该是收尾信号
-  process.stdout.write(`现在北京时间 ${hour} 点 · 用户刚说了收工类的话 · 看上下文真要收工的话建议跑 tinker deep-summary 看今日总结\n`);
+  return;
 }
 
 // v0.14 对话内 maybe-X 触发器 · 把 keyword 触发从 commit message 搬到 Claude Code 对话
@@ -4502,9 +4485,6 @@ const MAYBE_KINDS = {
     reminder: '用户对话里像是想邀请队友加入工作室。跟其他 maybe-X 不同 · invite 让你主动跑命令:\n1) 找 slug: 跑 `tinker studio list` 看用户哪个 active · 用 active 的 slug\n2) 找目标 handle: 从对话里看 (比如"邀请猫猫" → @猫猫)\n3) Bash 跑 `tinker studio invite <slug> @<handle>`\n4) 命令自动通过 bridge 投递邀请通知给对方 · 不用复制 token 微信发\n5) 报告用户已发 · 对方下次起 Claude session 时自动收到 + 提示一键加入',
   },
 };
-
-// goodnight matcher · 单独存 (cmdMaybeGoodnight 有自己的判断逻辑 · 不走 MAYBE_KINDS)
-const GOODNIGHT_MATCHER = '晚安|收工|今天就到|明天继续|睡了|累了|下班|收摊|休息|不弄了|做到这|歇了';
 
 // v0.14 maybe-X 命中观测 · 追加 jsonl 到 ~/.tinker/trigger-log.jsonl
 // 只记 kind / event / cwd / 冷却剩余 · 不持久 prompt 内容 · 失败静默
