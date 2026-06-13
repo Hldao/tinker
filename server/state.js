@@ -34,7 +34,10 @@ function buildState({ targetUserId } = {}) {
   for (const u of usersRows) {
     idToHandle[u.id] = u.handle;
     if (referencedIds.has(u.id)) {
-      usersOut[u.handle] = { name: u.name || u.handle, tagline: u.tagline || '' };
+      usersOut[u.handle] = { name: u.name || u.handle };
+      // tagline (简介) 不进公开启动包 · 只带当前用户自己的 · 看别人的走 /api/users/:handle 按 handle 取
+      // (成熟产品的"最小作者投影":启动包只够渲染内容作者的显示名 · bio 点进资料页才加载)
+      if (u.id === targetUserId) usersOut[u.handle].tagline = u.tagline || '';
     }
   }
 
@@ -412,4 +415,14 @@ function userIdFromHandle(handle) {
   return row?.id || null;
 }
 
-module.exports = { buildState, userIdFromHandle, buildProjectUpdates, searchUpdates, searchWorkshops };
+// 单个用户公开资料 · 凭 handle 查 (不可枚举 · 没有"列所有用户"这种口)
+// bio/tagline 从启动包挪到这里 · 点进工坊页才取 · 给 /api/users/:handle 用
+function getUserProfile({ handle } = {}) {
+  const h = String(handle || '').trim();
+  if (!h) return null;
+  const u = db.prepare('SELECT handle, name, tagline FROM users WHERE handle = ?').get(h);
+  if (!u) return null;
+  return { handle: u.handle, name: u.name || u.handle, tagline: u.tagline || '' };
+}
+
+module.exports = { buildState, userIdFromHandle, buildProjectUpdates, searchUpdates, searchWorkshops, getUserProfile };

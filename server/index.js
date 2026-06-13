@@ -23,7 +23,7 @@ const path = require('path');
 
 const { logger } = require('./logger');
 const db = require('./db');                  // SQLite · 启动时自动跑 migrations
-const { buildState, buildProjectUpdates, searchUpdates, searchWorkshops } = require('./state');
+const { buildState, buildProjectUpdates, searchUpdates, searchWorkshops, getUserProfile } = require('./state');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
 const blobs = require('./blobs');
@@ -650,6 +650,18 @@ app.get('/api/users/:handle/studios-preview', stateLimiter, (req, res) => {
   const user = db.prepare('SELECT id FROM users WHERE handle = ?').get(req.params.handle);
   if (!user) return res.json({ ok: true, studios: [] });
   res.json({ ok: true, studios: studios.studiosForUserWithPreview(user.id) });
+});
+
+// 单个用户公开资料 (name + tagline) · 凭 handle 取 · 工坊页进去时拉
+// bio 从启动包挪到这里 · 启动包不再批量带所有人的简介 · 也不可枚举 (得知道 handle)
+app.get('/api/users/:handle', stateLimiter, (req, res) => {
+  try {
+    const profile = getUserProfile({ handle: req.params.handle });
+    if (!profile) return res.status(404).json({ error: '没找到这个用户' });
+    res.json({ ok: true, user: profile });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // owner 邀请别人 · client 传 tokenHash + secretCipher (server 看不到 token 跟 secret)
