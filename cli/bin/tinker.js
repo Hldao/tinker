@@ -734,7 +734,7 @@ async function cmdLogin(opts = {}) {
     return;
   }
 
-  const { input, select, password } = require('@inquirer/prompts');
+  const { input, select, password } = promptKit();
   log(vermilion('\n  tinker login') + sepia('   · 一次性配置'));
   log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
   const serverUrl = await input({
@@ -833,7 +833,7 @@ async function cmdOnboard(opts = {}) {
     } else {
       const state = await apiState(cfg);
       const mine = (state.projects || []).filter(p => p.owner === cfg.handle);
-      const { select, input } = require('@inquirer/prompts');
+      const { select, input } = promptKit();
 
       let projectIdToBind = null;
       let projectName = null;
@@ -1216,7 +1216,7 @@ async function cmdPush(opts) {
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '推到哪个项目?',
       choices: mine.map(p => ({
@@ -1228,7 +1228,7 @@ async function cmdPush(opts) {
 
   let pushText = opts.text;
   if (!pushText) {
-    const { input } = require('@inquirer/prompts');
+    const { input } = promptKit();
     const suggestion = gitOneCommit();
     pushText = await input({ message: '一句进展', default: suggestion || undefined });
   }
@@ -1321,7 +1321,7 @@ async function cmdPushFromDraft(cfg, opts) {
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '发到哪个项目?',
       choices: mine.map(p => ({
@@ -1342,7 +1342,7 @@ async function cmdPushFromDraft(cfg, opts) {
   log('');
   // --yes 跳过确认 (跟 experience 草稿路径一致 · 给 AI / 非交互场景用)
   if (!opts.yes) {
-    const { confirm } = require('@inquirer/prompts');
+    const { confirm } = promptKit();
     const yes = await confirm({ message: '发到「' + p.name + '」?', default: true });
     if (!yes) { log(sepia('  取消了')); return; }
   }
@@ -1387,7 +1387,7 @@ async function cmdPushExperienceDraft(cfg, opts, text, productTag = 'experience'
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '发到哪个项目?',
       choices: mine.map(p => ({
@@ -1406,7 +1406,7 @@ async function cmdPushExperienceDraft(cfg, opts, text, productTag = 'experience'
   log(sepia('  ─────────'));
   log('');
   if (!opts.yes) {
-    const { confirm } = require('@inquirer/prompts');
+    const { confirm } = promptKit();
     const yes = await confirm({
       message: `发到「${p.name}」并标为${productLabel}?`,
       default: true,
@@ -1464,7 +1464,7 @@ async function cmdStuck(opts) {
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '哪个项目卡住了?',
       choices: mine.map(p => ({
@@ -1477,7 +1477,7 @@ async function cmdStuck(opts) {
   // 决定卡住描述 (-m 给了 / 交互问)
   let stuckText = opts.text;
   if (!stuckText) {
-    const { input } = require('@inquirer/prompts');
+    const { input } = promptKit();
     stuckText = await input({
       message: '卡在哪? (一句话 · 越具体越容易被人接上)',
       default: undefined,
@@ -1614,7 +1614,7 @@ async function cmdShip(opts) {
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '哪个项目完工了?',
       choices: mine.map(p => ({
@@ -1626,7 +1626,7 @@ async function cmdShip(opts) {
 
   let reflection = opts.text;
   if (!reflection) {
-    const { input } = require('@inquirer/prompts');
+    const { input } = promptKit();
     reflection = await input({
       message: '写一句完工感想 (会进时间线,也进陈列馆代表这件作品)',
       default: undefined,
@@ -1723,7 +1723,7 @@ async function cmdEditShip(opts) {
       projectId = candidates[0].id;
       log(sepia('  自动选了唯一一个 shipped 项目: ') + bold(candidates[0].name));
     } else {
-      const { select } = require('@inquirer/prompts');
+      const { select } = promptKit();
       projectId = await select({
         message: '改哪个项目的完工感想?',
         choices: candidates.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
@@ -1795,7 +1795,7 @@ async function cmdFreeze(opts) {
     projectId = candidates[0].id;
     log(sepia('  自动选了唯一一个 live 项目: ') + bold(candidates[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '暂停维护哪个?',
       choices: candidates.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
@@ -1827,7 +1827,7 @@ async function cmdRelaunch(opts) {
     projectId = candidates[0].id;
     log(sepia('  自动选了唯一一个 done 项目: ') + bold(candidates[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '重新激活哪个?',
       choices: candidates.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
@@ -2007,7 +2007,7 @@ async function cmdUpdateReal() {
     log(sepia('  这个 ') + vermilion('tinker update') + sepia(' 是升级 CLI 自己 · 拉最新代码 + npm install -g'));
     log('');
     try {
-      const { confirm } = require('@inquirer/prompts');
+      const { confirm } = promptKit();
       const go = await confirm({ message: '要继续升级 CLI 吗?', default: false });
       if (!go) {
         log('');
@@ -2295,7 +2295,7 @@ async function cmdHookInstall() {
       err('你在 Tinker 上还没项目 · 先去 ' + cfg.serverUrl + ' 开张');
       process.exit(1);
     }
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     const projectId = mine.length === 1 ? mine[0].id : await select({
       message: '这个 git 仓库对应哪个 Tinker 项目?',
       choices: mine.map(p => ({ name: p.name + sepia('  ' + (p.desc||'').slice(0, 40)), value: p.id })),
@@ -3952,7 +3952,7 @@ async function cmdCheck(opts) {
     return;
   }
 
-  const { select, input } = require('@inquirer/prompts');
+  const { select, input } = promptKit();
   let choice;
   try {
     choice = await select({ message: '怎么处理?', choices });
@@ -4179,7 +4179,7 @@ async function cmdLlm(sub, opts = {}) {
   }
 
   // set (or 没配过 · sub === undefined 也走这里)
-  const { input, select, password } = require('@inquirer/prompts');
+  const { input, select, password } = promptKit();
   log('');
   log(sepia('  配 LLM · 给 prompt 自动起草用'));
   log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
@@ -6936,7 +6936,7 @@ ${commits.join('\n')}
 
   // 5. confirm
   if (!opts.yes) {
-    const { confirm } = require('@inquirer/prompts');
+    const { confirm } = promptKit();
     const yes = await confirm({
       message: '发布到当前项目 + 标 [上手指南] + 广播到工作室?',
       default: true,
@@ -7160,7 +7160,7 @@ async function cmdWitnessPublish(opts) {
       log(sepia('  ─── 共 ') + sizeKB + sepia(' KB ───'));
       log('');
       if (process.stdout.isTTY) {
-        const { confirm } = require('@inquirer/prompts');
+        const { confirm } = promptKit();
         const yes = await confirm({ message: 'context 看起来 OK · 加进 witness 一起广播?', default: true });
         if (!yes) { transcript = null; log(sepia('  跳过 context · 只发 witness 主体')); }
       } else {
@@ -7670,7 +7670,7 @@ async function gateVoiceCheck(text, opts = {}) {
   log(vermilion('  ⚠ voice 自检') + sepia(' · 这段读着有点像 AI 直出 (命中 ' + vc.score + ' 条: ' + hits + ')'));
   if (process.stdin.isTTY && process.stdout.isTTY) {
     try {
-      const { confirm } = require('@inquirer/prompts');
+      const { confirm } = promptKit();
       const go = await confirm({ message: '还是要发吗?', default: true });
       if (!go) {
         log(sepia('  没发 · 跑 ') + vermilion('tinker draft') + sepia(' 让 LLM 按你 voice 重写一下'));
@@ -7900,7 +7900,7 @@ async function cmdResolve(choice, opts) {
 // 交互式让用户标 y/n/skip · 分别进 good 池 / bad 池 / 跳过
 // 直接监督 fingerprint 学习 · 是 v0.11 voice teach review 模式的核心
 async function reviewCandidatesInteractively(candidates, cfg, sourceTag) {
-  const { select } = require('@inquirer/prompts');
+  const { select } = promptKit();
   const goodDir = path.join(CONFIG_DIR, 'style-pool', 'good');
   const badDir = path.join(CONFIG_DIR, 'style-pool', 'bad');
   fs.mkdirSync(goodDir, { recursive: true });
@@ -8123,7 +8123,7 @@ async function cmdVoiceTeach(opts) {
 
     let go;
     try {
-      const { confirm } = require('@inquirer/prompts');
+      const { confirm } = promptKit();
       go = await confirm({ message: `把这 ${picked.length} 条加进 ~/.tinker/style-pool/good/ 吗?`, default: true });
     } catch { go = false; }
     if (!go) { log(sepia('  取消了')); return; }
@@ -8893,6 +8893,26 @@ function readHookStdin() {
   try { return JSON.parse(fs.readFileSync(0, 'utf-8')); } catch { return {}; }
 }
 
+// 真能跑交互 prompt 的前提:stdin 跟 stdout 都是 TTY
+// 非 TTY (AI 用 Bash 跑 / CI / hook / 管道) 时 inquirer 会抛隐晦 EOF 错
+// 交互点用这个先拦一下 · 给明确指引而不是让 inquirer crash
+function isInteractive() {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+// 交互 prompt 的统一入口 · 替代直接 require('@inquirer/prompts')
+// 非交互环境 (AI / CI / 管道) 先抛一个带清楚指引的错 · 不让 inquirer 崩出 EOF
+// 这个错会冒泡到 main() 的 catch · 被 err() 干净打印
+// (已经被 isInteractive()/isTTY 守住的调用点换成它也无害 · 那里永远 interactive)
+function promptKit() {
+  if (!isInteractive()) {
+    const e = new Error('这步需要终端交互 · 当前是非交互环境 (AI / CI / 管道) · 改用 --json 配合对应参数 (看 tinker <命令> --help) · 或到终端里手动跑');
+    e.code = 'NON_INTERACTIVE';
+    throw e;
+  }
+  return require('@inquirer/prompts');
+}
+
 function cmdNotifyClaude(event) {
   const input = readHookStdin();
   const sid = String(input.session_id || 'default').replace(/[^\w.-]/g, '_');
@@ -9109,7 +9129,7 @@ async function cmdDeleteUpdate(updateIds, opts) {
   if (!opts.yes && !opts.json) {
     if (process.stdin.isTTY && process.stdout.isTTY) {
       try {
-        const { confirm } = require('@inquirer/prompts');
+        const { confirm } = promptKit();
         const go = await confirm({ message: '确定删这 ' + ids.length + ' 条 (不可逆)?', default: false });
         if (!go) { log(sepia('  没删')); return; }
       } catch { log(sepia('  没删')); return; }
@@ -9545,7 +9565,7 @@ async function cmdSeek(opts) {
     projectId = mine[0].id;
     log(sepia('  自动选了唯一一个项目: ') + bold(mine[0].name));
   } else {
-    const { select } = require('@inquirer/prompts');
+    const { select } = promptKit();
     projectId = await select({
       message: '挂在哪个项目下?',
       choices: mine.map(p => ({ name: p.name + sepia('  ' + p.desc.slice(0, 40)), value: p.id })),
@@ -9554,7 +9574,7 @@ async function cmdSeek(opts) {
 
   let seekText = opts.text;
   if (!seekText) {
-    const { input } = require('@inquirer/prompts');
+    const { input } = promptKit();
     seekText = await input({ message: '你需要什么方法?' });
   }
   seekText = (seekText || '').trim();
@@ -9773,9 +9793,9 @@ async function cmdContributeFromFile(cfg, opts) {
     if (repoCfg) {
       projectId = repoCfg.projectId; projectName = repoCfg.projectName;
       log(sepia('  当前 repo 绑定 ') + bold(projectName) + sepia(' · 这次 contribute 挂在它名下'));
-    } else if (!opts.json) {
+    } else if (!opts.json && isInteractive()) {
       // 交互选项目
-      const { select } = require('@inquirer/prompts');
+      const { select } = promptKit();
       const state = await apiState(cfg);
       const mine = state.projects.filter(x => x.owner === cfg.handle && x.status !== 'done');
       if (mine.length === 0) { err('你还没建项目 · 先发一条 push 创建'); process.exit(1); }
@@ -9786,7 +9806,10 @@ async function cmdContributeFromFile(cfg, opts) {
       projectId = picked;
       projectName = mine.find(p => p.id === picked).name;
     } else {
-      return errJson('未指定项目 (--project) 且当前 repo 未绑定', 'NO_PROJECT_CTX');
+      // --json 或非交互 (AI / CI / 管道):没法弹选择框 · 给明确指引而不是让 inquirer 崩
+      const msg = '没法确定挂哪个项目 · 加 --project <slug 或项目名> 指定 · 或在已绑定项目的 repo 里跑';
+      if (opts.json) return errJson(msg, 'NO_PROJECT_CTX');
+      err(msg); process.exit(1);
     }
   }
 
@@ -9840,9 +9863,9 @@ async function cmdContributeFromFile(cfg, opts) {
       if (opts.json) return errJson(errMsg, 'NO_MATCH');
       err(errMsg); process.exit(1);
     }
-  } else {
+  } else if (isInteractive()) {
     // 交互式选 (复选)
-    const { checkbox } = require('@inquirer/prompts');
+    const { checkbox } = promptKit();
     log('');
     log(sepia('  从 ') + bold(filePath) + sepia(' 切了 ') + bold(sections.length + ' 段') + sepia(' · 勾你想 contribute 的'));
     log('');
@@ -9855,6 +9878,11 @@ async function cmdContributeFromFile(cfg, opts) {
       })),
     });
     if (chosen.length === 0) { log(sepia('  没勾任何段 · 取消')); return; }
+  } else {
+    // 非交互 (AI / CI / 管道):没法弹多选框 · 给明确指引而不是让 inquirer 崩
+    const msg = '非交互环境没法弹多选框 · 加 --section "<标题>" 选段 · 或 --auto 让 LLM 挑 · 或 --json';
+    if (opts.json) return errJson(msg, 'NO_SECTION_NONINTERACTIVE');
+    err(msg); process.exit(1);
   }
 
   // 隐私扫描 · 每段单独扫
@@ -9872,7 +9900,7 @@ async function cmdContributeFromFile(cfg, opts) {
         log(sepia('    --json 模式 · 自动跳过含隐私风险段'));
         continue;
       }
-      const { confirm } = require('@inquirer/prompts');
+      const { confirm } = promptKit();
       const goAnyway = await confirm({ message: '还是要 contribute 这段? (你看过没问题就 y)', default: false });
       if (!goAnyway) { skipped.push({ heading: sec.heading, reason: 'PRIVACY_USER' }); log(sepia('    跳过')); continue; }
     }
@@ -9880,7 +9908,7 @@ async function cmdContributeFromFile(cfg, opts) {
     const preview = sec.fullText.slice(0, 200).replace(/\n/g, ' ');
     log(sepia('    预览: ') + preview + (sec.charCount > 200 ? sepia('...') : ''));
     if (!opts.json) {
-      const { confirm } = require('@inquirer/prompts');
+      const { confirm } = promptKit();
       const go = await confirm({ message: '发这段 (标方法)?', default: true });
       if (!go) { skipped.push({ heading: sec.heading, reason: 'USER_NO' }); log(sepia('    跳过')); continue; }
     }
