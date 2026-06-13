@@ -801,3 +801,35 @@ test('exhibitProject ship: 重新补图 (已 live) 不再重复通知 wantToTry'
   const notifs = db.prepare("SELECT 1 FROM notifications WHERE target_user_id = ? AND type = 'projectDone'").all(alice);
   assert.equal(notifs.length, 1, '只通知首次 · 补图不再扰');
 });
+
+// ============================================
+// addUpdate 重复 push 兜底 (防箭证那种秒级连发刷屏)
+// ============================================
+test('addUpdate: 同项目 15 分钟内相同正文被兜底去重 (不写第二条)', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  const r1 = a.addUpdate({ projectId: p.id, text: '一模一样的进展内容' }, { currentUserId: daodao });
+  const r2 = a.addUpdate({ projectId: p.id, text: '一模一样的进展内容' }, { currentUserId: daodao });
+  assert.ok(!r1.deduped, '第一条正常写入');
+  assert.ok(r2.deduped, '第二条被去重');
+  assert.equal(r2.id, r1.id, '去重返回第一条的 id');
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM updates WHERE project_id = ?').get(p.id).c, 1, '库里只有一条');
+});
+
+test('addUpdate: 不同正文不去重', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '第一条不同内容' }, { currentUserId: daodao });
+  const r2 = a.addUpdate({ projectId: p.id, text: '第二条不同内容' }, { currentUserId: daodao });
+  assert.ok(!r2.deduped);
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM updates WHERE project_id = ?').get(p.id).c, 2);
+});
+
+test('addUpdate: 相同正文超过 15 分钟不去重 (窗口外)', () => {
+  const { daodao } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.addUpdate({ projectId: p.id, text: '同样的话', at: Date.now() - 20 * 60 * 1000 }, { currentUserId: daodao });
+  const r2 = a.addUpdate({ projectId: p.id, text: '同样的话' }, { currentUserId: daodao });
+  assert.ok(!r2.deduped, '20 分钟前那条在窗口外 · 不去重');
+  assert.equal(db.prepare('SELECT COUNT(*) AS c FROM updates WHERE project_id = ?').get(p.id).c, 2);
+});

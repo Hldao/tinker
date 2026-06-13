@@ -478,6 +478,25 @@ function addUpdate({ projectId, text, images, prompt, notifyTinkered, alsoStuck,
   if (!p) throw new Error('项目不存在');
   if (p.owner_id !== currentUserId) throw new Error('只能给自己的项目记一笔');
 
+  // v1.0 重复 push 兜底: 同项目 15 分钟内已有一模一样的正文 → 直接返那条 · 不写第二条
+  // 箭证那次客户端抽风 · 12 分钟连发 7 条同内容把 feed 刷屏了。服务端兜底 · 不依赖客户端带 idempotency-key。
+  const DEDUP_WINDOW_MS = 15 * 60 * 1000;
+  const dupRow = db.prepare(
+    'SELECT id, at FROM updates WHERE project_id = ? AND text = ? AND at > ? ORDER BY at DESC LIMIT 1'
+  ).get(projectId, text.trim(), Date.now() - DEDUP_WINDOW_MS);
+  if (dupRow) {
+    const li = db.prepare(`
+      SELECT p.slug AS project_slug, p.name AS project_name, usr.handle AS owner_handle
+      FROM projects p JOIN users usr ON usr.id = p.owner_id WHERE p.id = ?
+    `).get(projectId);
+    return {
+      id: dupRow.id, text: text.trim(), at: dupRow.at, deduped: true, statusChanged: false,
+      projectSlug: li ? li.project_slug : null,
+      projectName: li ? li.project_name : null,
+      ownerHandle: li ? li.owner_handle : null,
+    };
+  }
+
   const updateId = 'u-' + Date.now() + Math.random().toString(36).slice(2, 6);
   const now = Date.now();
   // 可选回填时间(CLI 给真实 commit 时间用)· 限制不能未来 · 不能比项目还早
