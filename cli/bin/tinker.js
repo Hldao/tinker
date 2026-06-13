@@ -2069,6 +2069,12 @@ async function cmdUpdateReal() {
     try { await cmdClaudeHookInstall({ quiet: true }); ok('hook 已刷新'); }
     catch { log(sepia('  hook 刷新没成 · 手动跑一下 ') + vermilion('tinker hook install-claude')); }
   }
+  // 升级后也刷新 Codex 的 AGENTS.md 块 (跟 Claude hook 同理 · 只在原本装过时刷 · 让 Codex 用户也拿到新版指令)
+  if (hasCodexAgentsInstalled()) {
+    log(sepia('  刷新 AGENTS.md 的 Tinker 块 (Codex) ...'));
+    try { writeAgentsBlock(); ok('AGENTS.md 已刷新'); }
+    catch { log(sepia('  AGENTS.md 刷新没成 · 手动跑一下 ') + vermilion('tinker hook install-codex')); }
+  }
 
   // 最近几条更新内容(粗略)
   try {
@@ -2369,30 +2375,42 @@ function buildAgentsBlock() {
   ].join('\n');
 }
 
+// AGENTS.md 里 Tinker 块的剥离正则 (install / uninstall / 升级刷新 共用)
+function agentsBlockStripRegex() {
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(esc(AGENTS_BEGIN) + '[\\s\\S]*?' + esc(AGENTS_END) + '\\n?', 'g');
+}
+// 当前 repo 装没装 Codex/AGENTS.md 集成 (给 tinker update 升级后判断要不要刷新)
+function hasCodexAgentsInstalled() {
+  try { return fs.readFileSync(path.join(process.cwd(), 'AGENTS.md'), 'utf-8').includes(AGENTS_BEGIN); }
+  catch { return false; }
+}
+// 写/更新项目根 AGENTS.md 的 Tinker 块 (带标记 · 不覆盖用户其它内容) · 返回文件是否原本就存在
+function writeAgentsBlock() {
+  const agentsFile = path.join(process.cwd(), 'AGENTS.md');
+  let content = '', existed = false;
+  if (fs.existsSync(agentsFile)) {
+    existed = true;
+    content = fs.readFileSync(agentsFile, 'utf-8').replace(agentsBlockStripRegex(), '');
+  }
+  content = content.trimEnd();
+  content = content ? content + '\n\n' + buildAgentsBlock() : buildAgentsBlock();
+  fs.writeFileSync(agentsFile, content);
+  return existed;
+}
+
 async function cmdCodexHookInstall(opts = {}) {
   // 第一步: 装 git hook + 绑 repo (跟 tinker hook install 一样 · 工具无关 · commit 触发器靠这个)
   await cmdHookInstall();
-
   // 第二步: 往项目根 AGENTS.md 写 Tinker 指令块 (Codex 读这个 · 带标记 · 可更新可删)
-  const agentsFile = path.join(process.cwd(), 'AGENTS.md');
-  let content = '';
-  let existed = false;
-  if (fs.existsSync(agentsFile)) {
-    existed = true;
-    content = fs.readFileSync(agentsFile, 'utf-8');
-    content = content.replace(new RegExp(AGENTS_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + AGENTS_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\n?', 'g'), '');
-  }
-  const block = buildAgentsBlock();
-  content = content.trimEnd();
-  content = content ? content + '\n\n' + block : block;
-  fs.writeFileSync(agentsFile, content);
-
+  const existed = writeAgentsBlock();
   log('');
   ok('Codex 集成装好了 (AGENTS.md)');
   log(sepia('    AGENTS.md       ') + (existed ? '已更新 Tinker 指令块' : '新建 · 写入 Tinker 指令块') + sepia(' (Codex 读它 · 学会主动调 tinker)'));
   log('');
   log(sepia('  Codex 没有 Claude Code 那种逐条注入的 hook · 靠 AGENTS.md 指令让 agent 主动调命令'));
   log(sepia('  commit 触发器走的是 git hook (工具无关 · 上面已装)'));
+  log(sepia('  以后 ') + vermilion('tinker update') + sepia(' 升级时 · AGENTS.md 块会自动跟着刷新 (跟 Claude hook 一样)'));
   log(sepia('  关:    ') + vermilion('tinker hook uninstall-codex') + sepia(' (删 AGENTS.md 里的块) · ') + vermilion('tinker hook uninstall') + sepia(' (删 git hook)'));
 }
 
@@ -2401,8 +2419,7 @@ function cmdCodexHookUninstall() {
   if (!fs.existsSync(agentsFile)) { log(sepia('  AGENTS.md 不存在 · 没什么要删')); return; }
   let content = fs.readFileSync(agentsFile, 'utf-8');
   if (!content.includes(AGENTS_BEGIN)) { log(sepia('  AGENTS.md 里没有 Tinker 块 · 没删')); return; }
-  content = content.replace(new RegExp(AGENTS_BEGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]*?' + AGENTS_END.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\n?', 'g'), '');
-  content = content.trimEnd();
+  content = content.replace(agentsBlockStripRegex(), '').trimEnd();
   if (content) { fs.writeFileSync(agentsFile, content + '\n'); }
   else { fs.unlinkSync(agentsFile); }  // 整个文件就剩 Tinker 块就删掉
   ok('删了 AGENTS.md 里的 Tinker 块' + (content ? '' : ' · AGENTS.md 空了 · 一并删掉'));
