@@ -8519,9 +8519,16 @@ function renderWorkshop(handle) {
       const projectsById = new Map(state.projects.map(p => [p.id, p]));
       const cards = shown.map(m => {
         const p = m.projectId ? projectsById.get(m.projectId) : null;
+        // scenario 缺失时兜底用正文第一行 (去 markdown 标记) · 跟项目页 renderMethodFirstClass 一致
+        // 别再无脑甩"还没写一句说明" · 方法有正文时那句是错的
+        const mFallbackLine = m.scenario
+          ? null
+          : (m.text || '').split('\n').map(s => s.trim()).find(s => s.length > 0) || '';
         const scenarioOrFallback = m.scenario
           ? `<div class="method-hero-card-scenario">${escapeHtml(m.scenario)}</div>`
-          : `<div class="method-hero-card-untitled" style="opacity:0.4;">还没写一句说明</div>`;
+          : (mFallbackLine
+              ? `<div class="method-hero-card-scenario">${escapeHtml(mFallbackLine.replace(/^#+\s*/, '').slice(0, 80))}</div>`
+              : `<div class="method-hero-card-untitled" style="opacity:0.4;">还没写一句说明</div>`);
         const textJson = JSON.stringify(m.text || '').replace(/"/g, '&quot;');
         const projectLine = p
           ? `<span class="nh" onclick="event.stopPropagation(); showScreen('project','${m.owner}','${p.slug}')">${escapeHtml(p.name)}</span>`
