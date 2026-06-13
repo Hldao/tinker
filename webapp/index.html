@@ -7827,7 +7827,10 @@ window.addEventListener('popstate', () => {
 function projectByOwnerSlug(o,s){ return state.projects.find(p=>p.owner===o&&p.slug===s); }
 function projectById(id){ return state.projects.find(p=>p.id===id); }
 function statusText(s){ return {active:'在做',stuck:'卡住',done:'跑通了',paused:'暂停',archive:'归档',live:'上线'}[s]||s; }
-function escapeHtml(s){ if(!s)return''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escapeHtml(s){ if(!s)return''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// 只放行 http(s) 链接 · 挡 javascript: / data: 等伪协议
+// 用户填的 productLink / githubLink / tinkered link 进 href 前必须过这道 (服务端 isValidUrl 不挡引号也不挡缺校验的字段)
+function safeUrl(u){ return (u && /^https?:\/\//i.test(u)) ? u : ''; }
 
 // 加密占位识别 · 历史上有人借 update.images 槽塞 bridge 密文 (caption='CC-ENC')
 // 这种 image 拉到的是 application/octet-stream · img 渲染空白 · 看着像坏图
@@ -8219,7 +8222,7 @@ function makeEntryEl(e) {
       <div class="entry-meta" style="margin-top: ${shownImgs.length > 0 ? '14px' : '0'};">
         <span>${e.tools.slice(0,3).join('、')}</span>
         ${e.status === 'done' ? `<span class="entry-showcase-link" onclick="event.stopPropagation(); showScreen('showcase','${e.projectId}')">✦ 在陈列馆</span>` : ''}
-        ${seeking && e.productLink ? `<a href="${e.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
+        ${seeking && e.productLink ? `<a href="${escapeHtml(safeUrl(e.productLink))}" target="_blank" rel="noopener" class="entry-seeking-cta" onclick="event.stopPropagation();">去试用 →</a>` : ''}
       </div>
     </div>
   `;
@@ -8689,7 +8692,7 @@ async function renderProject(owner, slug) {
       ` : '')}
       ${p.productLink ? `
       <div class="pheader-action-row" style="justify-content: flex-end;">
-        <a href="${p.productLink}" target="_blank" class="try-cta">
+        <a href="${escapeHtml(safeUrl(p.productLink))}" target="_blank" class="try-cta">
           <span>去试试</span>
           <span class="try-cta-arrow">→</span>
           <span class="try-cta-url">${p.productLink}</span>
@@ -8727,7 +8730,7 @@ async function renderProject(owner, slug) {
           const safeSrc = img.src.replace(/'/g, "\\'");
           return `
             <figure class="tl-figure">
-              <div class="tl-figure-frame" onclick="zoomImage('${safeSrc}', '${escapeHtml(img.caption||'')}')">
+              <div class="tl-figure-frame" onclick="zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
                 <img loading="lazy" src="${img.src}" alt="${escapeHtml(img.caption||'')}" onerror="window.__handleEncImgError(this)">
               </div>
               <figcaption class="tl-figure-caption"><span class="label">图 ${figureIdx}</span>${escapeHtml(img.caption || '')}</figcaption>
@@ -8871,7 +8874,7 @@ async function renderProject(owner, slug) {
                 <span class="arrow">→</span>
                 <span class="ref-user" onclick="showScreen('workshop','${t.user}')" style="cursor: pointer;">@${t.user}</span>
                 <span style="color: var(--sepia);"> 做了 </span>
-                ${t.link ? `<a href="${t.link}" target="_blank" class="ref-name">「${escapeHtml(t.name)}」</a>` : `<span class="ref-name">「${escapeHtml(t.name)}」</span>`}
+                ${safeUrl(t.link) ? `<a href="${escapeHtml(safeUrl(t.link))}" target="_blank" rel="noopener" class="ref-name">「${escapeHtml(t.name)}」</a>` : `<span class="ref-name">「${escapeHtml(t.name)}」</span>`}
                 ${t.user === currentUser.handle ? `<span class="small-action" style="margin-left: 12px;" onclick="deleteTinkered('${p.id}')">${ICONS.undo}撤回</span>` : ''}
                 ${inspSnippet ? `<div style="margin-left: 24px; margin-top: 4px; font-size: 13px; color: var(--sepia);">因 <a href="#update-${insp.id}" onclick="event.preventDefault(); flashAnchor('update-${insp.id}');" style="color: var(--sepia); text-decoration: underline; text-decoration-style: dotted;">「${escapeHtml(inspSnippet)}」</a> 启发</div>` : ''}
               </div>
@@ -8929,7 +8932,7 @@ async function renderProject(owner, slug) {
       <div class="mt-12" style="color: var(--sepia); font-size: 12px;">
         ${p.tools && p.tools.length > 0 ? `用 ${p.tools.join(' · ')} 做的` : ''}
         ${p.tools && p.tools.length > 0 && p.githubLink ? `<span style="color: var(--sepia-light); margin: 0 8px;">·</span>` : ''}
-        ${p.githubLink ? `<a href="${p.githubLink}" target="_blank" style="color: var(--sepia); text-decoration: underline; text-decoration-color: var(--sepia-light); text-underline-offset: 3px;">github</a>` : ''}
+        ${safeUrl(p.githubLink) ? `<a href="${escapeHtml(safeUrl(p.githubLink))}" target="_blank" rel="noopener" style="color: var(--sepia); text-decoration: underline; text-decoration-color: var(--sepia-light); text-underline-offset: 3px;">github</a>` : ''}
       </div>
     ` : ''}
 
@@ -8940,7 +8943,7 @@ async function renderProject(owner, slug) {
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('xhs')">${ICONS.xhs}分享到小红书</span>
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('wechat')">${ICONS.wechat}分享到微信</span>
         <span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="shareProject('copy')">${ICONS.link}复制项目链接</span>
-        ${p.productLink ? `<span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, '${p.productLink}')">${ICONS.external}只复制产物 URL</span>` : ''}
+        ${p.productLink ? `<span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, ${JSON.stringify(p.productLink).replace(/"/g,'&quot;')})">${ICONS.external}只复制产物 URL</span>` : ''}
       </div>
     </div>
   `;
@@ -9406,7 +9409,7 @@ async function renderUpdateDetail(updateId) {
       <div class="entry-meta" style="margin-top: 18px;">
         <span>${(p.tools || []).slice(0, 3).join('、')}</span>
         ${p.status === 'done' ? `<span class="entry-showcase-link" onclick="showScreen('showcase','${p.id}')">✦ 在陈列馆</span>` : ''}
-        ${seeking && p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="entry-seeking-cta">去试用 →</a>` : ''}
+        ${seeking && p.productLink ? `<a href="${escapeHtml(safeUrl(p.productLink))}" target="_blank" rel="noopener" class="entry-seeking-cta">去试用 →</a>` : ''}
       </div>
       <div class="method-detail-context" style="margin-top: 24px;">
         <span class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('project','${p.owner}','${p.slug}'); setTimeout(() => flashAnchor('update-${u.id}'), 50);">在「${escapeHtml(p.name)}」时间线里看上下文 →</span>
@@ -9556,7 +9559,7 @@ function renderShowcase(focusId) {
               <span class="showcase-owner-withdraw" onclick="confirmWithdraw(event, '${p.id}')">暂不入馆</span>
             ` : ''}
             <a class="showcase-card-workshop-link" onclick="event.stopPropagation(); showScreen('workshop','${p.owner}')">看 @${p.owner} 的工坊 →</a>
-            ${p.productLink ? `<a href="${p.productLink}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : `<span class="showcase-card-cta-empty">待补产物</span>`}
+            ${p.productLink ? `<a href="${escapeHtml(safeUrl(p.productLink))}" target="_blank" rel="noopener" class="showcase-card-cta" onclick="event.stopPropagation();" style="color: ${cfg.badgeColor}; border-bottom-color: ${cfg.badgeColor};">${cfg.tryCtaText}</a>` : `<span class="showcase-card-cta-empty">待补产物</span>`}
           </div>
         </div>
       </article>
