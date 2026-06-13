@@ -9873,6 +9873,23 @@ function onNotifClick(notifId, projectOwner, projectSlug, anchor) {
     return;
   }
 
+  // 便签类通知 (noted / mentioned / noteResolved) 的 anchor 是 note-<id>
+  // 便签挂在某条具体进展上时 · 跳到那条进展的帖子页 (便签就在那儿) ·
+  // 而不是空降项目页便签墙 — 否则落进一墙便签里找不到是哪条
+  if (anchor && anchor.indexOf('note-') === 0) {
+    const noteId = anchor.slice(5);
+    let noteUpdateId = null;
+    for (const pr of (state.projects || [])) {
+      const nt = (pr.notes || []).find(x => x.id === noteId);
+      if (nt) { noteUpdateId = nt.updateId || null; break; }
+    }
+    if (noteUpdateId) {
+      showScreen('update', noteUpdateId);
+      setTimeout(() => flashAnchor(anchor), 50);
+      return;
+    }
+  }
+
   showScreen('project', projectOwner, projectSlug);
   if (anchor) {
     setTimeout(() => flashAnchor(anchor), 50);
