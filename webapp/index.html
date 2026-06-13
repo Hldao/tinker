@@ -8769,7 +8769,6 @@ async function renderProject(owner, slug) {
         const imagesHtml = (u.images && u.images.length > 0) ? u.images.map((img) => {
           if (isEncryptedImageSlot(img)) return renderEncryptedPlaceholder();
           figureIdx++;
-          const safeSrc = img.src.replace(/'/g, "\\'");
           return `
             <figure class="tl-figure">
               <div class="tl-figure-frame" onclick="zoomImage(${JSON.stringify(img.src).replace(/"/g,'&quot;')}, ${JSON.stringify(img.caption||'').replace(/"/g,'&quot;')})">
