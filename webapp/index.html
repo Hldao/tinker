@@ -12494,7 +12494,7 @@ function copyAccountAiInstall(el) {
   if (!tok) return;
   const serverUrl = window.location.origin;
   const text = [
-    '帮我装 Tinker CLI 并用这把钥匙登录,然后跑 onboard 配齐协作环境。',
+    '帮我装 Tinker CLI 并用这把钥匙登录,然后按你是什么 AI 工具配齐协作环境。',
     '',
     '1) 装 CLI (没装过的话):',
     '   git clone https://github.com/Hldao/tinker.git ~/tinker-src',
@@ -12504,12 +12504,13 @@ function copyAccountAiInstall(el) {
     '2) 用钥匙登录:',
     '   tinker login --server ' + serverUrl + ' --token ' + tok,
     '',
-    '3) 一站式配齐 (项目关联 + git hook + Claude Code hook + CLAUDE.md):',
-    '   cd 到我当前在做的项目目录',
-    '   tinker onboard',
-    '   这条会交互式问我"这 repo 关联哪个 Tinker 项目" · 没项目它带我建一个 · 然后装好两套 hook 跟 CLAUDE.md',
+    '3) 配齐协作环境 (cd 到我当前在做的项目目录 · 按你是什么工具选一条):',
+    '   · 你是 Claude Code → tinker onboard (装 git hook + Claude Code hook + 写 CLAUDE.md)',
+    '   · 你是 Codex 或其它读 AGENTS.md 的 agent → tinker hook install-codex (装 git hook + 往 AGENTS.md 写 Tinker 指令)',
+    '   · 都不是 / 不确定 → tinker hook install (只装 git commit 触发器 · 工具无关)',
+    '   这步会交互式问我"这 repo 关联哪个 Tinker 项目" · 我没项目它带我建一个',
     '',
-    '装完后 CLAUDE.md 里有 Tinker 协作约定 · 让你看到 reminder 时知道怎么响应。',
+    '装完后,项目里的 CLAUDE.md (Claude Code) 或 AGENTS.md (Codex) 会有 Tinker 协作约定 · 让你看到 reminder 时知道怎么响应。',
     '钥匙丢了到 Tinker 网页撤销重发就行,不用紧张。',
   ].join('\n');
   safeCopy(text, '复制了 · 粘给你的 AI · 让 ta 装', '复制失败 · 请手动选中复制');
