@@ -10697,6 +10697,8 @@ function parseArgs(args) {
     else if (a.startsWith('--repo=')) opts.repo = a.slice('--repo='.length);
     else if (a === '--auto') opts.auto = true;
     else if (a === '--once') opts.once = true;
+    else if (a === '--reply') opts.reply = args[++i];
+    else if (a.startsWith('--reply=')) opts.reply = a.slice('--reply='.length);
     else if (a === '--section') {
       // 支持多次 · 收集成数组 (匹配多段一起 contribute)
       const v = args[++i];
