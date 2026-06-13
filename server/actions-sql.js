@@ -1562,6 +1562,34 @@ function listSeeking({ q, limit = 20 } = {}) {
   }));
 }
 
+// v0.95 列一条求方法请求收到的回应方法 (求助详情页展开看 · 配 listSeeking 的 replyCount)
+// 公开只读 · 不走 action 路径 · GET /api/seeking/:id/replies 直接暴露
+function listSeekingReplies({ seekingUpdateId }) {
+  if (!seekingUpdateId) return [];
+  const rows = db.prepare(`
+    SELECT m.id, m.title, m.scenario, m.text, m.at, m.tags,
+           m.project_id AS projectId, p.name AS projectName, p.slug AS projectSlug,
+           usr.handle AS ownerHandle
+    FROM methods m
+    JOIN users usr ON usr.id = m.owner_id
+    LEFT JOIN projects p ON p.id = m.project_id
+    WHERE m.seeking_update_id = ?
+    ORDER BY m.at DESC
+  `).all(String(seekingUpdateId));
+  return rows.map(r => ({
+    id: r.id,
+    title: r.title || null,
+    scenario: r.scenario || null,
+    textPreview: (r.text || '').slice(0, 200),
+    at: r.at,
+    tags: r.tags || null,
+    projectId: r.projectId || null,
+    projectName: r.projectName || null,
+    projectSlug: r.projectSlug || null,
+    ownerHandle: r.ownerHandle,
+  }));
+}
+
 // NOTIFICATIONS
 // ============================================
 
@@ -1582,7 +1610,7 @@ function markNotifRead({ notifId }, { currentUserId }) {
 }
 
 module.exports = {
-  searchMethods, getBorrowsForOwner, listSeeking, // 不走 action 路径 · 直接 GET 暴露
+  searchMethods, getBorrowsForOwner, listSeeking, listSeekingReplies, // 不走 action 路径 · 直接 GET 暴露
   listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI 用)
   // users
   editTagline, renameHandle,

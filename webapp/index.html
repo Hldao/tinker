@@ -9559,6 +9559,8 @@ async function renderUpdateDetail(updateId) {
         ` : ''}
       </div>
 
+      ${u.isSeeking ? `<div class="mt-12" id="seek-replies-wrap"><div class="section-label"><span>回应</span></div><p class="serif py-6 text-center" style="color: var(--sepia);">加载中…</p></div>` : ''}
+
       <div class="mt-12">
         <div class="section-label flex items-center justify-between">
           <span>便签 (${notesForThis.length})</span>
@@ -9586,6 +9588,41 @@ async function renderUpdateDetail(updateId) {
       </div>
     </article>
   `;
+  if (u.isSeeking) loadSeekReplies(u.id);
+}
+
+// v0.95 拉一条求方法请求收到的回应方法 · 填进求助详情页的"回应"区
+// 配 listSeeking 的 replyCount · 让求助者点进帖子能看到别人给的方法 (不只靠通知)
+async function loadSeekReplies(seekId) {
+  const wrap = document.getElementById('seek-replies-wrap');
+  if (!wrap) return;
+  try {
+    const res = await fetch('/api/seeking/' + encodeURIComponent(seekId) + '/replies');
+    const data = await res.json();
+    const items = (data.items || []);
+    const head = `<div class="section-label"><span>回应 (${items.length})</span></div>`;
+    if (items.length === 0) {
+      wrap.innerHTML = head + `<p class="serif py-6 text-center" style="color: var(--sepia);">还没有人回应 · 知道答案的话用上面「我知道 · 复制给 AI 回应」回一条</p>`;
+      return;
+    }
+    wrap.innerHTML = head + items.map(m => {
+      const title = m.scenario || m.title || (m.textPreview || '').split('\n').map(s => s.replace(/^#+\s*/, '').trim()).find(Boolean) || '(无标题)';
+      return `
+        <div class="method-hero-card" onclick="showScreen('method','${escapeHtml(m.id)}')">
+          <div class="method-hero-card-top">
+            <span class="method-hero-card-badge" style="color: var(--moss);">✤ 方法</span>
+          </div>
+          <div class="method-hero-card-scenario">${escapeHtml(title)}</div>
+          <div class="method-hero-card-meta">
+            <span class="nh" onclick="event.stopPropagation(); showScreen('workshop','${escapeHtml(m.ownerHandle)}')">@${escapeHtml(m.ownerHandle)}</span>
+            ${m.projectName && m.projectSlug ? `<span style="color: var(--sepia-light);">·</span> <span class="nh" onclick="event.stopPropagation(); showScreen('project','${escapeHtml(m.ownerHandle)}','${escapeHtml(m.projectSlug)}')">${escapeHtml(m.projectName)}</span>` : ''}
+            <span style="color: var(--sepia-light);">·</span> <span>${shortAgo(m.at)}</span>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = `<div class="section-label"><span>回应</span></div><p class="serif py-6 text-center" style="color: var(--sepia);">回应加载失败</p>`;
+  }
 }
 
 function renderShowcase(focusId) {

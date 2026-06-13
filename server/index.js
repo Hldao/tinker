@@ -412,6 +412,15 @@ app.get('/api/seeking', stateLimiter, (req, res) => {
   }
 });
 
+// v0.95 一条求方法请求收到的回应方法列表 (求助详情页展开用 · 公开只读)
+app.get('/api/seeking/:id/replies', stateLimiter, (req, res) => {
+  try {
+    res.json({ ok: true, items: actions.listSeekingReplies({ seekingUpdateId: String(req.params.id) }) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // 作者看自己最近 N 天被借了哪些方法 (goodnight 用 · 也给 webapp 个人页用)
 // 需要登录 · 只能看自己的
 app.get('/api/method/borrows-for-me', stateLimiter, auth.requireSession, (req, res) => {
