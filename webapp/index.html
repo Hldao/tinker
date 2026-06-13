@@ -9142,7 +9142,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
           ${modeTab('seeking', '有人在找')}
         </div>
         <p class="feed-sub mb-2">还没有答案的问题 · 你知道的话可以回应</p>
-        <p class="feed-sub-guide mb-6">想自己求一个?顶上的 <b>「+ 记一笔」</b> 写下你卡在哪,勾上 <b>「求看看，想拿反馈」</b>,这条就挂到这页了。</p>
+        <p class="feed-sub-guide mb-6">想自己求一个?跟你的 AI 说一句 <b>「帮我发个求方法,我卡在哪」</b>,它会用 tinker seek 替你挂到这页。</p>
       </div>
       <div id="methods-lib-seeking-list"><div class="text-center py-16 serif italic" style="color: var(--sepia);">加载中…</div></div>
     `;
@@ -9331,7 +9331,7 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
         ${modeTab('seeking', '有人在找')}
       </div>
       <p class="feed-sub mb-2">vibe coder 沉淀下来的手艺 · 关键词搜 · 复制 markdown 直接喂给你的 AI</p>
-      <p class="feed-sub-guide mb-6">想沉淀自己的?顶上的 <b>「+ 记一笔」</b> 切到 <b>「沉淀一笔」</b>,把跑通的手艺存下来,就进这页了。</p>
+      <p class="feed-sub-guide mb-6">想沉淀自己的?做通一件事后跟你的 AI 说 <b>「把这个沉淀成方法」</b>,它会用 tinker contribute 存进这页。</p>
       <div class="methods-lib-toolbar">
         <input type="text" id="methods-lib-q" class="methods-lib-search" placeholder="搜方法 · supabase / 邮箱登录 / 部署…" value="${escapeHtml(methodsLibraryState.query)}"
           oninput="methodsLibraryState.query = this.value; clearTimeout(window._methodsLibT); window._methodsLibT = setTimeout(() => renderMethodsLibrary(undefined, true), 200);">
