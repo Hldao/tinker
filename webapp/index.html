@@ -794,7 +794,8 @@
   }
   .tl-action {
     cursor: pointer;
-    border-bottom: 1px solid var(--sepia-light);
+    /* 静止无线 · 留 1px transparent 占位防 hover 跳动 · hover / .active 时才变红显形 (多个动作并排不再是三条实线) */
+    border-bottom: 1px solid transparent;
     color: var(--ink);
     font-family: 'Newsreader', serif;
     font-style: normal;
