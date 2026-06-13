@@ -37,6 +37,17 @@
     border: 1px solid var(--rule);
     white-space: nowrap;
   }
+  /* renderRichText 块级 markdown · 方法正文常含标题/列表/代码块 · 这套让它们不再显示成纯文本 */
+  .rich-pre { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5; background: rgba(120,113,108,0.06); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px; overflow-x: auto; white-space: pre; margin: 10px 0; color: var(--ink-soft); }
+  .rich-pre code { font-family: inherit; background: none; border: none; padding: 0; color: inherit; white-space: pre; }
+  .rich-h { font-family: 'Newsreader', serif; font-weight: 600; line-height: 1.3; margin: 14px 0 6px; color: var(--ink); }
+  .rich-h:first-child { margin-top: 0; }
+  .rich-h1 { font-size: 19px; }
+  .rich-h2 { font-size: 17px; }
+  .rich-h3 { font-size: 15px; }
+  .rich-ul { margin: 8px 0; padding-left: 20px; list-style: disc; }
+  .rich-ul li { margin: 3px 0; line-height: 1.55; }
+  .rich-quote { border-left: 3px solid var(--rule); padding: 2px 0 2px 14px; margin: 10px 0; color: var(--ink-soft); font-style: normal; }
   /* renderRichText 自动识别 URL · 让粘在正文里的预览链接一点就走
      mono 字号收一档 · vermilion + 虚线下划线 · 安静不吵 · hover 时实线
      ↗ 后缀跟陈列馆 / 项目页的 → 箭头形成箭头家族 · 行内 ↗=跳出去, 块级 →=动作 */
@@ -7974,37 +7985,68 @@ function renderMentions(text) {
 
 // v0.52: 块级版 · 支持段落 (双换行) + 单换行 · 用在 entry-text / tl-text / 完工感想等正文
 // 段落渲染解决长文阅读吃力的核心问题 · 但仍不支持标题/列表/引用 (Tinker 是工作现场 · 不是博客)
+// inline 级渲染 · 单行/段文本 (escapeHtml → 抽 inline code → url → 粗体 → @提及 → 还原 code)
+// 顺序保留历史踩坑处理: code 先抽走 · 免得 URL 正则把反引号字符吞进去整段炸
+function renderRichInline(raw) {
+  let s = escapeHtml(raw);
+  const codes = [];
+  s = s.replace(/`([^`\n]+?)`/g, (m, c) => { codes.push(c); return `\x00C${codes.length - 1}\x00`; });
+  // URL 自动链接 · 尾巴上的 .,;:!?)] 不算 URL 一部分 · 算句末标点
+  s = s.replace(/(https?:\/\/[^\s<>"]+)/g, (match) => {
+    let url = match, suffix = '';
+    const m = match.match(/^(.+?)([.,;:!?\)\]]+)$/);
+    if (m) { url = m[1]; suffix = m[2]; }
+    return `<a href="${url}" target="_blank" rel="noopener" class="inline-link" onclick="event.stopPropagation()">${url}</a>${suffix}`;
+  });
+  s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
+    if (state.users && state.users[username]) {
+      return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop',${JSON.stringify(username)})">@${username}</span>`;
+    }
+    return match;
+  });
+  s = s.replace(/\x00C(\d+)\x00/g, (m, i) => `<code class="inline-code">${codes[+i]}</code>`);
+  return s;
+}
+
+// 块级 markdown 渲染 · 方法正文是 markdown (常含标题/列表/代码块) · 别展示成纯文本
+// 支持: ``` 围栏代码块 / # 标题 (1-3级) / - * 列表 / > 引用 / 空行分段 + 单换行<br>
 function renderRichText(text) {
   if (!text) return '';
-  const paragraphs = String(text).split(/\n{2,}/);
-  return paragraphs.map(para => {
-    let s = escapeHtml(para);
-    // inline code 先抽走 · 占位符隔离 · 避免 URL 正则把反引号字符当 URL 一部分吞掉
-    // (历史踩坑: `http://IP` 这种写法会让 URL 吃反引号 · 后续 code 正则跨段配对 · 整段炸)
-    const codes = [];
-    s = s.replace(/`([^`\n]+?)`/g, (m, c) => {
-      codes.push(c);
-      return `\x00C${codes.length - 1}\x00`;
-    });
-    // URL 自动链接 · 尾巴上的 .,;:!?)] 不算 URL 一部分 · 算句末标点
-    s = s.replace(/(https?:\/\/[^\s<>"]+)/g, (match) => {
-      let url = match, suffix = '';
-      const m = match.match(/^(.+?)([.,;:!?\)\]]+)$/);
-      if (m) { url = m[1]; suffix = m[2]; }
-      return `<a href="${url}" target="_blank" rel="noopener" class="inline-link" onclick="event.stopPropagation()">${url}</a>${suffix}`;
-    });
-    s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
-    s = s.replace(/@([A-Za-z0-9_]+)/g, (match, username) => {
-      if (state.users && state.users[username]) {
-        return `<span class="mention" onclick="event.stopPropagation(); showScreen('workshop','${username}')">@${username}</span>`;
-      }
-      return match;
-    });
-    // 还原 inline code
-    s = s.replace(/\x00C(\d+)\x00/g, (m, i) => `<code class="inline-code">${codes[+i]}</code>`);
-    s = s.replace(/\n/g, '<br>');
-    return `<p>${s}</p>`;
-  }).join('');
+  // 1. 围栏代码块先抽走 · 内容只 escapeHtml 不走 inline (代码里的 ** @ 等不该被解释)
+  const fences = [];
+  const work = String(text).replace(/```[^\n]*\n?([\s\S]*?)```/g, (m, code) => {
+    fences.push(code.replace(/\n+$/, ''));
+    return `\n\x00F${fences.length - 1}\x00\n`;
+  });
+  const lines = work.split('\n');
+  const isBlockStart = (ln) => /^\x00F\d+\x00$/.test(ln) || /^#{1,3}\s/.test(ln) || /^>\s?/.test(ln) || /^[-*]\s+/.test(ln);
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const fm = line.match(/^\x00F(\d+)\x00$/);
+    if (fm) { out.push(`<pre class="rich-pre"><code>${escapeHtml(fences[+fm[1]])}</code></pre>`); i++; continue; }
+    const hm = line.match(/^(#{1,3})\s+(.*)$/);
+    if (hm) { out.push(`<div class="rich-h rich-h${hm[1].length}">${renderRichInline(hm[2])}</div>`); i++; continue; }
+    if (/^>\s?/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(renderRichInline(lines[i].replace(/^>\s?/, ''))); i++; }
+      out.push(`<blockquote class="rich-quote">${buf.join('<br>')}</blockquote>`);
+      continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) { buf.push(`<li>${renderRichInline(lines[i].replace(/^[-*]\s+/, ''))}</li>`); i++; }
+      out.push(`<ul class="rich-ul">${buf.join('')}</ul>`);
+      continue;
+    }
+    if (line.trim() === '') { i++; continue; }
+    const buf = [];
+    while (i < lines.length && lines[i].trim() !== '' && !isBlockStart(lines[i])) { buf.push(renderRichInline(lines[i])); i++; }
+    out.push(`<p>${buf.join('<br>')}</p>`);
+  }
+  return out.join('');
 }
 
 function extractMentions(text) {
