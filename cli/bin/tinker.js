@@ -9120,28 +9120,23 @@ async function cmdEditUpdate(updateId, opts) {
   }
 }
 
-// tinker delete <updateId> [--yes]
-// 不可逆 · TTY 默认 confirm · 非 TTY 必须显式 --yes
-async function cmdDeleteUpdate(updateId, opts) {
+// tinker delete <updateId> [<updateId> ...] [--yes]
+// 不可逆 · TTY 默认 confirm · 非 TTY 必须显式 --yes · 支持一次删多条
+// 注意: deleteUpdate 用 updateIdx (位置) · 删一条后面的 idx 全变 · 所以每条都现拉 findMyUpdate 拿新 idx
+async function cmdDeleteUpdate(updateIds, opts) {
   const cfg = mustHaveConfig();
-  if (!updateId || !updateId.startsWith('u-')) {
-    if (opts.json) return errJson('用法: tinker delete <updateId>', 'NO_ID');
-    err('用法: ' + vermilion('tinker delete <updateId>') + sepia(' [--yes 跳过确认]'));
+  const ids = (Array.isArray(updateIds) ? updateIds : [updateIds]).filter(x => x && x.startsWith('u-'));
+  if (ids.length === 0) {
+    if (opts.json) return errJson('用法: tinker delete <updateId> [<updateId> ...]', 'NO_ID');
+    err('用法: ' + vermilion('tinker delete <updateId> [<updateId> ...]') + sepia(' [--yes 跳过确认]'));
     process.exit(1);
   }
-  const found = await findMyUpdate(cfg, updateId);
-  if (!found) {
-    if (opts.json) return errJson('找不到你的 update: ' + updateId, 'NOT_FOUND');
-    err('找不到你的 update: ' + updateId); process.exit(1);
-  }
+  // 确认一次 · 覆盖全部 · 非 TTY 必须 --yes
   if (!opts.yes && !opts.json) {
     if (process.stdin.isTTY && process.stdout.isTTY) {
-      const preview = (found.update.text || '').slice(0, 80) + ((found.update.text || '').length > 80 ? '...' : '');
-      log(sepia('  要删: ') + preview);
-      log(sepia('  项目: ') + found.project.name);
       try {
         const { confirm } = require('@inquirer/prompts');
-        const go = await confirm({ message: '确定删 (不可逆)?', default: false });
+        const go = await confirm({ message: '确定删这 ' + ids.length + ' 条 (不可逆)?', default: false });
         if (!go) { log(sepia('  没删')); return; }
       } catch { log(sepia('  没删')); return; }
     } else {
@@ -9149,14 +9144,20 @@ async function cmdDeleteUpdate(updateId, opts) {
       process.exit(1);
     }
   }
-  try {
-    await apiAction(cfg, 'deleteUpdate', { projectId: found.project.id, updateIdx: found.idx });
-    if (opts.json) return outputJson({ ok: true, updateId });
-    ok('删了');
-  } catch (e) {
-    if (opts.json) return errJson(e.message, 'DELETE_FAILED');
-    err(e.message); process.exit(1);
+  const deleted = [], failed = [];
+  for (const id of ids) {
+    try {
+      const found = await findMyUpdate(cfg, id);  // 每条现拉 · idx 随删随变 · 不能复用陈旧 idx
+      if (!found) { failed.push({ id, error: '找不到你的 update' }); if (!opts.json) err('找不到: ' + id); continue; }
+      await apiAction(cfg, 'deleteUpdate', { projectId: found.project.id, updateIdx: found.idx });
+      deleted.push(id);
+      if (!opts.json) ok('删了 ' + sepia(id));
+    } catch (e) {
+      failed.push({ id, error: e.message });
+      if (!opts.json) err('删失败 ' + id + ': ' + e.message);
+    }
   }
+  if (opts.json) return outputJson({ ok: failed.length === 0, deleted, failed });
 }
 
 // tinker edit-method <methodId> [-m] [--scenario] [--title] [--tag x --tag y]
@@ -11133,7 +11134,7 @@ async function main() {
       case 'used': await cmdUsed(args[1], opts); break;
       case 'note-done': await cmdNoteDone(args[1], opts); break;
       case 'edit': await cmdEditUpdate(args[1], opts); break;
-      case 'delete': await cmdDeleteUpdate(args[1], opts); break;
+      case 'delete': await cmdDeleteUpdate(args.slice(1).filter(a => a.startsWith('u-')), opts); break;
       case 'edit-method': await cmdEditMethod(args[1], opts); break;
       case 'project': await cmdProject(args[1], args[2], opts); break;
       case 'mark-experience': case 'mark-exp':
