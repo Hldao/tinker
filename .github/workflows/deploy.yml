@@ -15,6 +15,7 @@ jobs:
   deploy:
     name: 部署到生产服务器
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # 兜底 · 部署卡死 15 分钟必失败 · 不再默认挂 6 小时
     steps:
       - name: 检出代码 (仅用于看改了什么)
         uses: actions/checkout@v4
@@ -52,22 +53,32 @@ jobs:
 
       - name: 部署
         run: |
-          ssh -i ~/.ssh/deploy_key root@${{ secrets.SSH_HOST }} bash -s << 'DEPLOYSCRIPT'
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 root@${{ secrets.SSH_HOST }} bash -s << 'DEPLOYSCRIPT'
             set -e
             cd ~/tinker
-            echo "--- 1. 拉新代码 ---"
+            EXPECTED_SHA="${{ github.sha }}"
+            echo "--- 1. 拉新代码 (目标 ${EXPECTED_SHA}) ---"
+            # 大陆 ECS 连 github 会抽风把 git pull 挂死 (今天卡过 7 分钟) · 配 lowSpeed:
+            # 传输持续低于 1KB/s 超过 30 秒就放弃 · 重试循环才接得住 (无限挂时重试永远等不到返回)
+            git config http.lowSpeedLimit 1000
+            git config http.lowSpeedTime 30
+            PULLED=false
             for i in 1 2 3 4 5; do
               echo "  [尝试 $i/5]"
-              if git pull; then
-                echo "  ✓ 成功"
+              git pull || echo "  ⚠ 这次 pull 失败/超时"
+              # 别信"pull 没报错" · 核对 ECS 真含了目标 commit (容许 pull 到比它更新的 commit · 连续 push 时会这样)
+              if git merge-base --is-ancestor "$EXPECTED_SHA" HEAD 2>/dev/null; then
+                echo "  ✓ ECS 已含目标 commit (HEAD=$(git rev-parse --short HEAD))"
+                PULLED=true
                 break
               fi
-              if [ $i -eq 5 ]; then
-                echo "  ✗ 5 次都失败 · 退出"
-                exit 1
-              fi
+              echo "  ⚠ 还没拉到目标 commit (现在 HEAD=$(git rev-parse --short HEAD)) · 重试"
               sleep 5
             done
+            if [ "$PULLED" != "true" ]; then
+              echo "  ✗ 5 次都没拉到目标 commit · 退出 · 别假绿 (这正是今天那个坑)"
+              exit 1
+            fi
 
             echo "--- 2. 修文件权限 (容器要能读) ---"
             chmod -R a+rX webapp server .git
