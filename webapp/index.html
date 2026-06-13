@@ -8901,7 +8901,7 @@ async function renderProject(owner, slug) {
               ${imagesHtml}
               <div class="tl-actions">
                 ${isMethodOrProven ? `<span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>` : ''}
-                ${!isMine && u.isSeeking ? `<span class="tl-action tl-action-seek-reply" onclick="openSeekReply('${u.id}', '${p.id}')">回应这个请求</span>` : ''}
+                ${!isMine && u.isSeeking ? `<span class="tl-action tl-action-seek-reply" onclick="copySeekReplyForAI('${u.id}', ${JSON.stringify(u.text || '').replace(/"/g, '&quot;')})">我知道 · 复制给 AI 回应</span>` : ''}
                 ${!isMine && !u.isSeeking ? `<span class="tl-action ${meUsed ? 'active' : ''}" onclick="openMethodUsed('${p.id}', ${uIdx})">${meUsed ? '✓ 你用过 · 跑通了' : '用了 · 跑通了'}</span>` : ''}
                 <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
                 ${isMine ? `
@@ -9423,7 +9423,7 @@ async function renderSeekingPage() {
             <span>${shortAgo(s.at)}</span>
           </div>
           <div class="method-hero-card-actions">
-            ${!isMine ? `<span class="method-hero-card-used" onclick="openSeekReply('${escapeHtml(s.id)}','${escapeHtml(s.projectId)}')">我知道 · 来回应</span>` : '<span style="color: var(--sepia-light); font-family: JetBrains Mono, monospace; font-size: 11px;">你发的</span>'}
+            ${!isMine ? `<span class="method-hero-card-used" onclick="copySeekReplyForAI('${escapeHtml(s.id)}', ${JSON.stringify(s.text || '').replace(/"/g, '&quot;')})">我知道 · 复制给 AI 回应</span>` : '<span style="color: var(--sepia-light); font-family: JetBrains Mono, monospace; font-size: 11px;">你发的</span>'}
           </div>
         </div>
       `;
@@ -9549,7 +9549,8 @@ async function renderUpdateDetail(updateId) {
       </div>
       <div class="tl-actions" style="margin-top: 22px;">
         <span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>
-        ${u.isSeeking && !isMine ? `<span class="tl-action tl-action-seek-reply" onclick="openSeekReply('${u.id}', '${p.id}')">回应这个请求</span>` : ''}
+        ${u.isSeeking && !isMine ? `<span class="tl-action tl-action-seek-reply" onclick="copySeekReplyForAI('${u.id}', ${JSON.stringify(u.text || '').replace(/"/g, '&quot;')})">我知道 · 复制给 AI 回应</span>` : ''}
+        ${u.isSeeking && !isMine ? `<span class="tl-action" onclick="openSeekReply('${u.id}', '${p.id}')">或自己写一条</span>` : ''}
         <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
         ${isMine ? `
           <span class="small-action" onclick="editUpdate('${p.id}', ${uIdx})">${ICONS.edit}改</span>
@@ -10563,6 +10564,33 @@ function openSeekReply(seekingUpdateId, projectId) {
     }
     hint.textContent = '回应求方法请求 · 写完会通知对方';
   }
+}
+
+// "我知道 · 复制给 AI 回应" · 把求助原文 + 帖子链接 + 回帖指令打包给回应者的 AI
+// AI 答完用回应者已配好的 tinker CLI (tinker contribute --reply) 发回去 · 不往剪贴板塞裸 token
+function copySeekReplyForAI(seekingUpdateId, requestText) {
+  const link = location.origin + '/#/update/' + encodeURIComponent(seekingUpdateId);
+  const prompt = [
+    '帮我回应 Tinker 上一条「求方法」请求。',
+    '',
+    '【求助原文】',
+    requestText,
+    '',
+    '【这条求助的帖子】',
+    link,
+    '',
+    '【请你做】',
+    '1. 用一条能复用的「方法」回答这个求助: 具体怎么做 + 为什么这么做 · 200-600 字 · markdown · 带个 # 标题。',
+    '2. 先把草稿给我看 · 我点头再发。',
+    '3. 我说发 · 就用我已经配好的 tinker 把它作为对这条求助的回应发回去:',
+    '   把方法写进一个 .md 文件 · 然后跑',
+    '   tinker contribute --from-file <那个文件> --reply ' + seekingUpdateId,
+    '   (会挂在我自己的项目下 · 我没有项目就先帮我选一个或新建一个)',
+    '4. 发成功后告诉我一声 · 对方会收到「有人回应了你的求方法」通知。',
+    '',
+    '(你要是没装 tinker · 就只把方法 markdown 给我 · 我自己贴回去。)',
+  ].join('\n');
+  safeCopy(prompt, '复制了 · 粘给你的 AI · 让它答完直接回帖', '复制失败 · 手动选中复制');
 }
 
 // v0.82 双形态: progress = 记一笔进展 (addUpdate) · method = 沉淀一笔方法 (createMethod)
