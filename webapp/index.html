@@ -801,6 +801,16 @@
   }
   .tl-action:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
   .tl-action.active { color: var(--vermilion); border-bottom-color: var(--vermilion); }
+
+  /* —— 详情页 (update-detail) 专属覆盖 —— */
+  /* 正文不做 6 行截断 · 点进详情就该看全文 (entry-text 的 line-clamp 是给首页卡片的) */
+  .update-detail .entry-text {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+  /* action 行: 大字 tl-action 和小字 small-action 混排 · 基线对齐让各自下划线齐平 (center 会按盒高居中 · 小字下划线偏高) */
+  .update-detail .tl-actions { align-items: baseline; }
   .tl-used-count {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
