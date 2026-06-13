@@ -23,7 +23,7 @@ const path = require('path');
 
 const { logger } = require('./logger');
 const db = require('./db');                  // SQLite · 启动时自动跑 migrations
-const { buildState } = require('./state');
+const { buildState, buildProjectUpdates, searchUpdates } = require('./state');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
 const blobs = require('./blobs');
@@ -339,6 +339,31 @@ app.get('/api/state', stateLimiter, (req, res) => {
   // 现在: 看 authedAs · null = 未鉴权 / @handle = 鉴权通过
   state.authedAs = req.user?.handle || null;
   res.json(state);
+});
+
+// 单项目全量 updates · 懒加载 (v1.0 瘦身)
+// /api/state 里 update 只带预览 (前 400 字 + truncated 标记) · 进项目详情页时拉这个拿全文
+// 公开 · 不需要登录 (跟 /api/state 一致 · 看的是公开进展)
+app.get('/api/project/:id/updates', stateLimiter, (req, res) => {
+  try {
+    res.json({ ok: true, updates: buildProjectUpdates(req.params.id) });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'project updates failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 后端 update 全文搜索 · 懒加载后全站搜索框走这个 · 不降级
+// ?q=<关键词>&limit=8 · 公开 · LIKE 子串匹配 (跟原前端 includes 行为一致)
+app.get('/api/updates/search', stateLimiter, (req, res) => {
+  const q = String(req.query.q || '').slice(0, 200);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 8, 30);
+  try {
+    res.json({ ok: true, items: searchUpdates({ q, limit }) });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'updates search failed');
+    res.status(400).json({ error: e.message });
+  }
 });
 
 // 方法库 + 踩坑经验 搜索 (v0.12)

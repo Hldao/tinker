@@ -269,6 +269,105 @@ function buildState({ targetUserId } = {}) {
   };
 }
 
+// ====================================================
+// 单项目全量 updates · 给 /api/project/:id/updates 用 (懒加载)
+// /api/state 里 update 只带预览 · 进项目详情页时按需拉这个拿全文
+// 形状跟 buildState 的 projectUpdates 完全一致 (共用 mapUpdateRow)
+// ====================================================
+function buildProjectUpdates(projectId) {
+  const updatesRows = db.prepare('SELECT * FROM updates WHERE project_id = ? ORDER BY at DESC').all(projectId);
+  if (updatesRows.length === 0) return [];
+  const updateIds = updatesRows.map(u => u.id);
+  const placeholders = updateIds.map(() => '?').join(',');
+
+  const idToHandle = {};
+  db.prepare('SELECT id, handle FROM users').all().forEach(u => { idToHandle[u.id] = u.handle; });
+
+  const updateImagesMap = {};
+  db.prepare(`
+    SELECT ui.update_id, ui.position, i.id AS image_id, i.caption
+    FROM update_images ui JOIN images i ON i.id = ui.image_id
+    WHERE ui.update_id IN (${placeholders})
+    ORDER BY ui.update_id, ui.position
+  `).all(...updateIds).forEach(r => {
+    if (!updateImagesMap[r.update_id]) updateImagesMap[r.update_id] = [];
+    updateImagesMap[r.update_id].push({ src: '/api/image/' + r.image_id, caption: r.caption || '' });
+  });
+
+  const usedByMap = {};
+  db.prepare(`
+    SELECT update_id, user_id, note, at FROM method_used
+    WHERE update_id IN (${placeholders})
+    ORDER BY at DESC
+  `).all(...updateIds).forEach(r => {
+    if (!usedByMap[r.update_id]) usedByMap[r.update_id] = [];
+    usedByMap[r.update_id].push({ user: idToHandle[r.user_id], note: r.note || '', at: r.at });
+  });
+
+  return updatesRows.map(u => mapUpdateRow(u, updateImagesMap[u.id], usedByMap[u.id], { preview: false }));
+}
+
+// 共享的 update 行 → webapp 形状映射 · buildState 和 buildProjectUpdates 共用 · 防形状漂移
+// preview=true 时 text 只给前 N 字预览 + truncated 标记 (首屏瘦身用 · 全文走 /api/project/:id/updates)
+const UPDATE_PREVIEW_CHARS = 400;
+function mapUpdateRow(u, imgs, usedBy, { preview } = {}) {
+  let text = u.text || '';
+  let truncated = false;
+  if (preview && text.length > UPDATE_PREVIEW_CHARS) {
+    text = text.slice(0, UPDATE_PREVIEW_CHARS);
+    truncated = true;
+  }
+  const out = { id: u.id, text, at: u.at };
+  if (truncated) out.truncated = true;
+  if (u.prompt) out.prompt = u.prompt;
+  if (u.feedback_ask !== null && u.feedback_ask !== undefined) out.feedbackAsk = u.feedback_ask;
+  if (u.kind) out.kind = u.kind;
+  if (u.is_method) out.isMethod = true;
+  if (u.is_experience) out.isExperience = true;
+  if (u.is_learning) out.isLearning = true;
+  if (u.is_decision) out.isDecision = true;
+  if (u.is_seeking) out.isSeeking = true;
+  if (u.scenario) out.scenario = u.scenario;
+  if (imgs && imgs.length > 0) out.images = imgs;
+  if (usedBy && usedBy.length > 0) out.usedBy = usedBy;
+  return out;
+}
+
+// ====================================================
+// 后端 update 全文搜索 · 给 /api/updates/search 用
+// 懒加载后首屏没全文了 · 全站搜索框改走这个 · 不降级 (照样全文匹配)
+// 只搜公开内容 (排除 archive 项目) · LIKE 子串匹配 (跟原前端 includes() 行为一致)
+// ====================================================
+function searchUpdates({ q, limit = 8 } = {}) {
+  const query = String(q || '').trim();
+  if (!query) return [];
+  const idToHandle = {};
+  db.prepare('SELECT id, handle FROM users').all().forEach(u => { idToHandle[u.id] = u.handle; });
+  const rows = db.prepare(`
+    SELECT u.id, u.text, u.at, u.kind, u.is_method, u.is_experience, u.is_learning, u.is_decision,
+           u.scenario, p.owner_id, p.slug AS project_slug, p.name AS project_name
+    FROM updates u
+    JOIN projects p ON p.id = u.project_id
+    WHERE p.status != 'archive'
+      AND u.is_method = 0
+      AND LOWER(u.text) LIKE '%' || LOWER(?) || '%'
+    ORDER BY u.at DESC
+    LIMIT ?
+  `).all(query, Math.min(limit, 30));
+  return rows.map(r => ({
+    updateId: r.id,
+    projectOwner: idToHandle[r.owner_id],
+    projectSlug: r.project_slug,
+    projectName: r.project_name,
+    at: r.at,
+    isExperience: !!r.is_experience,
+    isLearning: !!r.is_learning,
+    isDecision: !!r.is_decision,
+    scenario: r.scenario || null,
+    preview: (r.text || '').slice(0, 120),
+  }));
+}
+
 // helper: array → object grouped by key
 function groupBy(arr, key) {
   const out = {};
@@ -286,4 +385,4 @@ function userIdFromHandle(handle) {
   return row?.id || null;
 }
 
-module.exports = { buildState, userIdFromHandle };
+module.exports = { buildState, userIdFromHandle, buildProjectUpdates, searchUpdates };
