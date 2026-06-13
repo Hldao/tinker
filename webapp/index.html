@@ -48,6 +48,9 @@
   .rich-ul { margin: 8px 0; padding-left: 20px; list-style: disc; }
   .rich-ul li { margin: 3px 0; line-height: 1.55; }
   .rich-quote { border-left: 3px solid var(--rule); padding: 2px 0 2px 14px; margin: 10px 0; color: var(--ink-soft); font-style: normal; }
+  /* 全站去斜体 (用户偏好 · 中文斜体只是机械倾斜不好看)。Tailwind 的 .italic 工具类在独立 tailwind.css 里 · 这条 !important 盖掉它 ·
+     保留 HTML 上的 italic class 不动 (它还当语义标记 · 一堆 .serif.italic 选择器靠它设字号/字距)。配合本文件内 font-style 已全转 normal。 */
+  .italic { font-style: normal !important; }
   /* renderRichText 自动识别 URL · 让粘在正文里的预览链接一点就走
      mono 字号收一档 · vermilion + 虚线下划线 · 安静不吵 · hover 时实线
      ↗ 后缀跟陈列馆 / 项目页的 → 箭头形成箭头家族 · 行内 ↗=跳出去, 块级 →=动作 */
@@ -75,7 +78,7 @@
   .masthead { border-bottom: 2px solid var(--ink); background: var(--bg); }
   .masthead .title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 28px; letter-spacing: -0.02em; color: var(--ink); }
   .masthead .title-cn { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; color: var(--ink); letter-spacing: 0.02em; }
-  .masthead .tagline { color: var(--sepia); font-style: italic; }
+  .masthead .tagline { color: var(--sepia); font-style: normal; }
   .masthead a, .masthead button { color: var(--ink); border-bottom: 1px solid transparent; transition: border-color 0.15s; cursor: pointer; }
   .masthead a:hover, .masthead button:hover { border-bottom-color: var(--ink); }
 
@@ -235,7 +238,7 @@
   .entry-handle { font-weight: 600; color: var(--ink); font-size: 15px; }
   .entry-handle:hover { color: var(--vermilion); }
   .entry-slash { color: var(--sepia-light); }
-  .entry-project { color: var(--ink-soft); font-size: 15px; font-style: italic; font-family: 'Newsreader', serif; }
+  .entry-project { color: var(--ink-soft); font-size: 15px; font-style: normal; font-family: 'Newsreader', serif; }
   .entry-status { margin-left: auto; font-size: 12px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.04em; font-family: 'JetBrains Mono', monospace; }
   .entry-status.stuck { color: var(--vermilion); }
   .entry-status.done { color: var(--moss); }
@@ -253,7 +256,7 @@
   .methods-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
   .methods-lib-search { flex: 1; min-width: 240px; font-family: 'Newsreader', serif; font-size: 16px; padding: 10px 14px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; color: var(--ink); transition: border-color 0.15s; }
   .methods-lib-search:focus { outline: none; border-color: var(--moss); }
-  .methods-lib-search::placeholder { color: var(--sepia-light); font-style: italic; }
+  .methods-lib-search::placeholder { color: var(--sepia-light); font-style: normal; }
   .methods-lib-tabs { display: flex; gap: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
   .methods-lib-tab { color: var(--sepia); cursor: pointer; padding: 4px 2px; border-bottom: 1px solid transparent; transition: color 0.15s, border-color 0.15s; }
   .methods-lib-tab:hover { color: var(--ink); }
@@ -350,12 +353,12 @@
 
   /* WORKSHOP */
   .workshop-name { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 48px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
-  .workshop-tagline { font-family: 'Newsreader', serif; font-style: italic; color: var(--sepia); font-size: 19px; }
+  .workshop-tagline { font-family: 'Newsreader', serif; font-style: normal; color: var(--sepia); font-size: 19px; }
   .section-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 18px; }
   .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
   .pcard:hover .pcard-name { color: var(--vermilion); }
   .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
-  .pcard-desc { color: var(--sepia); font-size: 14px; font-style: italic; margin-bottom: 8px; }
+  .pcard-desc { color: var(--sepia); font-size: 14px; font-style: normal; margin-bottom: 8px; }
   .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; }
   .pcard-meta .stuck { color: var(--vermilion); }
   .pcard-meta .done { color: var(--moss); }
@@ -384,7 +387,7 @@
   /* PROJECT */
   .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
   .pname { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 52px; font-weight: 500; letter-spacing: -0.025em; line-height: 1; margin-bottom: 12px; }
-  .pdesc { font-family: 'Newsreader', serif; font-style: italic; color: var(--ink-soft); font-size: 22px; line-height: 1.4; margin-bottom: 20px; }
+  .pdesc { font-family: 'Newsreader', serif; font-style: normal; color: var(--ink-soft); font-size: 22px; line-height: 1.4; margin-bottom: 20px; }
 
   /* v0.32 项目编年史 · ship 完的项目挂在头部 · 默认展开 · 完整 update 流在下面 */
   .project-timeline {
@@ -442,7 +445,7 @@
   }
   .project-timeline-empty-hint {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     color: var(--sepia);
     font-size: 14px;
     line-height: 1.6;
@@ -590,7 +593,7 @@
   .tl-figure-frame img { display: block; max-width: 100%; height: auto; }
   .tl-figure-caption {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     color: var(--sepia);
     margin-top: 6px;
@@ -629,12 +632,12 @@
   .ref-entry { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); padding: 8px 0; border-bottom: 1px dotted var(--rule); }
   .ref-entry .arrow { color: var(--vermilion); margin-right: 8px; }
   .ref-entry .ref-user { font-weight: 600; }
-  .ref-entry .ref-name { font-style: italic; }
+  .ref-entry .ref-name { font-style: normal; }
 
   .note-entry { padding: 14px 0; border-bottom: 1px dotted var(--rule); }
   .note-head { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-bottom: 4px; }
   .note-head .nu { color: var(--ink); font-weight: 500; }
-  .note-text { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); line-height: 1.5; font-style: italic; }
+  .note-text { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); line-height: 1.5; font-style: normal; }
 
   /* 便签里的图 — 比 timeline 插图更小 (便签是轻量评论) */
   .note-images { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -737,14 +740,14 @@
   .search-result-item:hover .sri-name { color: var(--vermilion); }
   .sri-name { font-family: 'Newsreader', serif; font-size: 16px; color: var(--ink); transition: color 0.15s; }
   .sri-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-left: 8px; }
-  .sri-tagline { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 2px; }
+  .sri-tagline { font-family: 'Newsreader', serif; font-style: normal; font-size: 14px; color: var(--sepia); margin-top: 2px; }
   .sri-tag { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 1px 6px; margin-left: 8px; border-radius: 2px; letter-spacing: 0.04em; vertical-align: middle; }
   .sri-tag-experience { background: #fff1ec; color: var(--vermilion); }
   .sri-tag-learning { background: #fef6e4; color: #ad6526; }
   .sri-tag-decision { background: #ece8f7; color: #5a3a93; }
   .sri-tag-method { background: #f0ede4; color: var(--moss); }
   .sri-text { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink-soft); line-height: 1.5; margin-top: 4px; }
-  .search-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); text-align: center; padding: 24px 0; }
+  .search-hint { font-family: 'Newsreader', serif; font-style: normal; font-size: 14px; color: var(--sepia); text-align: center; padding: 24px 0; }
   .kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--sepia); border: 1px solid var(--sepia-light); padding: 1px 5px; border-radius: 3px; margin-left: 4px; }
 
   /* @mention */
@@ -791,7 +794,7 @@
     border-bottom: 1px solid var(--sepia-light);
     color: var(--ink);
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 14px;
     padding-bottom: 1px;
     transition: all 0.15s;
@@ -809,7 +812,7 @@
     font-family: 'Newsreader', serif;
     font-size: 13px;
     color: var(--sepia);
-    font-style: italic;
+    font-style: normal;
     line-height: 1.6;
   }
   .tl-used-list .nh { color: var(--ink); font-weight: 600; font-style: normal; }
@@ -847,7 +850,7 @@
   }
   .quote-block-text {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     color: var(--ink-soft);
     font-size: 15px;
     line-height: 1.55;
@@ -862,8 +865,8 @@
   .notif-text { font-family: 'Newsreader', serif; font-size: 17px; line-height: 1.55; color: var(--ink); }
   .notif-text .nh { font-weight: 600; }
   .notif-text .nh:hover { color: var(--vermilion); }
-  .notif-text .npj { font-style: italic; color: var(--ink-soft); }
-  .notif-extra { font-family: 'Newsreader', serif; font-style: italic; font-size: 14px; color: var(--sepia); margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--rule); }
+  .notif-text .npj { font-style: normal; color: var(--ink-soft); }
+  .notif-extra { font-family: 'Newsreader', serif; font-style: normal; font-size: 14px; color: var(--sepia); margin-top: 6px; padding-left: 12px; border-left: 2px solid var(--rule); }
   .notif-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-top: 6px; }
   .notif-bulk-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0 16px; border-bottom: 1px dotted var(--rule); margin-bottom: 4px; }
 
@@ -873,7 +876,7 @@
   .update-extra-row:hover .extra-title { color: var(--vermilion); }
   .update-extra-row input { margin-top: 4px; accent-color: var(--vermilion); cursor: pointer; }
   .update-extras .extra-title { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink); display: block; transition: color 0.15s; }
-  .update-extras .extra-sub { font-family: 'Newsreader', serif; font-style: italic; font-size: 12px; color: var(--sepia); display: block; margin-top: 1px; }
+  .update-extras .extra-sub { font-family: 'Newsreader', serif; font-style: normal; font-size: 12px; color: var(--sepia); display: block; margin-top: 1px; }
   .update-extras .disabled-row { opacity: 0.4; cursor: not-allowed; }
   .update-extras .disabled-row input { pointer-events: none; }
 
@@ -974,7 +977,7 @@
   /* INPUT / MODAL */
   .input-bare { background: transparent; border: none; border-bottom: 1px solid var(--sepia-light); color: var(--ink); font-family: 'Newsreader', serif; font-size: 17px; width: 100%; padding: 8px 0; outline: none; transition: border-color 0.15s; }
   .input-bare:focus { border-bottom-color: var(--vermilion); }
-  .input-bare::placeholder { color: var(--sepia-light); font-style: italic; }
+  .input-bare::placeholder { color: var(--sepia-light); font-style: normal; }
   .btn-act { font-family: 'Newsreader', serif; font-size: 16px; background: transparent; border: none; border-bottom: 1.5px solid var(--ink); color: var(--ink); padding: 4px 0; cursor: pointer; transition: all 0.15s; }
   .btn-act:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
   .btn-act-primary { background: var(--ink); color: var(--bg); padding: 8px 16px; border: none; font-family: 'Newsreader', serif; font-size: 15px; cursor: pointer; transition: all 0.15s; }
@@ -985,7 +988,7 @@
   .modal-back { background: rgba(28, 25, 23, 0.4); }
   .modal-paper { background: var(--bg); border: 1px solid var(--ink); padding: 28px 32px; max-width: 520px; }
   .modal-title { font-family: 'Newsreader', serif; font-size: 24px; font-weight: 500; letter-spacing: -0.01em; margin-bottom: 4px; }
-  .modal-sub { color: var(--sepia); font-style: italic; font-family: 'Newsreader', serif; font-size: 14px; margin-bottom: 18px; }
+  .modal-sub { color: var(--sepia); font-style: normal; font-family: 'Newsreader', serif; font-size: 14px; margin-bottom: 18px; }
   /* v0.82 update modal 双形态 toggle · 记一笔 (进展) | 沉淀一笔 (方法)
      跟 view-pill / category-pill 视觉一致 · vermilion active */
   .update-mode-toggle { display: flex; gap: 24px; align-items: center; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
@@ -1026,7 +1029,7 @@
     display: inline-block;
     cursor: pointer;
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 14px;
     color: var(--ink);
     border-bottom: 1px solid var(--sepia-light);
@@ -1034,7 +1037,7 @@
     transition: all 0.15s;
   }
   .upload-trigger:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
-  .upload-hint { font-family: 'Newsreader', serif; font-style: italic; font-size: 13px; color: var(--sepia); margin-top: 6px; }
+  .upload-hint { font-family: 'Newsreader', serif; font-style: normal; font-size: 13px; color: var(--sepia); margin-top: 6px; }
 
   .toast-paper { background: var(--ink); color: var(--bg); font-family: 'Newsreader', serif; font-size: 15px; padding: 12px 18px; border-radius: 0; }
 
@@ -1046,14 +1049,14 @@
     bottom: 32px;
     color: var(--bg);
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 14px;
     text-align: center;
     width: 100%;
   }
 
   /* ONBOARD */
-  .onboard-num { font-family: 'Newsreader', serif; font-style: italic; font-size: 60px; color: var(--vermilion); line-height: 1; }
+  .onboard-num { font-family: 'Newsreader', serif; font-style: normal; font-size: 60px; color: var(--vermilion); line-height: 1; }
   .onboard-h1 { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 56px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.05; color: var(--ink); }
   /* v0.71 入场仪式分类选择 · 4 类 × 3 道 · 让用户主动选方向 */
   .onboard-category-row { padding-bottom: 24px; }
@@ -1064,7 +1067,7 @@
   .starter-card { padding: 28px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 80px 1fr; gap: 24px; }
   .starter-card:first-child { border-top: 1px solid var(--rule); }
   .starter-title { font-family: 'Newsreader', serif; font-size: 22px; margin-bottom: 12px; }
-  .starter-prompt { border-left: 2px solid var(--rule); padding: 4px 16px; margin-bottom: 14px; font-family: 'Newsreader', serif; font-style: italic; color: var(--ink-soft); font-size: 15px; line-height: 1.5; }
+  .starter-prompt { border-left: 2px solid var(--rule); padding: 4px 16px; margin-bottom: 14px; font-family: 'Newsreader', serif; font-style: normal; color: var(--ink-soft); font-size: 15px; line-height: 1.5; }
 
   /* ===============================================================
      v0.28 TIGHTENED OVERRIDES — v0.27 的迭代
@@ -1567,7 +1570,7 @@
   .upload-area { margin-top: 14px; padding-top: 12px; }
   .upload-hint {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 12.5px;
     color: var(--sepia);
     margin-top: 6px;
@@ -1575,7 +1578,7 @@
   }
   .upload-trigger {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 13.5px;
     color: var(--vermilion);
     border-bottom: 1px solid var(--vermilion);
@@ -1975,11 +1978,11 @@
   }
 
   /* 覆盖 inline-style italic (+ 记一笔 / + 新项目 / + 留便签 / 复制提示词 等)
-     这些是 markup 里 style="font-family: Newsreader, serif; font-style: italic; ..."
+     这些是 markup 里 style="font-family: Newsreader, serif; font-style: normal; ..."
      用 attribute selector + !important 覆盖 (inline style 唯一突破方式) */
-  span.react-action[style*="font-style: italic"],
-  a.react-action[style*="font-style: italic"],
-  [style*="font-style: italic"][class*="react-action"] {
+  span.react-action[style*="font-style: normal"],
+  a.react-action[style*="font-style: normal"],
+  [style*="font-style: normal"][class*="react-action"] {
     font-style: normal !important;
   }
   /* 同样覆盖 nav 区 onboard 的 "还是先去入场仪式" 类 */
@@ -2283,7 +2286,7 @@
     display: block;
     color: var(--vermilion);
     font-family: 'Fraunces', serif;
-    font-style: italic;
+    font-style: normal;
     font-variation-settings: 'opsz' 144;
     font-size: 36px;
     margin-bottom: 16px;
@@ -2817,7 +2820,7 @@
     font-variation-settings: 'opsz' 144;
     font-size: 22px;
     font-weight: 400;
-    font-style: italic;
+    font-style: normal;
     color: var(--vermilion);
     line-height: 1;
     letter-spacing: -0.02em;
@@ -2906,7 +2909,7 @@
   .day-label .day-num {
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 36px;
     font-weight: 400;
     line-height: 0.9;
@@ -3026,7 +3029,7 @@
   .day-label .day-week {
     font-size: 13.5px;
     color: var(--ink-soft);
-    font-style: italic;
+    font-style: normal;
     letter-spacing: 0;
   }
 
@@ -3106,7 +3109,7 @@
     text-align: right;
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 40px;            /* 大一档 · 因为在 left column 内 · 不再跟横向 separator 等元素争 */
     font-weight: 400;
     line-height: 0.9;
@@ -3137,7 +3140,7 @@
     font-family: 'Newsreader', serif;
     font-size: 13px;
     color: var(--ink-soft);
-    font-style: italic;
+    font-style: normal;
     letter-spacing: 0;
   }
 
@@ -3262,7 +3265,7 @@
   .day-label .day-date {
     color: var(--ink-soft);
     font-family: 'Fraunces', 'Newsreader', serif !important;
-    font-style: italic !important;
+    font-style: normal !important;
     font-size: 13px !important;
     font-weight: 400;
     letter-spacing: 0.02em !important;
@@ -3356,7 +3359,7 @@
     text-align: right;
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 42px;
     font-weight: 400;
     line-height: 0.92;
@@ -3398,7 +3401,7 @@
   /* 星期 · serif italic 让中文字符不机械 (字距对齐 mono) */
   .day-label .day-week {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     color: var(--ink-soft);
     letter-spacing: 0;
@@ -3459,7 +3462,7 @@
     display: block;
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 42px;
     line-height: 0.92;
     color: var(--vermilion);
@@ -3484,7 +3487,7 @@
   .day-label .day-week {
     display: inline;
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     color: var(--ink-soft);
     letter-spacing: 0;
@@ -3598,7 +3601,7 @@
   .day-label .day-month-cn {
     display: inline !important;
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 11px;
     color: var(--vermilion);
     letter-spacing: 0.02em;
@@ -3628,7 +3631,7 @@
   .day-label .day-card-bot {
     display: block !important;
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     color: var(--ink-soft);
     padding-top: 8px;
@@ -3654,7 +3657,7 @@
   .day-label .day-note-count {
     display: block !important;
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 16px;
     line-height: 1.5;
     color: var(--ink-soft);
@@ -3759,7 +3762,7 @@
   div.day-label > .day-num {
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 22px;
     font-weight: 400;
     color: var(--vermilion);
@@ -3777,7 +3780,7 @@
   /* "星期五" · Newsreader italic sepia */
   div.day-label > .day-week {
     font-family: 'Newsreader', serif;
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     color: var(--ink-soft);
     letter-spacing: 0;
@@ -3816,7 +3819,7 @@
   #masthead-date .md-num {
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 22px;
     font-weight: 400;
     color: var(--vermilion);
@@ -4195,7 +4198,7 @@
   .ui-build-badge .bb-ver {
     font-family: 'Fraunces', 'Newsreader', serif;
     font-variation-settings: 'opsz' 144;
-    font-style: italic;
+    font-style: normal;
     font-size: 13px;
     font-weight: 400;
     color: var(--vermilion);
@@ -4410,7 +4413,7 @@
   }
   .masthead .masthead-sub-row .tagline {
     display: inline !important;     /* 撤销 v0.47 之前的隐藏 · 副行专属 */
-    font-style: italic;
+    font-style: normal;
     color: var(--sepia);
     font-size: 13.5px;
     letter-spacing: 0.005em;
@@ -4810,7 +4813,7 @@
     font-variation-settings: 'opsz' 144;
     font-size: 56px;
     font-weight: 400;
-    font-style: italic;
+    font-style: normal;
     color: var(--sepia-light);
     line-height: 1;
     letter-spacing: -0.02em;
@@ -7218,7 +7221,7 @@
         <span id="login-dev-action" class="hidden react-action serif" style="color: var(--moss); cursor: pointer; font-size: 13px; border-bottom: 1px dotted var(--moss);" onclick="guardSubmit(this, submitLoginEmailDev)" title="仅本地开发 · 生产环境没这个口">本地直接进 (跳过邮件)</span>
         <button id="login-send-btn" onclick="guardSubmit(this, submitLoginEmail)" class="btn-act-primary">发链接到我邮箱 →</button>
       </div>
-      <p class="text-xs serif" style="color: var(--sepia); margin-top: 14px; font-style: italic;">
+      <p class="text-xs serif" style="color: var(--sepia); margin-top: 14px; font-style: normal;">
         不会发广告 · 不会卖给第三方 · alpha 期连密码都不要
       </p>
     </div>
@@ -8437,7 +8440,11 @@ function renderWorkshop(handle) {
       ${isMe ? `<a class="workshop-account-link" onclick="showScreen('account')">账号 →</a>` : ''}
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工坊' : '一间工坊'}</div>
       <h1 class="workshop-name mb-3">@${handle}</h1>
-      <p class="workshop-tagline">「${escapeHtml(user.tagline)}」</p>
+      ${user.tagline && user.tagline.trim()
+        ? `<p class="workshop-tagline">「${escapeHtml(user.tagline)}」</p>`
+        : (isMe
+            ? `<p class="workshop-tagline"><a class="workshop-affiliation-link" onclick="openEditWorkshop()">加一句话介绍你的工坊 →</a></p>`
+            : '')}
       ${benchHtml}
       ${toolsHtml}
       ${(user.studios && user.studios.length > 0)
@@ -8456,8 +8463,8 @@ function renderWorkshop(handle) {
       <div class="section-label flex items-center justify-between">
         <span>最近在动 (${recent.length})</span>
         ${isMe ? `<span class="flex gap-4 items-center">
-          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0; color: var(--vermilion); border-bottom-color: var(--vermilion);" onclick="openPickProject()">+ 记一笔</span>
-          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNewProject()">+ 新项目</span>
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: normal; text-transform: none; letter-spacing: 0; color: var(--vermilion); border-bottom-color: var(--vermilion);" onclick="openPickProject()">+ 记一笔</span>
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: normal; text-transform: none; letter-spacing: 0;" onclick="openNewProject()">+ 新项目</span>
         </span>` : ''}
       </div>
       ${recent.length === 0 ? (isMe ? `
@@ -8476,7 +8483,7 @@ function renderWorkshop(handle) {
       <div class="mb-12">
         <div class="section-label flex items-center justify-between">
           <span>做过的 (${done.length})</span>
-          <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="showScreen('showcase')">看全部陈列 →</span>
+          <span class="react-action" style="font-family: Newsreader, serif; font-style: normal; text-transform: none; letter-spacing: 0;" onclick="showScreen('showcase')">看全部陈列 →</span>
         </div>
         <div class="done-index-list">${renderDoneIndex(done)}</div>
       </div>
@@ -8524,7 +8531,7 @@ function renderWorkshop(handle) {
         `;
       }).join('');
       const moreLink = sorted.length > 12
-        ? `<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="showScreen('methods')">看全部方法库 →</span>`
+        ? `<span class="react-action" style="font-family: Newsreader, serif; font-style: normal; text-transform: none; letter-spacing: 0;" onclick="showScreen('methods')">看全部方法库 →</span>`
         : '';
       return `
         <div class="mb-12">
@@ -8859,7 +8866,7 @@ async function renderProject(owner, slug) {
         <div class="mb-12">
           <div class="section-label flex items-center justify-between">
             <span>时间线 (${timelineUpdates.length})</span>
-            ${isMine ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openUpdate()">+ 记一笔</span>' : ''}
+            ${isMine ? '<span class="react-action" style="font-family: Newsreader, serif; font-style: normal; text-transform: none; letter-spacing: 0;" onclick="openUpdate()">+ 记一笔</span>' : ''}
           </div>
           ${timelineUpdates.map(renderUpdateEntry).join('')}
         </div>
@@ -8935,7 +8942,7 @@ async function renderProject(owner, slug) {
     <div class="mb-12 psect">
       <div class="section-label flex items-center justify-between">
         <span>便签墙 (${p.notes.length})</span>
-        <span class="react-action" style="font-family: Newsreader, serif; font-style: italic; text-transform: none; letter-spacing: 0;" onclick="openNote()">+ 留个便签</span>
+        <span class="react-action" style="font-family: Newsreader, serif; font-style: normal; text-transform: none; letter-spacing: 0;" onclick="openNote()">+ 留个便签</span>
       </div>
       <p class="mb-4 text-xs serif" style="color: var(--sepia);">独立平等 · 不嵌套盖楼 · 创作者想回就直接记一笔进展</p>
       ${p.notes.length === 0 ? '<p class="serif py-6 text-center" style="color: var(--sepia);">还没人留便签</p>' : ''}
@@ -11903,7 +11910,7 @@ function refreshMastheadHandle() {
   if (currentUser.handle) {
     el.innerHTML = `<a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="showScreen('account')" title="去账号页">@${currentUser.handle}</a> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
   } else {
-    el.innerHTML = `<span style="color: var(--sepia); font-style: italic;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('开张你的工坊')">开张我的工坊</a>`;
+    el.innerHTML = `<span style="color: var(--sepia); font-style: normal;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('开张你的工坊')">开张我的工坊</a>`;
   }
 }
 
