@@ -361,7 +361,7 @@
   .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
   .pcard:hover .pcard-name { color: var(--vermilion); }
   .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
-  .pcard-desc { color: var(--sepia); font-size: 14px; font-style: normal; margin-bottom: 8px; }
+  .pcard-desc { color: var(--sepia); font-size: 14px; font-style: normal; margin-bottom: 8px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .pcard-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); text-transform: lowercase; letter-spacing: 0.05em; }
   .pcard-meta .stuck { color: var(--vermilion); }
   .pcard-meta .done { color: var(--moss); }
@@ -837,15 +837,16 @@
   .tl-used-header { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.15em; margin-bottom: 8px; }
   /* v0.72 便签预览条 · update 卡片下方显示关联便签的 60 字摘要 + 跳转 ·
      上下文关联 ≠ spec 反对的嵌套盖楼 (便签自身仍独立平等 · 不能再被回复) */
-  .tl-note-preview { margin-top: 14px; padding: 10px 14px; background: rgba(120, 113, 108, 0.04); border-left: 2px solid var(--sepia-light); cursor: pointer; transition: all 0.15s; font-family: 'Newsreader', serif; line-height: 1.5; }
+  /* flex 单行 · 文字省略号 · @user 和尾部徽标 (已处理 / +N条↓) 不收缩 · 窄屏也不 wrap 把徽标挤掉行 */
+  .tl-note-preview { margin-top: 14px; padding: 10px 14px; background: rgba(120, 113, 108, 0.04); border-left: 2px solid var(--sepia-light); cursor: pointer; transition: all 0.15s; font-family: 'Newsreader', serif; line-height: 1.5; display: flex; align-items: baseline; }
   .tl-note-preview:hover { background: rgba(194, 65, 12, 0.04); border-left-color: var(--vermilion); }
-  .tl-note-preview-user { font-family: 'Inter', -apple-system, sans-serif; font-weight: 600; font-size: 13.5px; color: var(--ink); margin-right: 6px; }
+  .tl-note-preview-user { font-family: 'Inter', -apple-system, sans-serif; font-weight: 600; font-size: 13.5px; color: var(--ink); margin-right: 6px; flex-shrink: 0; }
   .tl-note-preview:hover .tl-note-preview-user { color: var(--vermilion); }
-  .tl-note-preview-text { color: var(--ink-soft); font-size: 14.5px; }
-  .tl-note-preview-more { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--sepia); letter-spacing: 0.05em; margin-left: 8px; white-space: nowrap; }
+  .tl-note-preview-text { color: var(--ink-soft); font-size: 14.5px; flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-note-preview-more { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--sepia); letter-spacing: 0.05em; margin-left: 8px; white-space: nowrap; flex-shrink: 0; }
   /* 便签预览条 · 已处理态 · 跟便签墙的小章呼应 · 左边线转苔绿 + 淡一档 */
   .tl-note-preview.is-resolved { opacity: 0.72; border-left-color: var(--moss); }
-  .tl-note-preview-done { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.05em; margin-left: 8px; border: 1px solid var(--moss); border-radius: 9px; padding: 0 6px; white-space: nowrap; }
+  .tl-note-preview-done { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--moss); letter-spacing: 0.05em; margin-left: 8px; border: 1px solid var(--moss); border-radius: 9px; padding: 0 6px; white-space: nowrap; flex-shrink: 0; }
   /* 便签墙某条便签关联了 update · 顶上"说的是「XXX」"跳转链接 */
   .note-ref { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-bottom: 6px; cursor: pointer; transition: color 0.15s; padding-bottom: 6px; border-bottom: 1px dotted var(--rule); line-height: 1.5; }
   .note-ref:hover { color: var(--vermilion); }
