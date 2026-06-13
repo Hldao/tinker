@@ -399,7 +399,8 @@ function exhibitProject({ projectId, kind, statement, seekingFeedback, feedbackA
   const anchor = 'update-' + updateId;
 
   // 只有 ship kind 完工时通知"想试试"的人 (跟原来 shipProject 行为一致)
-  if (isShipKind && !wasDone) {
+  // v0.33 把 done 拆出 live · wasDone 漏改成 wasShipped (374 行改了这里没改) · 首次陈列才通知 · 重新补图不再扰
+  if (isShipKind && !wasShipped) {
     const wantToTryRows = db.prepare(`
       SELECT user_id FROM reactions WHERE project_id = ? AND type = 'wantToTry' AND user_id != ?
     `).all(projectId, currentUserId);

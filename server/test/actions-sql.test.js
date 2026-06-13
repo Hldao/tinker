@@ -776,3 +776,28 @@ test('searchUpdates: 尊重 limit · preview 不超 120 字', () => {
   assert.equal(hits.length, 3, '尊重 limit');
   assert.ok(hits.every(h => h.preview.length <= 120), 'preview ≤ 120');
 });
+
+// ============================================
+// exhibitProject / ship · 回归: wasDone 未定义 (v0.33 漏改 · 截图/补图时炸)
+// ============================================
+test('exhibitProject ship: 有 wantToTry 用户时不炸 + 发完工通知 (wasDone 回归)', () => {
+  const { daodao, alice } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.reactToProject({ projectId: p.id, level: 'wantToTry' }, { currentUserId: alice });
+  // 以前这里走到 `if (isShipKind && !wasDone)` 抛 ReferenceError · 数据存了但报错给用户看
+  const r = a.shipProject({ projectId: p.id, reflection: '完工了 · 这是一句完工感想' }, { currentUserId: daodao });
+  assert.ok(r.ok);
+  assert.equal(r.kind, 'ship');
+  const notifs = db.prepare("SELECT 1 FROM notifications WHERE target_user_id = ? AND type = 'projectDone'").all(alice);
+  assert.equal(notifs.length, 1, 'wantToTry 用户收到完工通知');
+});
+
+test('exhibitProject ship: 重新补图 (已 live) 不再重复通知 wantToTry', () => {
+  const { daodao, alice } = setupBasic();
+  const p = a.addProject({ name: 'P', desc: 'D', productLink: 'https://e.com' }, { currentUserId: daodao });
+  a.reactToProject({ projectId: p.id, level: 'wantToTry' }, { currentUserId: alice });
+  a.shipProject({ projectId: p.id, reflection: '首次完工感想' }, { currentUserId: daodao }); // → live · 通知 1 次
+  a.shipProject({ projectId: p.id, reflection: '补个图再说一句' }, { currentUserId: daodao }); // 已 live · 不该再通知
+  const notifs = db.prepare("SELECT 1 FROM notifications WHERE target_user_id = ? AND type = 'projectDone'").all(alice);
+  assert.equal(notifs.length, 1, '只通知首次 · 补图不再扰');
+});
