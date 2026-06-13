@@ -7007,13 +7007,13 @@
     <div class="mb-12">
       <div class="mono text-xs mb-3" style="color: var(--vermilion); letter-spacing: 0.28em;">入场仪式</div>
       <h1 class="onboard-h1 mb-4">先做一个小东西</h1>
-      <p class="serif italic text-lg" style="color: var(--sepia);">不是看完教程才能进来 — 我们觉得"做出来"比"学会了"更接近 vibe coding 的本质。挑一个,5 分钟。</p>
+      <p class="serif text-lg" style="color: var(--sepia);">不是看完教程才能进来。做出来,比学会了,更接近 vibe coding 的本质。挑一个,5 分钟。</p>
     </div>
     <div id="onboard-starters"></div>
     <div class="mt-12 pt-8 border-t-2" style="border-color: var(--ink);">
-      <p class="serif italic mb-4" style="color: var(--sepia);">做完了?</p>
+      <p class="serif mb-4" style="color: var(--sepia);">做完了?</p>
       <button onclick="openWorkshopSetup()" class="btn-act-primary">挂上我的产物 · 开张工坊</button>
-      <p class="mt-6 text-sm serif italic" style="color: var(--sepia);">
+      <p class="mt-6 text-sm serif" style="color: var(--sepia);">
         已经有作品了? <span class="react-action" onclick="openWorkshopSetup()">直接挂上来</span>
       </p>
     </div>
@@ -7279,7 +7279,7 @@
     <!-- 状态 1: 填邮箱 -->
     <div id="login-state-input">
       <h3 class="modal-title">进 Tinker 工坊</h3>
-      <p class="modal-sub" id="login-sub">用邮箱 · 我们发个登录链接给你 · 5 分钟内点开就进 · 不用记密码</p>
+      <p class="modal-sub" id="login-sub">用邮箱 · 发个登录链接给你 · 5 分钟内点开就进 · 不用记密码</p>
       <div class="mb-5">
         <label class="mono text-xs block mb-1" style="color: var(--sepia);">你的邮箱</label>
         <input id="login-email" class="input-bare" type="email" placeholder="例如 you@gmail.com" autocomplete="email">
@@ -7315,7 +7315,7 @@
 <!-- WELCOME modal — 第一次登录后 (server 返回 needsWelcome=true) · 确认/改 handle + tagline -->
 <div id="modal-set-handle" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 480px;">
-    <h3 class="modal-title">开张你的工坊</h3>
+    <h3 class="modal-title">先把工坊支起来</h3>
     <p class="modal-sub">招牌已从你邮箱预填 · 不喜欢可以改 · 现在不填一句话也行</p>
     <div class="mb-4">
       <label class="mono text-xs block mb-1" style="color: var(--sepia);">招牌 (昵称) · 字母 / 数字 / 下划线 / 中文</label>
@@ -7327,7 +7327,7 @@
       <input id="sh-tagline" class="input-bare" placeholder="比如 用 AI 帮我妈做小红书">
     </div>
     <div class="flex justify-end gap-4 mt-6">
-      <button id="sh-submit-btn" onclick="guardSubmit(this, submitWelcome)" class="btn-act-primary">开张 →</button>
+      <button id="sh-submit-btn" onclick="guardSubmit(this, submitWelcome)" class="btn-act-primary">支起来 →</button>
     </div>
   </div>
 </div>
@@ -9813,7 +9813,7 @@ function renderNotifications() {
     root.innerHTML = `
       <div class="serif py-12 text-center" style="color: var(--sepia);">
         <p style="margin-bottom: 16px;">登录之后才能看到对你项目的反馈</p>
-        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openLogin('开张你的工坊')">开张我的工坊 →</span>
+        <span class="react-action serif italic" style="color: var(--vermilion); cursor: pointer;" onclick="openLogin('支起你的工坊')">支起我的工坊 →</span>
       </div>`;
     return;
   }
@@ -12161,7 +12161,7 @@ function refreshMastheadHandle() {
   if (currentUser.handle) {
     el.innerHTML = `<a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="showScreen('account')" title="去账号页">@${currentUser.handle}</a> · <a style="color: var(--sepia); cursor: pointer; border-bottom: 1px dotted var(--sepia-light);" onclick="logout()">出去</a>`;
   } else {
-    el.innerHTML = `<span style="color: var(--sepia); font-style: normal;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('开张你的工坊')">开张我的工坊</a>`;
+    el.innerHTML = `<span style="color: var(--sepia); font-style: normal;">匿名浏览中</span> · <a style="color: var(--vermilion); cursor: pointer; border-bottom: 1px dotted var(--vermilion);" onclick="openLogin('支起你的工坊')">支起我的工坊</a>`;
   }
 }
 
@@ -12272,7 +12272,7 @@ function openLogin(contextDesc) {
   if (subEl && contextDesc) {
     subEl.textContent = '想 ' + contextDesc + ' · 填邮箱发个登录链接 · 5 分钟内点开就进 · 不用记密码';
   } else if (subEl) {
-    subEl.textContent = '用邮箱 · 我们发个登录链接给你 · 5 分钟内点开就进 · 不用记密码';
+    subEl.textContent = '用邮箱 · 发个登录链接给你 · 5 分钟内点开就进 · 不用记密码';
   }
   // 重置到输入态
   document.getElementById('login-state-input').classList.remove('hidden');
@@ -12447,7 +12447,8 @@ async function submitWelcome() {
       }
       setTimeout(() => dispatchPending(p), 200);
     } else {
-      navigateFromHash();
+      // 新用户主动注册 (没有 pending 动作) · 送进入场仪式做个小东西 · 别直接丢回 feed
+      showScreen('onboard');
     }
     showToast('开张了 · 你好 @' + handle);
   } catch (e) {
@@ -12468,7 +12469,7 @@ function navMyWorkshop() {
   if (currentUser.handle) {
     showScreen('workshop', currentUser.handle);
   } else {
-    requireLogin('navMyWorkshop', {}, '开张你的工坊');
+    requireLogin('navMyWorkshop', {}, '支起你的工坊');
   }
 }
 function navAddUpdate() {
