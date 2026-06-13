@@ -5493,6 +5493,20 @@
   .prefs-chip.off { color: var(--vermilion); border-color: var(--vermilion); background: rgba(194, 65, 12, 0.05); text-decoration: line-through; text-decoration-color: var(--vermilion); }
   .prefs-help { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.04em; margin-top: 6px; opacity: 0.8; }
   .prefs-status-chip { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; letter-spacing: 0.08em; color: var(--sepia); pointer-events: none; }
+  /* 通知偏好面板重组: 两组小标题 + 真·开关 + 高级折叠 */
+  .prefs-group-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--sepia); letter-spacing: 0.12em; text-transform: uppercase; margin: 20px 0 4px; opacity: 0.7; }
+  .prefs-group-label:first-child { margin-top: 0; }
+  .prefs-switch { display: inline-flex; align-items: center; gap: 9px; background: none; border: none; padding: 0; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--sepia); letter-spacing: 0.06em; }
+  .prefs-switch-track { width: 30px; height: 16px; border-radius: 8px; background: var(--rule); position: relative; transition: background 0.18s; flex: none; }
+  .prefs-switch-knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,0.18); transition: left 0.18s; }
+  .prefs-switch.on { color: var(--moss); }
+  .prefs-switch.on .prefs-switch-track { background: var(--moss); }
+  .prefs-switch.on .prefs-switch-knob { left: 16px; }
+  .prefs-switch:hover .prefs-switch-track { box-shadow: 0 0 0 2px rgba(120,113,108,0.12); }
+  .prefs-advanced { margin-top: 20px; padding-top: 12px; border-top: 1px dotted var(--rule); }
+  .prefs-advanced-toggle { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); cursor: pointer; letter-spacing: 0.06em; }
+  .prefs-advanced-toggle:hover { color: var(--vermilion); }
+  .prefs-advanced-body { margin-top: 12px; }
 
   /* —— B · 做过的索引 chip —— */
   .done-index-list {
@@ -12523,7 +12537,7 @@ async function loadAndRenderPrefs() {
     _currentPrefs = prefs;
     renderPrefsPanel(prefs, quietNow);
     if (chip) {
-      chip.textContent = quietNow ? '勿扰中' : '勿扰已关';
+      chip.textContent = quietNow ? '静默中' : '未静音';
       chip.style.color = quietNow ? 'var(--vermilion)' : 'var(--sepia)';
     }
   } catch (e) {
@@ -12556,6 +12570,8 @@ function renderPrefsPanel(prefs, quietNow) {
   }).join('');
 
   panel.innerHTML = `
+    <div class="prefs-group-label">什么时候别打扰我</div>
+
     <div class="prefs-block">
       <div class="prefs-row">
         <span class="prefs-label">勿扰模式</span>
@@ -12568,7 +12584,7 @@ function renderPrefsPanel(prefs, quietNow) {
         </select>
         ${mutedHint ? `<span class="prefs-status muted">${mutedHint}</span>` : ''}
       </div>
-      <div class="prefs-help">开启后:站内通知不亮红点 · CLI 触发器不弹 · bridge auto-ping 不主动发</div>
+      <div class="prefs-help">开启后:站内通知不亮红点 · CLI 不再弹提醒 · 也不主动给队友发提醒</div>
     </div>
 
     <div class="prefs-block">
@@ -12583,34 +12599,35 @@ function renderPrefsPanel(prefs, quietNow) {
       <div class="prefs-help">跨午夜也行 · 比如 23:00 - 07:00 · 留空就不限制</div>
     </div>
 
-    <div class="prefs-block">
-      <div class="prefs-row">
-        <span class="prefs-label">站内通知</span>
-        <span class="prefs-toggle ${prefs.webMuteWeak ? 'on' : ''}" onclick="toggleWebMuteWeak()">
-          ${prefs.webMuteWeak ? '✓ 屏蔽弱信号 (想试试 / 留便签)' : '屏蔽弱信号 (想试试 / 留便签)'}
-        </span>
-      </div>
-      <div class="prefs-help">强信号 (mention · 接走 · 方法被用 · 卡住) 不让关 · 按 spec 是核心反馈链</div>
-    </div>
+    <div class="prefs-group-label">收哪些通知</div>
 
     <div class="prefs-block">
       <div class="prefs-row">
-        <span class="prefs-label">CLI 触发器</span>
-        <span class="prefs-toggle" onclick="toggleCliKindsExpand(this)">展开 ${Object.keys(CLI_KIND_LABELS).length} 类 →</span>
-        <span class="prefs-status" style="color: var(--sepia);">已关 ${(prefs.cliDisabledKinds || []).length} 类</span>
+        <span class="prefs-label">站内弱信号</span>
+        <button type="button" class="prefs-switch ${prefs.webMuteWeak ? 'on' : ''}" onclick="toggleWebMuteWeak()" role="switch" aria-checked="${prefs.webMuteWeak ? 'true' : 'false'}">
+          <span class="prefs-switch-track"><span class="prefs-switch-knob"></span></span>
+          <span>屏蔽「想试试 / 留便签」</span>
+        </button>
       </div>
-      <div class="prefs-help">点 chip 切换 · 关掉的画线 · 关了不会再弹 reminder · commit 检查不变</div>
-      <div id="prefs-cli-kinds" class="prefs-chip-row" style="display: none;">${cliKindsHtml}</div>
+      <div class="prefs-help">强信号 (被 @ · 接走 · 方法被用 · 卡住) 不让关 · 这些是核心反馈</div>
+    </div>
+
+    <div class="prefs-advanced">
+      <span class="prefs-advanced-toggle" onclick="toggleAdvancedPrefs(this)">高级 · CLI 提醒过滤${(prefs.cliDisabledKinds || []).length ? ' · 已关 ' + (prefs.cliDisabledKinds || []).length + ' 类' : ''} ▾</span>
+      <div id="prefs-advanced-body" class="prefs-advanced-body" style="display: none;">
+        <div class="prefs-help">提交代码时会评估这 ${Object.keys(CLI_KIND_LABELS).length} 类提醒 · 点一下切换 · 关掉的画线 · 关了就不再弹这类 · 提交检查本身照常</div>
+        <div class="prefs-chip-row">${cliKindsHtml}</div>
+      </div>
     </div>
   `;
 }
 
-function toggleCliKindsExpand(el) {
-  const panel = document.getElementById('prefs-cli-kinds');
-  if (!panel) return;
-  const isHidden = panel.style.display === 'none';
-  panel.style.display = isHidden ? 'flex' : 'none';
-  el.textContent = isHidden ? '收起 →' : ('展开 ' + Object.keys(CLI_KIND_LABELS).length + ' 类 →');
+function toggleAdvancedPrefs(el) {
+  const body = document.getElementById('prefs-advanced-body');
+  if (!body) return;
+  const isHidden = body.style.display === 'none';
+  body.style.display = isHidden ? 'block' : 'none';
+  el.textContent = el.textContent.replace(isHidden ? '▾' : '▴', isHidden ? '▴' : '▾');
 }
 
 async function updateMuteMode(mode) {
@@ -12654,7 +12671,7 @@ async function syncPrefs(partial) {
     renderPrefsPanel(prefs, quietNow);
     const chip = document.getElementById('prefs-status-chip');
     if (chip) {
-      chip.textContent = quietNow ? '勿扰中' : '勿扰已关';
+      chip.textContent = quietNow ? '静默中' : '未静音';
       chip.style.color = quietNow ? 'var(--vermilion)' : 'var(--sepia)';
     }
     showToast('改了 · 多台机器都同步');
