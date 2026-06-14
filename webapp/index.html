@@ -5454,7 +5454,8 @@
   .workshop-studio-action.primary:hover { color: var(--vermilion); border-bottom-color: var(--vermilion); }
 
   /* —— v0.30 §5 账号页 —— */
-  .account-page { max-width: 640px; margin: 0 auto; padding-top: 12px; }
+  /* 左对齐版心 (去掉 margin:0 auto 的居中) · 宽度对齐关于页 prose (44rem) · 左边缘跟 masthead/全站齐 · 不再窄而居中地飘在 960 框里 */
+  .account-page { max-width: 44rem; padding-top: 12px; }
   .account-head { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 2px solid var(--ink); }
   .account-title {
     font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
