@@ -308,7 +308,8 @@
   .method-hero-card-meta { display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); margin-top: 4px; flex-wrap: wrap; }
   .method-hero-card-meta .nh { color: var(--sepia); cursor: pointer; }
   .method-hero-card-meta .nh:hover { color: var(--vermilion); }
-  .method-hero-card-actions { display: flex; gap: 12px; margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  /* margin-top:auto 把动作行钉到卡片底 · 卡片 grid 等高时左右两列动作行对齐 · flex gap:8px 兜住跟 meta 的最小间距 */
+  .method-hero-card-actions { display: flex; gap: 12px; margin-top: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   .method-hero-card-copy { color: var(--moss); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
   .method-hero-card-copy:hover { color: var(--vermilion); }
   /* 发现页卡片的「用了·跑通了」· 借用环的"还" · 已用显苔绿 */
@@ -5353,15 +5354,7 @@
     letter-spacing: 0.04em;
   }
   /* —— v0.38 工坊页"我的工作室"厚卡板块 —— */
-  .workshop-studios-section { margin-bottom: 48px; }
-  .workshop-studios-head {
-    display: flex; align-items: baseline; justify-content: space-between;
-    margin-bottom: 18px; padding-bottom: 10px;
-    border-bottom: 1px solid var(--ink);
-  }
-  .workshop-studios-title {
-    font-family: 'Newsreader', serif; font-size: 22px; font-weight: 500; color: var(--ink);
-  }
+  /* 工作室区标题已统一用 .section-label (跟 最近在动/沉淀方法 等同款) · 旧 .workshop-studios-head/title 大 serif 标题废弃 */
   .workshop-studios-action-link {
     font-family: Newsreader, serif; font-size: 14px;
     cursor: pointer; color: var(--sepia);
@@ -8548,7 +8541,6 @@ async function renderWorkshop(handle) {
         </div>
       ` : '')}
     </div>
-    <div id="workshop-studios-block"></div>
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
         <span>最近在动 (${recent.length})</span>
@@ -8568,6 +8560,7 @@ async function renderWorkshop(handle) {
         </div>
       ` : '<p class="serif py-8 text-center" style="color: var(--sepia);">最近没有进行中的项目</p>') : renderPcards(recent, {showUpdates: true})}
     </div>
+    <div id="workshop-studios-block"></div>
     ${alsoDoing.length > 0 ? `<div class="mb-12"><div class="section-label">也在做 (${alsoDoing.length})</div>${renderPcards(alsoDoing, {region: 'alsoDoing'})}</div>` : ''}
     ${done.length > 0 ? `
       <div class="mb-12">
@@ -12565,9 +12558,9 @@ async function loadAndRenderWorkshopStudios(handle, isMe) {
       : '';
     const cards = studios.map(s => renderWorkshopStudioCard(s, isMe)).join('');
     root.innerHTML = `
-      <div class="workshop-studios-section">
-        <div class="workshop-studios-head">
-          <span class="workshop-studios-title">${escapeHtml(headTitle)} (${studios.length})</span>
+      <div class="mb-12">
+        <div class="section-label flex items-center justify-between">
+          <span>${escapeHtml(headTitle)} (${studios.length})</span>
           ${headActions}
         </div>
         ${cards}
