@@ -9511,6 +9511,8 @@ function rerenderAfterUpdateAction(p) {
 async function renderUpdateDetail(updateId) {
   const root = document.getElementById('update-content');
   if (!root) return;
+  // 请求序号 · 防竞态:快速连点两条帖 · 先点的全文后到别盖掉后点的
+  const seq = (renderUpdateDetail._seq = (renderUpdateDetail._seq || 0) + 1);
   let u = null, p = null;
   for (const pr of state.projects) {
     const found = (pr.updates || []).find(x => x.id === updateId);
@@ -9523,8 +9525,11 @@ async function renderUpdateDetail(updateId) {
   currentProjectCtx = p.id;  // 让 openNote 等动作落到这个项目 (否则用上一个项目页的 ctx)
   // 懒加载: state 里这条只有预览 · 单条详情要全文 · 拉该项目全量 updates 把这条换成全文
   if (u.truncated) {
+    // 先清掉上一条帖的内容 · 否则 fetch 期间会闪一下旧帖再跳成新帖
+    root.innerHTML = '<div class="text-center py-16 serif" style="color: var(--sepia);">加载中…</div>';
     try {
       const r = await fetchJSON('/api/project/' + p.id + '/updates');
+      if (seq !== renderUpdateDetail._seq) return;  // 已被更晚的点击取代 · 丢弃这次过期结果
       if (r && r.ok && Array.isArray(r.updates)) {
         p.updates = r.updates;
         const full = r.updates.find(x => x.id === updateId);
