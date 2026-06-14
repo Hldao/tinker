@@ -8392,17 +8392,29 @@ function makeMethodEntryEl(e) {
 }
 
 /* ============ WORKSHOP ============ */
+// 工坊简介那一块的 html · 初次渲染 + 简介后台补回来时都用这个 · 保持一致
+function workshopTaglineHtml(tagline, isMe) {
+  if (tagline && tagline.trim()) return `<p class="workshop-tagline">「${escapeHtml(tagline)}」</p>`;
+  if (isMe) return `<p class="workshop-tagline"><a class="workshop-affiliation-link" onclick="openEditWorkshop()">加一句话介绍你的工坊 →</a></p>`;
+  return '';
+}
+
 async function renderWorkshop(handle) {
   let user = state.users[handle];
   const root = document.getElementById('workshop-content');
-  // tagline (简介) 不在启动包里了 · 只带当前用户自己的 · 看别人工坊时按 handle 取 · 顺带兜底没进启动包的用户
-  if (!user || user.tagline === undefined) {
+  const seq = (renderWorkshop._seq = (renderWorkshop._seq || 0) + 1);
+  // 完全不认识这个 handle (state 里没 user 也没他的项目) · 才先 await 确认存不存在 · 否则直接用手上数据秒画
+  if (!user && !state.projects.some(p => p.owner === handle)) {
     try {
       const r = await fetchJSON('/api/users/' + encodeURIComponent(handle));
-      if (r && r.ok && r.user) user = { name: (user && user.name) || r.user.name, tagline: r.user.tagline };
-    } catch (e) { /* 取不到 · 下面按 user 在不在兜底 */ }
+      if (seq !== renderWorkshop._seq) return;
+      if (r && r.ok && r.user) user = { name: r.user.name, tagline: r.user.tagline };
+    } catch (e) { /* 取不到 · 下面兜底 */ }
+    if (!user) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这间工坊</p>'; return; }
   }
-  if (!user) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这间工坊</p>'; return; }
+  if (!user) user = {};
+  // 简介 (tagline) 不在启动包里 (只带当前用户自己的) · 缺就先秒画整页留空位 · 函数末尾后台补 · 不闪上一间工坊
+  const bioMissing = user.tagline === undefined;
   const projects = state.projects.filter(p=>p.owner===handle);
   // v0.69: 工作室分层不再纯按 status · 30 天没动的 active/stuck 也沉到「也在做」
   // spec 5.1 §项目: "30 天没动 → 自动沉到也在做 · 让真实活动决定哪些被看见,不需要用户主动整理"
@@ -8522,11 +8534,7 @@ async function renderWorkshop(handle) {
       ${isMe ? `<a class="workshop-account-link" onclick="showScreen('account')">账号 →</a>` : ''}
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工坊' : '一间工坊'}</div>
       <h1 class="workshop-name mb-3">@${handle}</h1>
-      ${user.tagline && user.tagline.trim()
-        ? `<p class="workshop-tagline">「${escapeHtml(user.tagline)}」</p>`
-        : (isMe
-            ? `<p class="workshop-tagline"><a class="workshop-affiliation-link" onclick="openEditWorkshop()">加一句话介绍你的工坊 →</a></p>`
-            : '')}
+      <div id="workshop-tagline-slot">${workshopTaglineHtml(user.tagline, isMe)}</div>
       ${benchHtml}
       ${toolsHtml}
       ${(user.studios && user.studios.length > 0)
@@ -8649,6 +8657,21 @@ async function renderWorkshop(handle) {
   // v0.38 异步拉 preview 数据 · 渲染厚卡板块到"最近在动"之前
   // 不再用 bulk dump 的 user.studios 当开关 (那个现在只含本人) · 直接按 handle 拉 · 空了内部不渲染
   loadAndRenderWorkshopStudios(handle, isMe);
+
+  // 简介没在手上 (看别人工坊 · 启动包不带简介) · 后台拉回来只换简介那一小块 · 不重画整页
+  if (bioMissing) {
+    (async () => {
+      try {
+        const r = await fetchJSON('/api/users/' + encodeURIComponent(handle));
+        if (seq !== renderWorkshop._seq) return;  // 已被更晚的导航取代 · 丢弃
+        if (r && r.ok && r.user) {
+          state.users[handle] = Object.assign({}, state.users[handle] || {}, { name: r.user.name, tagline: r.user.tagline });
+          const slot = document.getElementById('workshop-tagline-slot');
+          if (slot) slot.innerHTML = workshopTaglineHtml(r.user.tagline, isMe);
+        }
+      } catch (e) { /* 拉失败 · 留空位 · 不动页面 */ }
+    })();
+  }
 }
 
 /* ============ STUDIO (工作室聚合页 · v0.18) ============
@@ -8723,13 +8746,9 @@ async function renderProject(owner, slug) {
   const root = document.getElementById('project-content');
   if (!p) { root.innerHTML = '<p class="serif" style="color: var(--sepia);">找不到这个项目</p>'; return; }
   currentProjectCtx = p.id;
-  // 懒加载: /api/state 里 update 只带预览 (前 400 字) · 进项目页拉这个项目的全量 updates 全文
-  // 拉回来替换 p.updates · 时间线/复制 markdown/编辑 都读 p.updates · 一次到位
-  try {
-    const r = await fetchJSON('/api/project/' + p.id + '/updates');
-    if (r && r.ok && Array.isArray(r.updates)) p.updates = r.updates;
-  } catch (e) { /* 拉失败就用 state 里的预览兜底 · 不至于空白 */ }
-  if (currentProjectCtx !== p.id) return; // 拉取期间用户已经切走 · 别拿旧项目覆盖当前屏
+  // 懒加载策略 (跟帖子详情同思路):预览态里只有正文截到 400 字 · 配图/便签/反馈等其它字段都全
+  // 所以先用预览把整页同步画出来 (秒开 · 不闪上一个项目)。时间线卡片要全文 (展开看完整 / 复制
+  // markdown) 才需要全文 · 在函数末尾后台拉回来 · 拿到后整页重画一次 settle (已是全文则跳过 · 不循环)
   const isMine = owner === currentUser.handle;
   const me = currentUser.handle;
   const myReaction =
@@ -9084,6 +9103,21 @@ async function renderProject(owner, slug) {
       </div>
     </div>
   `;
+
+  // 时间线卡片要全文 (展开看完整 / 复制 markdown) · 预览先顶上 · 全文后台拉回来再整页重画一次 settle
+  // 闸门在 truncated 上:全文端点返回的 updates 不带 truncated · 重画时这里为 false · 不会再拉 · 不死循环
+  if (p.updates.some(u => u.truncated)) {
+    (async () => {
+      try {
+        const r = await fetchJSON('/api/project/' + p.id + '/updates');
+        if (currentProjectCtx !== p.id) return;  // 拉取期间用户已切走 · 别拿旧项目覆盖当前屏
+        if (r && r.ok && Array.isArray(r.updates)) {
+          p.updates = r.updates;
+          renderProject(owner, slug);  // 整页重画 · 此时 updates 全文 · 不再触发拉取
+        }
+      } catch (e) { /* 拉失败 · 预览兜底 · 不动页面 */ }
+    })();
+  }
 }
 
 /* ============ ONBOARD ============ */
