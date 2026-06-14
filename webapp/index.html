@@ -9523,20 +9523,8 @@ async function renderUpdateDetail(updateId) {
     return;
   }
   currentProjectCtx = p.id;  // 让 openNote 等动作落到这个项目 (否则用上一个项目页的 ctx)
-  // 懒加载: state 里这条只有预览 · 单条详情要全文 · 拉该项目全量 updates 把这条换成全文
-  if (u.truncated) {
-    // 先清掉上一条帖的内容 · 否则 fetch 期间会闪一下旧帖再跳成新帖
-    root.innerHTML = '<div class="text-center py-16 serif" style="color: var(--sepia);">加载中…</div>';
-    try {
-      const r = await fetchJSON('/api/project/' + p.id + '/updates');
-      if (seq !== renderUpdateDetail._seq) return;  // 已被更晚的点击取代 · 丢弃这次过期结果
-      if (r && r.ok && Array.isArray(r.updates)) {
-        p.updates = r.updates;
-        const full = r.updates.find(x => x.id === updateId);
-        if (full) u = full;
-      }
-    } catch (e) { /* 拉失败用预览兜底 */ }
-  }
+  // 懒加载策略:预览态里除正文截断外其它字段都全 · 所以先用预览把整页秒画出来 (零空屏/零跳动)
+  // 全文 (truncated) 在下面后台拉回来后只把正文那段原地换掉 · 见函数末尾
   const seeking = u.feedbackAsk !== undefined;
   const imgs = (u.images && u.images.length > 0) ? u.images : [];
   const isMine = p.owner === currentUser.handle;
@@ -9554,7 +9542,7 @@ async function renderUpdateDetail(updateId) {
       </div>
       <div class="mono" style="color: var(--sepia); font-size: 12px; margin-bottom: 16px;">${shortAgo(u.at)}</div>
       ${seeking && u.feedbackAsk ? `<div class="entry-feedback-ask"><span class="ask-prefix">想知道:</span>${escapeHtml(u.feedbackAsk)}</div>` : ''}
-      <div class="entry-text" style="font-size: 17px; line-height: 1.7;">${renderRichText(u.text)}</div>
+      <div class="entry-text" id="ud-text" style="font-size: 17px; line-height: 1.7;">${renderRichText(u.text)}</div>
       ${imgs.length > 0 ? `
         <div class="feed-figure${imgs.length > 1 ? ' multi' : ''}" style="margin-top: 16px;">
           ${imgs.map(img => isEncryptedImageSlot(img) ? renderEncryptedPlaceholder() : `
@@ -9568,7 +9556,7 @@ async function renderUpdateDetail(updateId) {
         ${seeking && p.productLink ? `<a href="${escapeHtml(safeUrl(p.productLink))}" target="_blank" rel="noopener" class="entry-seeking-cta">去试用 →</a>` : ''}
       </div>
       <div class="tl-actions" style="margin-top: 22px;">
-        <span class="tl-action" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>
+        <span class="tl-action" id="ud-copy-md" title="复制完整 markdown · 粘到你的 AI 对话里" onclick="copyText(this, ${JSON.stringify(u.text).replace(/"/g,'&quot;')})">${ICONS.copy}复制 markdown</span>
         ${u.isSeeking && !isMine ? `<span class="tl-action tl-action-seek-reply" onclick="copySeekReplyForAI('${u.id}', ${JSON.stringify(u.text || '').replace(/"/g, '&quot;')})">我知道 · 复制给 AI 回应</span>` : ''}
         ${u.isSeeking && !isMine ? `<span class="tl-action" onclick="openSeekReply('${u.id}', '${p.id}')">或自己写一条</span>` : ''}
         <span class="tl-action" onclick="openNote('${u.id}')">说一句</span>
@@ -9608,6 +9596,25 @@ async function renderUpdateDetail(updateId) {
     </article>
   `;
   if (u.isSeeking) loadSeekReplies(u.id);
+
+  // 全文懒加载:整页已用预览秒开 · 全文回来只把正文 + 复制按钮原地换掉 · 不重画不闪不跳
+  // (预览态只截了正文 · 配图/便签/场景等其它字段本来就全 · 所以无需重渲染整页)
+  if (u.truncated) {
+    (async () => {
+      try {
+        const r = await fetchJSON('/api/project/' + p.id + '/updates');
+        if (seq !== renderUpdateDetail._seq) return;  // 已被更晚的点击取代 · 丢弃这次过期结果
+        if (!r || !r.ok || !Array.isArray(r.updates)) return;
+        p.updates = r.updates;
+        const full = r.updates.find(x => x.id === updateId);
+        if (!full) return;
+        const txtEl = document.getElementById('ud-text');
+        if (txtEl) txtEl.innerHTML = renderRichText(full.text);
+        const copyEl = document.getElementById('ud-copy-md');
+        if (copyEl) copyEl.setAttribute('onclick', 'copyText(this, ' + JSON.stringify(full.text) + ')');
+      } catch (e) { /* 拉失败 · 预览正文兜底 · 不动页面 */ }
+    })();
+  }
 }
 
 // v0.95 拉一条求方法请求收到的回应方法 · 填进求助详情页的"回应"区
