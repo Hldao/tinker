@@ -1098,6 +1098,20 @@
   .starter-title { font-family: 'Newsreader', serif; font-size: 22px; margin-bottom: 12px; }
   .starter-prompt { border-left: 2px solid var(--rule); padding: 4px 16px; margin-bottom: 14px; font-family: 'Newsreader', serif; font-style: normal; color: var(--ink-soft); font-size: 15px; line-height: 1.5; }
 
+  /* 登船页收尾 · 可以做什么 → 为什么有价值 + 积少成多 */
+  .onboard-value { margin-top: 64px; }
+  .onboard-value-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--vermilion); letter-spacing: 0.28em; text-transform: uppercase; margin-bottom: 14px; }
+  .onboard-value-h { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-variation-settings: 'opsz' 144; font-size: 30px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.2; color: var(--ink); margin-bottom: 12px; }
+  .onboard-value-lead { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-size: 17px; line-height: 1.65; color: var(--ink-soft); margin-bottom: 30px; letter-spacing: 0.005em; }
+  .ov-item { padding: 18px 0; border-top: 1px solid var(--rule); }
+  .ov-item:last-of-type { border-bottom: 1px solid var(--rule); }
+  .ov-do { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-size: 19px; color: var(--ink); margin-bottom: 6px; }
+  .ov-do .ov-arrow { color: var(--vermilion); margin-right: 9px; }
+  .ov-why { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-size: 15.5px; line-height: 1.6; color: var(--ink-soft); margin: 0; letter-spacing: 0.005em; }
+  .onboard-compound { margin-top: 34px; }
+  .onboard-compound .oc-punch { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-size: 19px; line-height: 1.6; color: var(--ink); margin: 0; letter-spacing: 0.005em; }
+  .onboard-compound .oc-cli { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-size: 14.5px; line-height: 1.65; color: var(--ink-soft); margin: 16px 0 0; letter-spacing: 0.005em; }
+
   /* ===============================================================
      v0.28 TIGHTENED OVERRIDES — v0.27 的迭代
      ▍ 反馈："气质对了 · 但信息中间距太大" → 收一档
@@ -6392,6 +6406,63 @@
     border-bottom-color: var(--sepia);
   }
 
+  /* —— 发动机在命令行 · CLI loop 场景 —— */
+  .about-cli-lead {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 16.5px;
+    line-height: 1.7;
+    color: var(--ink);
+    margin: 0 0 22px;
+    letter-spacing: 0.005em;
+  }
+  .cli-loop {
+    margin: 0 0 4px;
+    padding-left: 18px;
+    border-left: 1px solid var(--rule);
+  }
+  .cli-loop-step {
+    position: relative;
+    margin-bottom: 15px;
+  }
+  .cli-loop-step:last-child { margin-bottom: 0; }
+  .cli-loop-step::before {
+    content: '';
+    position: absolute;
+    left: -22px;
+    top: 9px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--vermilion);
+  }
+  .cli-loop-step p {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink);
+    margin: 0;
+    letter-spacing: 0.005em;
+  }
+  .cli-loop-step .cli-loop-aside { color: var(--ink-soft); }
+  .cli-borrow {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    margin: 20px 0 0;
+    letter-spacing: 0.005em;
+  }
+  .cli-install {
+    font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-size: 14.5px;
+    line-height: 1.7;
+    color: var(--ink-soft);
+    margin: 24px 0 0;
+    padding-top: 18px;
+    border-top: 1px dotted var(--rule);
+    letter-spacing: 0.005em;
+  }
+
   /* —— ALPHA 段落 (沉底 · 小字) —— */
   .about-alpha {
     margin-top: 64px;
@@ -6895,13 +6966,15 @@
       <div class="about-hero">
         <div class="about-eyebrow">关于</div>
         <h1 class="about-h1">捣鼓<span class="about-h1-sep">·</span>Tinker</h1>
-        <p class="about-tagline">给那种用 AI 做出能跑的小东西的人，不必懂代码。</p>
+        <p class="about-tagline">你用 AI 做东西，它替你把代码之外最值钱的那层攒下来。</p>
       </div>
 
       <!-- 一段话 elevator -->
       <div class="about-section about-intro">
-        <p>GitHub 是给写代码的人用的工坊。</p>
-        <p>这里是给用 AI 做小东西的人用的工坊。他们做的东西能跑、能玩、能启发别人也动手做，不必懂代码，也不必证明自己"成了程序员"。</p>
+        <p>GitHub 替写代码的人存代码。</p>
+        <p>这里替用 AI 做东西的人，存代码之外那层：你为什么这么选，你怎么把它做通的。</p>
+        <p>那层东西过几个月自己都忘，偏偏最值钱。在这儿它攒下来，你回得去，别人借得走，你的 AI 整段读得进。</p>
+        <p>不必懂代码，也不必证明自己"成了程序员"。</p>
       </div>
 
       <!-- 不做什么 -->
@@ -6920,24 +6993,42 @@
         <div class="about-section-label">做什么</div>
 
         <div class="about-do-item">
-          <h3 class="about-do-title">把"在做但没做完"的人当主角</h3>
-          <p>卡住、试错、放弃，都跟"做完了"一样值得看，不是只有成功的事才能露面。改成「跑通了」时写一句感想，进<span class="about-link" onclick="showScreen('showcase')">陈列馆</span>，但仍然不投票、不排行。</p>
+          <h3 class="about-do-title">把"为什么这么选"留下来</h3>
+          <p>做东西一路都在做选择：选了这个工具不选那个，走了这条路绕开那条。这些"为什么"代码里看不见，git 里查不到，过几个月自己都忘了。在这儿把它记成一条决策，用你的口吻。三个月后你回得去，你的 AI 也能替你想。这是这里最想让你攒下来的东西。</p>
         </div>
 
         <div class="about-do-item">
           <h3 class="about-do-title">把跑通的手艺沉淀成方法</h3>
-          <p>做通一件事，别让它埋在某条进展里。存成方法，它有两层：「卡片那层」给人看，一眼知道它解决什么、要不要借走；「正文那层」给 AI 用，整段复制进你的 AI 对话，直接当上下文。一份沉淀，人跟 AI 都用得上。这是这里最想让你做的事。</p>
+          <p>做通一件事，别让它埋在某条进展里。存成方法，它有两层：「卡片那层」给人看，一眼知道它解决什么、要不要借走；「正文那层」给 AI 用，整段复制进你的 AI 对话，直接当上下文。一份沉淀，人跟 AI 都用得上。</p>
         </div>
 
         <div class="about-do-item">
-          <h3 class="about-do-title">让别人真用上你的东西</h3>
-          <p>不是点赞，是「我借了你的方法，跑通了」「看了你的进展，我也动手做了」。人能借走照着做，AI 能直接读进对话当上下文。有人因为你沉淀的东西也成了事，比一千个赞重要。</p>
+          <h3 class="about-do-title">求得到，也被真用上</h3>
+          <p>缺个方法，一句话求一个，知道的人、或者他的 AI，接得上。你沉淀的东西反过来也一样：人能借走照着做，AI 能直接读进对话。不是点赞，是「我借了你的方法，跑通了」。有人因为你也成了事，比一千个赞重要。</p>
+        </div>
+
+        <div class="about-do-item">
+          <h3 class="about-do-title">卡住、放弃，也是主角</h3>
+          <p>这不是卖点，是这里的脾气。卡住、试错、放弃，都跟"做完了"一样值得看，不是只有成功的事才能露面。改成「跑通了」时写一句感想，进<span class="about-link" onclick="showScreen('showcase')">陈列馆</span>，但仍然不投票、不排行。</p>
         </div>
 
         <div class="about-do-item">
           <h3 class="about-do-title">作品要能被真的体验到</h3>
           <p>不能只贴截图加 AI 写的介绍。网页能点开试、小程序能扫码、app 能下到，只要陌生人不联系你就能真的上手，就算。</p>
         </div>
+      </div>
+
+      <!-- 发动机在命令行 · CLI 价值露出 -->
+      <div class="about-section">
+        <div class="about-section-label">发动机在命令行</div>
+        <p class="about-cli-lead">网页上你能手动记一笔，手动沉淀方法。但这些本来不该靠手动。真正干活的，是一个跟着你一起写代码的命令行小工具。</p>
+        <div class="cli-loop">
+          <div class="cli-loop-step"><p>你照常用 AI 写东西，它蹲在旁边，不打扰。</p></div>
+          <div class="cli-loop-step"><p>做了个选型，它替你把"为什么选这个不选那个"记成一条决策。跑通个手艺，它顺手沉淀成方法。都用你的口吻。</p></div>
+          <div class="cli-loop-step"><p><span class="cli-loop-aside">这些不是日记。</span>是你三个月后回得去、别人借得走、AI 整段读得进对话的东西。</p></div>
+        </div>
+        <p class="cli-borrow">反过来你缺方法时，一句话，它替你去<span class="about-link" onclick="showScreen('methods')">方法库</span>求一个，或者把别人跑通的整段拉进你跟 AI 的对话。省得复制粘贴来回翻。</p>
+        <p class="cli-install">想让它跟着你写？现在还是 alpha，装法糙一点，<span class="about-link" onclick="showScreen('workshop','daodao')">@daodao 的工坊</span>里有步骤。等发到 npm，就一行命令的事。</p>
       </div>
 
       <!-- 关于产品本身 -->
@@ -7022,6 +7113,35 @@
       <p class="mt-6 text-sm serif" style="color: var(--sepia);">
         已经有作品了? <span class="react-action" onclick="openWorkshopSetup()">直接挂上来</span>
       </p>
+    </div>
+
+    <!-- 收尾 · 可以做什么 → 为什么有价值 + 积少成多 -->
+    <div class="onboard-value">
+      <div class="onboard-value-eyebrow">做完之后</div>
+      <h1 class="onboard-value-h">真正省事的，是它跟着你写</h1>
+      <p class="onboard-value-lead">一个小东西只是开头。Tinker 最特别的那部分不在这个网页上，是一个跟着你写代码的命令行小工具。你照常用 AI 写东西，值钱的东西它替你留，你几乎不用多做。</p>
+
+      <div class="ov-item">
+        <div class="ov-do"><span class="ov-arrow">→</span>卡住、跑通的那一下，它当场替你记</div>
+        <p class="ov-why">那十几秒想法最清楚。等你切到浏览器再写，早凉了。这个瞬间只有它接得住，网页抓不到。</p>
+      </div>
+      <div class="ov-item">
+        <div class="ov-do"><span class="ov-arrow">→</span>它顺着你的 git 和跟 AI 聊过的，自己起草，用你的口吻</div>
+        <p class="ov-why">你不动笔，它写好你瞄一眼点确认。别的工具抓不到你跟 AI 的对话，写出来也不像你说的。</p>
+      </div>
+      <div class="ov-item">
+        <div class="ov-do"><span class="ov-arrow">→</span>要用别人的方法，一句话，它整段拉进你跟 AI 的对话</div>
+        <p class="ov-why">不用开浏览器搜、复制、再粘回去。上下文直接到 AI 手里，你接着写就行。</p>
+      </div>
+      <div class="ov-item">
+        <div class="ov-do"><span class="ov-arrow">→</span>你照常写，它在旁边攒，你一步没多走</div>
+        <p class="ov-why">不是又一个要你抽空填的后台。沉淀是写代码顺手的事，不是额外的活，所以你真的会做。</p>
+      </div>
+
+      <div class="onboard-compound">
+        <p class="oc-punch">这样一笔一笔攒下来，是只属于你、你的 AI 随时调得动的决策和方法库。一个小东西不算什么，攒住了才算。</p>
+        <p class="oc-cli">没装命令行也能在网页上手动记，只是少了那点不用停、不动笔的省事。想让它跟着你写？<span class="react-action" onclick="showScreen('about')">怎么回事 →</span></p>
+      </div>
     </div>
   </section>
 
@@ -9992,10 +10112,31 @@ async function pollUnread() {
   } catch (e) { /* 网络抖动忽略 · 下一轮再试 */ }
 }
 
+// 切回标签页 / 切回浏览器窗口时 · 把当前正看的屏拉一次最新重渲染
+// (原来只有通知红点轮询 · 别处发的新进展 — 自己终端 tinker push、另一个标签页、队友发的 —
+//  正看着的页面不会动 · 得手动刷新 · 这里补上)
+// 弹窗开着就不动 (别把正在填的发布弹窗背景抽走) · 没登录 / 后台标签页跳过
+let _lastScreenRefresh = 0;
+async function refreshCurrentScreen() {
+  if (!currentUser.handle || document.hidden) return;
+  if (document.querySelector('[id^="modal-"]:not(.hidden)')) return;   // 弹窗开着 · 别打断
+  const now = Date.now();
+  if (now - _lastScreenRefresh < 2000) return;   // focus + visibilitychange 可能连发 · 2 秒内只刷一次
+  _lastScreenRefresh = now;
+  const y = window.scrollY;   // 重渲染会重置滚动 · 切回来不该跳回顶部
+  try {
+    await refreshState();
+    updateUnreadBadge();
+    navigateFromHash();        // 重渲染当前屏 · 只渲染不压栈
+    requestAnimationFrame(() => window.scrollTo(0, y));
+  } catch (e) { /* 网络抖动忽略 · 下次切回再试 */ }
+}
+
 function setupUnreadPoll() {
   setInterval(pollUnread, 30000);
-  // 切回标签页立刻查一次 · 不用等下一轮 30 秒
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollUnread(); });
+  // 切回标签页 / 切回浏览器窗口:把当前屏也拉最新重渲染 (不只查红点)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshCurrentScreen(); });
+  window.addEventListener('focus', refreshCurrentScreen);
 }
 
 // 点开通知 · 1) 标已读 (后端单条) 2) 跳到项目页 3) 滚到 anchor + flash
