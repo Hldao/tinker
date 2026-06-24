@@ -255,7 +255,7 @@ reminder 提示 "@X 对你那个 witness 写了 critique"
    - 不是产品发布会语气 · 不堆 emoji / 不堆破折号
    - 跟 push 的 voice 一致
 2. 找接收方 handle
-   - 从对话里看 (比如"给猫猫" → `-t @maomao`)
+   - handle 以 `tinker studio info <slug>` 成员列表里的为准 · 别猜拼音 (比如猫猫的 handle 就是 `@猫猫` · 不是 `@maomao` · 写错会变死信对方收不到)
    - 没指定就走 active studio 广播 (不带 `-t`)
 3. Bash 跑 `tinker handoff -m "<你写的>" [-t @<handle>]`
 4. 命令输出给用户看 · 让用户确认是否真的发了

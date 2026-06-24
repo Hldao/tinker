@@ -4479,7 +4479,7 @@ const MAYBE_KINDS = {
   handoff: {
     cooldownMin: 30,
     matcher: '接力|交接给|帮我接力|给.{0,4}接着做|让.{0,4}接|你接一下|你接着做|换人|这个给.{0,4}做|把现场|把这个交给|打包给',
-    reminder: '用户对话里像是想 handoff 接力 · 把当前现场打包发给队友。\n看上下文判断是不是真的想交接 · 不是的话别打扰 (单说"接"字不算)。\n是的话主动帮用户跑命令 · 不是只提醒:\n1) 看对话上下文写一句 50-100 字 handoff 说明 · 气质参考: "X 做了一半 · 卡在 Y · 你接着 Z" · 不是产品发布会语气\n2) 找接收方 handle: 从对话里看 (比如"给猫猫" → -t @maomao) · 没指定就走 active studio 广播 (不带 -t)\n3) Bash 跑 `tinker handoff -m "<你写的说明>" [-t @<handle>]`\n4) 命令输出给用户看 · 让用户确认是否真的发了 (handoff 一旦发出去对方就收到 · 没法撤回)',
+    reminder: '用户对话里像是想 handoff 接力 · 把当前现场打包发给队友。\n看上下文判断是不是真的想交接 · 不是的话别打扰 (单说"接"字不算)。\n是的话主动帮用户跑命令 · 不是只提醒:\n1) 看对话上下文写一句 50-100 字 handoff 说明 · 气质参考: "X 做了一半 · 卡在 Y · 你接着 Z" · 不是产品发布会语气\n2) 找接收方 handle: handle 以 `tinker studio info <slug>` 成员列表里的为准 · 别猜拼音 (比如猫猫的 handle 就是 @猫猫 · 不是 @maomao · 写错会变死信对方收不到) · 没指定就走 active studio 广播 (不带 -t)\n3) Bash 跑 `tinker handoff -m "<你写的说明>" [-t @<handle>]`\n4) 命令输出给用户看 · 让用户确认是否真的发了 (handoff 一旦发出去对方就收到 · 没法撤回)',
   },
   invite: {
     cooldownMin: 30,

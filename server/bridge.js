@@ -36,6 +36,14 @@ function bridgeSend({ to, toStudio, kind, payload }, { currentUserId }) {
     if (!studios.isMember(toStudio, currentUserId)) {
       throw new Error('你不在这个工作室里 · 不能往里发');
     }
+  } else if (to) {
+    // 点对点收件:校验 handle 真的对应一个用户 · 否则这条会变死信。
+    // bridgePoll 按 to_handle = 收件人自己的 handle 精确匹配 · handle 不存在(拼音猜错/手误)
+    // 就永远拉不到 · 而发送方拿到 msgId 还以为发出去了。当场报错 · 不静默丢。
+    const toRow = db.prepare('SELECT id FROM users WHERE handle = ?').get(to);
+    if (!toRow) {
+      throw new Error('收件人 @' + to + ' 不存在 · 没这个 handle (核对工作室成员: tinker studio info <slug>)');
+    }
   }
 
   const id = 'msg-' + crypto.randomBytes(8).toString('hex');
