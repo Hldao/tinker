@@ -9997,6 +9997,95 @@ async function cmdRecent(opts) {
 // v0.17 tinker feed @<handle> · 看指定 handle 的最近 update + method · 公开 update 流
 // 跟 bridge 不冲突:bridge 是私信加密 · feed 是公开进展流 · 两者互补
 // 使用场景:想知道 ta 在做什么 / 到哪一步了 · 不靠 ta 主动 ping
+// v0.x 影子只读问答 · tinker ask @handle "问题"
+// 拉某人共享的进展/方法 · 用 LLM 替 ta 汇报 · 谁问谁付(用问的人自己的 LLM 钥匙)
+// 只用记录里的信息 · 隐私边界 = apiState 本就只返回共享出来的东西
+async function cmdAsk(handleArg, questionArg, opts) {
+  const cfg = mustHaveConfig();
+  const question = (questionArg || opts.text || '').trim();
+  if (!handleArg || !question) {
+    if (opts.json) return errJson('用法: tinker ask @<handle> "问题"', 'NO_ARGS');
+    err('用法: ' + vermilion('tinker ask @<handle> "问题"') + sepia('  · 问某人的影子 ta 在做什么'));
+    process.exit(1);
+  }
+  if (!opts.dryRun && (!cfg.llm || !cfg.llm.apiKey)) {
+    if (opts.json) return errJson('LLM 没配置 · 先跑 tinker llm set', 'NO_LLM');
+    err('问影子要用你自己的 LLM 钥匙 · 先跑 ' + vermilion('tinker llm set'));
+    process.exit(1);
+  }
+  const handle = handleArg.replace(/^@/, '');
+
+  const state = await apiState(cfg);
+  const userInfo = (state.users && state.users[handle]) || null;
+  const items = [];
+  for (const p of state.projects) {
+    if (p.owner !== handle) continue;
+    for (const u of (p.updates || [])) {
+      items.push({ at: u.at, kind: 'update', project: p.name, status: p.status, text: u.text });
+    }
+    for (const m of (p.methods || [])) {
+      items.push({ at: m.at, kind: 'method', project: p.name, text: '[方法] ' + (m.title || '') + (m.scenario ? ' · ' + m.scenario : '') });
+    }
+  }
+  items.sort((a, b) => b.at - a.at);
+  // 滤掉空记录(比如没填的方法占位) · 别浪费 token 也别让影子对着空白瞎答
+  const recent = items.filter(it => (it.text || '').replace('[方法]', '').trim().length > 0).slice(0, 25);
+
+  if (recent.length === 0) {
+    if (opts.json) return outputJson({ ok: true, handle, answer: null, note: '没有共享进展' });
+    log(sepia('  @' + handle + ' 还没共享公开进展 · 影子没法替 ta 说话'));
+    return;
+  }
+
+  const ctx = recent.map(it => {
+    const when = new Date(it.at).toLocaleDateString();
+    return `- (${when} · ${it.project} · ${it.status}) ${(it.text || '').replace(/\s+/g, ' ').slice(0, 300)}`;
+  }).join('\n');
+
+  const prompt = `你是 @${handle}${userInfo && userInfo.name ? '(' + userInfo.name + ')' : ''} 的"影子" · 基于 ta 在捣鼓上记录的进展替 ta 回答别人的问题。
+
+ta 最近的进展记录(越靠上越新):
+${ctx}
+
+有人问:${question}
+
+要求:
+- 只根据上面的记录回答 · 记录里没有的别编 · 不确定就说"ta 最近没记到这个"
+- 像在替 ta 汇报进度 · 简洁口语 · 纯中文 · 别堆术语
+- 直接说结论 · 别复述问题 · 2-5 句话`;
+
+  if (opts.dryRun) {
+    if (opts.json) return outputJson({ ok: true, handle, question, basedOn: recent.length, prompt, dryRun: true });
+    log('');
+    log(sepia('  [dry-run] 抓到 @' + handle + ' 的 ' + recent.length + ' 条共享进展 · 不调 LLM · 下面是拼好的提示词:'));
+    log('');
+    log(sepia('  ──────────────────────────────'));
+    log('  ' + prompt.split('\n').join('\n  '));
+    log(sepia('  ──────────────────────────────'));
+    return;
+  }
+
+  const provider = cfg.llm.provider || 'anthropic';
+  let answer;
+  try {
+    const { text, tokens } = await callLLM(cfg, provider, prompt, { maxTokens: 800 });
+    answer = (text || '').trim();
+    recordLLMUsage(provider, tokens, 'ask');
+  } catch (e) {
+    if (opts.json) return errJson('问影子失败: ' + e.message, 'LLM_FAIL');
+    err('问影子失败: ' + e.message);
+    process.exit(1);
+  }
+
+  if (opts.json) return outputJson({ ok: true, handle, question, answer, basedOn: recent.length });
+  log('');
+  log(bold('  @' + handle + ' 的影子'));
+  log('');
+  log('  ' + answer.split('\n').join('\n  '));
+  log('');
+  log(sepia('  (基于 ta 最近 ' + recent.length + ' 条共享进展 · 影子只知道 ta 公开记录的东西)'));
+}
+
 async function cmdFeed(handleArg, opts) {
   const cfg = mustHaveConfig();
   if (!handleArg) {
@@ -10493,6 +10582,7 @@ function help() {
   log(sepia('  ') + vermilion('看别人在做什么 / 团队联动'));
   log('  ' + vermilion('tinker feed @<handle>') + sepia('             看 ta 最近 update / method / 项目状态 [--limit N] [--watch]'));
   log('  ' + vermilion('tinker feed @<handle> --watch') + sepia('      每 30s 拉一次新进展 · 命令行里持续看 ta 在干啥'));
+  log('  ' + vermilion('tinker ask @<handle> "问题"') + sepia('       问 ta 的影子 ta 在做什么 · 基于共享进展替 ta 答 (用你自己的 LLM 钥匙)'));
   log('  ' + vermilion('tinker bridge auto-ping --enable') + sepia('   触发器命中 ship/stuck 时自动 ping 团队 [--kinds ...] [--to @who]'));
   log(sepia('                                        ') + dim('需要先 tinker secret <暗号>'));
   log('  ' + vermilion('tinker bridge auto-ping --status') + sepia('   看当前配置'));
@@ -10672,6 +10762,7 @@ function parseArgs(args) {
     else if (a === '--by-claude') opts.byClaude = true;
     else if (a === '--with-context') opts.withContext = true;
     else if (a === '--force' || a === '-f') opts.force = true;
+    else if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
@@ -11141,6 +11232,7 @@ async function main() {
       case 'contribute': await cmdContribute(args[1], opts); break;
       case 'recent': await cmdRecent(opts); break;
       case 'feed': await cmdFeed(args[1], opts); break;
+      case 'ask': await cmdAsk(args[1], args[2], opts); break;
       case 'react': await cmdReact(args[1], opts); break;
       case 'tinkered': await cmdTinkered(args[1], opts); break;
       case 'used': await cmdUsed(args[1], opts); break;
