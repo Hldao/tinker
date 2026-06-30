@@ -24,6 +24,7 @@ const path = require('path');
 const { logger } = require('./logger');
 const db = require('./db');                  // SQLite · 启动时自动跑 migrations
 const { buildState, buildProjectUpdates, searchUpdates, searchWorkshops, getUserProfile } = require('./state');
+const shadow = require('./shadow');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
 const blobs = require('./blobs');
@@ -351,6 +352,20 @@ app.get('/api/state', stateLimiter, (req, res) => {
   // 现在: 看 authedAs · null = 未鉴权 / @handle = 鉴权通过
   state.authedAs = req.user?.handle || null;
   res.json(state);
+});
+
+// 影子只读问答(网页版)· 登录用户问某人的影子 ta 在做什么
+// 服务器拉那人共享的进展 + 用 Haiku 替 ta 汇报 · 轻度 · 成本极低 · 服务器自付
+app.post('/api/ask', stateLimiter, auth.requireSession, async (req, res) => {
+  const { handle, question } = req.body || {};
+  if (!handle || !question) return res.status(400).json({ error: 'handle / question 必填' });
+  try {
+    const r = await shadow.askShadow({ handle, question });
+    res.json(r);
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'ask shadow failed');
+    res.status(400).json({ error: e.message || '问影子失败' });
+  }
 });
 
 // 单项目全量 updates · 懒加载 (v1.0 瘦身)

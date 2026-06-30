@@ -7480,6 +7480,23 @@
 </div>
 
 <!-- API tokens (CLI 钥匙) modal -->
+<!-- 问影子 modal -->
+<div id="modal-ask-shadow" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4" onclick="if(event.target===this)closeModal('modal-ask-shadow')">
+  <div class="modal-paper w-full" style="max-width: 540px;">
+    <h3 class="modal-title" id="ask-shadow-title">问影子</h3>
+    <p class="modal-sub">影子基于 ta 在捣鼓上共享的进展替 ta 回答 · 只知道公开记录的东西。</p>
+    <input id="ask-shadow-q" class="input-bare" placeholder="比如:最近在做什么? / 那个 bug 修好了吗?" style="width: 100%; margin-bottom: 12px;" onkeydown="if(event.key==='Enter')submitAskShadow()">
+    <div style="display: flex; gap: 14px; align-items: center;">
+      <button class="btn-act-primary" onclick="guardSubmit(this, submitAskShadow)">问</button>
+      <span class="react-action" onclick="closeModal('modal-ask-shadow')" style="color: var(--sepia); font-size: 13px;">关掉</span>
+    </div>
+    <div id="ask-shadow-answer" class="hidden" style="margin-top: 16px; padding: 14px 16px; background: var(--paper); border-left: 3px solid var(--vermilion); border-radius: 4px;">
+      <div class="serif" id="ask-shadow-answer-text" style="font-size: 14px; line-height: 1.75; color: var(--ink); white-space: pre-wrap;"></div>
+      <div class="account-sub-text" id="ask-shadow-answer-meta" style="margin-top: 8px; font-size: 11px;"></div>
+    </div>
+  </div>
+</div>
+
 <div id="modal-api-tokens" class="hidden fixed inset-0 modal-back flex items-center justify-center z-50 p-4">
   <div class="modal-paper w-full" style="max-width: 600px; max-height: 88vh; overflow-y: auto;">
     <h3 class="modal-title">CLI 钥匙</h3>
@@ -8822,6 +8839,7 @@ async function renderStudio(slug) {
       <span class="studio-member-handle">@${escapeHtml(m.handle)}</span>
       ${m.role === 'owner' ? '<span class="studio-member-role">owner</span>' : ''}
       ${m.tagline ? `<div class="studio-member-tag">${escapeHtml(m.tagline)}</div>` : ''}
+      <div style="margin-top: 8px;"><span class="small-action" onclick="event.stopPropagation(); openAskShadow('${escapeHtml(m.handle)}')" style="font-size: 12px; color: var(--vermilion);">问 ta 的影子 →</span></div>
     </div>
   `).join('');
 
@@ -13050,6 +13068,47 @@ function copyShadowAiInstall(el) {
     '钥匙丢了到 Tinker 账号页撤销重发就行。',
   ].join('\n');
   safeCopy(text, '复制了 · 粘给你的 AI · 让 ta 装', '复制失败 · 请手动选中复制');
+}
+
+// 问影子(网页版)· 弹窗里问某成员的影子 ta 在做什么 · 走 /api/ask
+let askShadowHandle = null;
+function openAskShadow(handle) {
+  askShadowHandle = handle;
+  document.getElementById('ask-shadow-title').textContent = '问 @' + handle + ' 的影子';
+  document.getElementById('ask-shadow-q').value = '';
+  document.getElementById('ask-shadow-answer').classList.add('hidden');
+  document.getElementById('modal-ask-shadow').classList.remove('hidden');
+  setTimeout(() => { const el = document.getElementById('ask-shadow-q'); if (el) el.focus(); }, 50);
+}
+
+async function submitAskShadow() {
+  const q = (document.getElementById('ask-shadow-q').value || '').trim();
+  if (!q) { showToast('先写个问题'); return; }
+  if (!askShadowHandle) return;
+  const ans = document.getElementById('ask-shadow-answer');
+  const txt = document.getElementById('ask-shadow-answer-text');
+  const meta = document.getElementById('ask-shadow-answer-meta');
+  txt.textContent = '影子在想…';
+  meta.textContent = '';
+  ans.classList.remove('hidden');
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handle: askShadowHandle, question: q }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.ok === false) {
+      txt.textContent = data.message || data.error || '问影子失败';
+      return;
+    }
+    if (data.answer == null) {
+      txt.textContent = '@' + askShadowHandle + ' 还没共享公开进展 · 影子没法替 ta 说话';
+      return;
+    }
+    txt.textContent = data.answer;
+    meta.textContent = '基于 ta 最近 ' + (data.basedOn || 0) + ' 条共享进展 · 影子只知道公开记录的东西';
+  } catch (e) { txt.textContent = e.message || '问影子失败'; }
 }
 
 function confirmDeleteAccount() {
