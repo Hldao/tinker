@@ -7825,11 +7825,11 @@ async function apiListTokens() {
   if (!res.ok) throw new Error(data.error || '读取 token 失败');
   return data;
 }
-async function apiCreateToken(label) {
+async function apiCreateToken(label, tier) {
   const res = await fetch('/api/account/tokens', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label }),
+    body: JSON.stringify({ label, tier }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || '生成 token 失败');
@@ -8874,7 +8874,11 @@ async function renderStudio(slug) {
       </div>
       <div style="margin-top: 14px;">
         <input id="shadow-new-token-label" class="input-bare" placeholder="给这把钥匙起个名 · 比如 我的 MacBook" style="margin-bottom: 10px;">
-        <button class="btn-act-primary" onclick="guardSubmit(this, submitShadowKey)">生成影子钥匙</button>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button class="btn-act-primary" onclick="guardSubmit(this, () => submitShadowKey('light'))">生成轻度钥匙</button>
+          <button class="btn-act" onclick="guardSubmit(this, () => submitShadowKey('heavy'))" style="color: var(--vermilion); border-color: var(--vermilion);">生成重度钥匙</button>
+        </div>
+        <div class="account-sub-text" style="margin-top: 8px; font-size: 11px;">不确定就先「轻度」· 重度要先 <span class="mono">tinker llm set</span> 配自己的 LLM 钥匙才会真正干活。</div>
       </div>
       <div id="shadow-new-token-revealed" class="hidden" style="margin-top: 14px; padding: 12px; background: var(--paper); border: 1px dashed var(--vermilion); border-radius: 4px;">
         <div class="mono text-xs" style="color: var(--vermilion); margin-bottom: 6px;">这把钥匙只显示这一次 · 关掉就看不见了</div>
@@ -11296,7 +11300,7 @@ async function refreshApiTokensList() {
       tokens.map(t => `
         <div class="api-token-row">
           <div>
-            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}${t.tier === 'heavy' ? ' <span class="mono" style="font-size: 10px; color: var(--vermilion); border: 1px solid var(--vermilion); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">重度</span>' : ' <span class="mono" style="font-size: 10px; color: var(--sepia); border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">轻度</span>'}</div>
             <div class="api-token-meta">
               <span class="mono">${escapeHtml(t.prefix)}…</span> ·
               建于 ${shortAgo(t.created_at)}
@@ -12926,7 +12930,7 @@ async function refreshAccountTokensList() {
       tokens.map(t => `
         <div class="api-token-row">
           <div>
-            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}${t.tier === 'heavy' ? ' <span class="mono" style="font-size: 10px; color: var(--vermilion); border: 1px solid var(--vermilion); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">重度</span>' : ' <span class="mono" style="font-size: 10px; color: var(--sepia); border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">轻度</span>'}</div>
             <div class="api-token-meta">
               <span class="mono">${escapeHtml(t.prefix)}…</span> ·
               建于 ${shortAgo(t.created_at)}
@@ -13000,15 +13004,16 @@ function copyAccountAiInstall(el) {
 }
 
 // 工作室页「影子 CLI 钥匙」· 复用账号页的 token 接口 · 默认 label 带「影子」方便在钥匙列表里认出来
-async function submitShadowKey() {
+async function submitShadowKey(tier) {
   const labelEl = document.getElementById('shadow-new-token-label');
   const name = labelEl && labelEl.value.trim() ? labelEl.value.trim() : '我的机器';
+  const tierCn = tier === 'heavy' ? '重度' : '轻度';
   try {
-    const created = await apiCreateToken('影子 · ' + name);
+    const created = await apiCreateToken('影子 · ' + tierCn + ' · ' + name, tier);
     document.getElementById('shadow-new-token-value').textContent = created.token;
     document.getElementById('shadow-new-token-revealed').classList.remove('hidden');
     if (labelEl) labelEl.value = '';
-    showToast('影子钥匙生成了 · 复制下来存好 · 关掉就看不见了');
+    showToast(tierCn + '影子钥匙生成了 · 复制下来存好 · 关掉就看不见了');
   } catch (e) { showToast(e.message); }
 }
 

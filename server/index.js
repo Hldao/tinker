@@ -324,9 +324,9 @@ app.get('/api/account/tokens', auth.requireSession, (req, res) => {
 
 app.post('/api/account/tokens', auth.requireSession, (req, res) => {
   if (req.session?.viaApiToken) return res.status(403).json({ error: '需要浏览器登录 · API token 无权管理 token' });
-  const { label } = req.body || {};
+  const { label, tier } = req.body || {};
   try {
-    const created = auth.createApiToken({ userId: req.user.id, label });
+    const created = auth.createApiToken({ userId: req.user.id, label, tier });
     res.json(created);  // 注意:这是 token 唯一一次返回 · 用户得自己存
   } catch (e) {
     res.status(400).json({ error: e.message || '创建 token 失败' });

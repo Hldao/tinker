@@ -235,22 +235,24 @@ function getApiTokenUser(req) {
 // ============================================
 // API token CRUD (给 CLI / agent 用)
 // ============================================
-function createApiToken({ userId, label }) {
+function createApiToken({ userId, label, tier }) {
   const tokenId = db.uuidv7();
   // 32 字节随机 → base64url ~43 字符 · 加 'tk_' 前缀方便识别
   const rawToken = 'tk_' + db.randomToken(32);
   const prefix = rawToken.slice(0, 11); // tk_xxxxxxxx 给用户用来识别
   const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  // 轻度 = 影子当帮手(默认) · 重度 = 影子当队员 · 非法值一律收敛成 light
+  const safeTier = tier === 'heavy' ? 'heavy' : 'light';
   db.prepare(`
-    INSERT INTO api_tokens (id, user_id, label, token_hash, prefix, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(tokenId, userId, (label || '').slice(0, 80) || null, hash, prefix, Date.now());
-  return { id: tokenId, token: rawToken, prefix, label: label || null };
+    INSERT INTO api_tokens (id, user_id, label, token_hash, prefix, created_at, tier)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(tokenId, userId, (label || '').slice(0, 80) || null, hash, prefix, Date.now(), safeTier);
+  return { id: tokenId, token: rawToken, prefix, label: label || null, tier: safeTier };
 }
 
 function listApiTokens(userId) {
   return db.prepare(`
-    SELECT id, label, prefix, last_used_at, created_at
+    SELECT id, label, prefix, tier, last_used_at, created_at
     FROM api_tokens
     WHERE user_id = ? AND revoked_at IS NULL
     ORDER BY created_at DESC
