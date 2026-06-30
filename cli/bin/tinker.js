@@ -1132,6 +1132,7 @@ async function publishShadowItem(cfg, it) {
 async function cmdShadow(sub, arg, opts) {
   if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
   if (sub === 'run') return shadowRun(opts);
+  if (sub === 'night') return shadowNight(opts);
   if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
@@ -1319,6 +1320,82 @@ async function shadowUndo(arg, opts) {
   sent.pop();
   saveShadowSent(sent);
   ok('撤回了影子最近发的那条 → ' + (last.projectName || last.projectId));
+}
+
+// 重度影子第3格 · 夜班写代码(骨架)
+// 隔离 git 工作树 → (可插拔 agent)写代码 → 跑测试 → 绿了留分支给你审 · 从不自动合
+// 用法: tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程agent命令(在工作树里跑)"]
+// --agent 命令在工作树目录里执行 · 能用环境变量 TINKER_TASK 拿到任务描述
+async function shadowNight(opts) {
+  mustHaveConfig();
+  if (!inGitRepo()) { err('夜班要在 git 仓库里跑'); process.exit(1); }
+  const task = (opts.task || '').trim();
+  if (!task) {
+    err('用法: ' + vermilion('tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程命令"]'));
+    process.exit(1);
+  }
+  const testCmd = (opts.test || '').trim();
+  const agentCmd = (opts.agent || '').trim();
+  const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+  const branch = 'shadow/night-' + Date.now();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tinker-night-'));
+  fs.rmSync(tmp, { recursive: true, force: true }); // worktree add 要目录不存在
+
+  log('');
+  log(sepia('  影子夜班开工 · 隔离工作树(不碰你当前工作区)'));
+  log(sepia('  任务: ') + task);
+  try {
+    execSync('git worktree add -b ' + branch + ' "' + tmp + '" HEAD', { cwd: repoRoot, stdio: 'ignore' });
+  } catch (e) { err('建工作树失败: ' + e.message); process.exit(1); }
+
+  let agentErr = null;
+  if (agentCmd) {
+    log(sepia('  影子写代码中: ') + agentCmd);
+    try {
+      execSync(agentCmd, { cwd: tmp, env: { ...process.env, TINKER_TASK: task }, stdio: 'inherit', timeout: 10 * 60 * 1000 });
+    } catch (e) { agentErr = e.message || 'agent 非零退出'; }
+  } else {
+    log(sepia('  (没给 --agent · 跳过"写代码" · 只验工作树+测试骨架)'));
+  }
+
+  const changed = execSync('git status --porcelain', { cwd: tmp, encoding: 'utf-8' }).trim();
+
+  let testPass = null, testOut = '';
+  if (testCmd && !agentErr) {
+    log(sepia('  跑测试: ') + testCmd);
+    try {
+      testOut = execSync(testCmd, { cwd: tmp, encoding: 'utf-8', timeout: 10 * 60 * 1000 });
+      testPass = true;
+    } catch (e) { testPass = false; testOut = ((e.stdout || '') + (e.stderr || '')).toString(); }
+  }
+
+  // 绿灯条件:agent 没报错 · 有改动 · 且(没测试 或 测试通过)
+  const green = !agentErr && !!changed && (testCmd ? testPass === true : true);
+  let kept = false;
+  if (green) {
+    execSync('git add -A', { cwd: tmp, stdio: 'ignore' });
+    const safeMsg = ('影子夜班: ' + task).replace(/"/g, "'").slice(0, 72);
+    execSync('git commit -m "' + safeMsg + '"', { cwd: tmp, stdio: 'ignore' });
+    kept = true;
+  }
+  // 清工作树 · 绿了分支留着给你审 · 没绿就连分支一起删
+  try { execSync('git worktree remove --force "' + tmp + '"', { cwd: repoRoot, stdio: 'ignore' }); } catch {}
+  if (!kept) { try { execSync('git branch -D ' + branch, { cwd: repoRoot, stdio: 'ignore' }); } catch {} }
+
+  log('');
+  if (kept) {
+    ok('影子夜班完工 · ' + (testCmd ? '测试通过 ✓' : '有改动') + ' · 留了分支 ' + bold(branch) + ' 等你审(没自动合)');
+    log(sepia('  看改了啥: ') + vermilion('git log -p ' + branch));
+    log(sepia('  满意就合: ') + vermilion('git merge ' + branch) + sepia('   ·   不要: ') + vermilion('git branch -D ' + branch));
+    try { fireDesktop({ title: '影子夜班完工', body: '任务绿了 · 分支 ' + branch + ' 待你 review' }); } catch {}
+  } else if (agentErr) {
+    err('影子夜班中断 · agent 出错: ' + agentErr + ' · 改动已丢弃,没留分支');
+  } else if (!changed) {
+    log(sepia('  影子夜班:没产生任何改动(agent 没动文件 / 没给 agent)· 没留分支'));
+  } else {
+    err('影子夜班没通过测试 · 改动已丢弃,没留分支');
+    if (testOut) log(sepia('  测试输出(尾部):') + '\n  ' + testOut.split('\n').slice(-8).join('\n  '));
+  }
 }
 
 async function cmdDraft(opts) {
@@ -10776,6 +10853,7 @@ function help() {
   log('  ' + vermilion('tinker shadow discard <编号>') + sepia('       丢掉这条'));
   log('  ' + vermilion('tinker shadow auto off/draft/send') + sepia('  自主档位 · draft 自动起草入队 · send 自动发(可撤回)'));
   log('  ' + vermilion('tinker shadow undo') + sepia('                撤回影子最近发的那条 (30分钟内)'));
+  log('  ' + vermilion('tinker shadow night --task "..." --test "..." --agent "..."') + sepia('  夜班:隔离写码→跑测试→绿了留分支待审(从不自动合)'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
@@ -11019,6 +11097,9 @@ function parseArgs(args) {
     else if (a === '--with-context') opts.withContext = true;
     else if (a === '--force' || a === '-f') opts.force = true;
     else if (a === '--dry-run') opts.dryRun = true;
+    else if (a === '--task') opts.task = args[++i];
+    else if (a === '--test') opts.test = args[++i];
+    else if (a === '--agent') opts.agent = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
