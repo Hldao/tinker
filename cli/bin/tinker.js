@@ -1083,6 +1083,131 @@ async function cmdProjects(opts = {}) {
   });
 }
 
+// ============================================
+// 重度影子 · 第一格:自动起草 + 审批队列
+// 影子自己动(run · 可挂 hook/定时)把进展拟成草稿入队 · 你审了才发(approve)
+// 只拟不自动发 = 零风险 · 后面更重的(夜班写码/自动发)都挂这套骨架上
+// ============================================
+const SHADOW_QUEUE_FILE = path.join(CONFIG_DIR, 'shadow-queue.json');
+function loadShadowQueue() {
+  try { return JSON.parse(fs.readFileSync(SHADOW_QUEUE_FILE, 'utf-8')); } catch { return []; }
+}
+function saveShadowQueue(q) {
+  fs.writeFileSync(SHADOW_QUEUE_FILE, JSON.stringify(q, null, 2));
+}
+
+async function cmdShadow(sub, arg, opts) {
+  if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
+  if (sub === 'run') return shadowRun(opts);
+  if (sub === 'approve' || sub === 'send') return shadowApprove(arg, opts);
+  if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
+  if (sub === 'clear') { saveShadowQueue([]); ok('影子队列清空了'); return; }
+  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | clear]'));
+  process.exit(1);
+}
+
+// run:影子自己动 · 看 git 历史用你口吻起草进展 · 入队(不发)
+// 可被 post-commit hook / 定时器调 · --quiet 时没东西就不吭声(hook 友好)
+async function shadowRun(opts) {
+  const cfg = mustHaveConfig();
+  if (!inGitRepo()) {
+    if (!opts.quiet) err('不在 git 仓库 · 影子起草需要 git 历史');
+    process.exit(opts.quiet ? 0 : 1);
+  }
+  if (!cfg.llm || !cfg.llm.apiKey) {
+    if (!opts.quiet) err('影子起草要用你自己的 LLM 钥匙 · 先跑 ' + vermilion('tinker llm set'));
+    process.exit(opts.quiet ? 0 : 1);
+  }
+  const repoCfg = loadRepoConfig();
+  const history = gitHistorySince(opts.since || '12h');
+  if (!history || (!history.log && !history.pendingStat)) {
+    if (!opts.quiet) log(sepia('  这段时间没 commit 也没改动 · 影子没东西可写'));
+    return;
+  }
+  let candidates;
+  try { candidates = await llmDraft(cfg, history); }
+  catch (e) { if (!opts.quiet) err(e.message); process.exit(opts.quiet ? 0 : 1); }
+  if (!candidates || candidates.length === 0) {
+    if (!opts.quiet) log(sepia('  影子看了一圈 · 觉得没什么值得发的'));
+    return;
+  }
+  const q = loadShadowQueue();
+  let n = 0;
+  for (const c of candidates) {
+    const text = sanitizeDraft(c && c.text ? c.text : '');
+    if (!text.trim()) continue;
+    q.push({
+      id: 's-' + Date.now() + '-' + (n++),
+      kind: 'update',
+      text,
+      rationale: (c && c.rationale) || '',
+      projectId: repoCfg ? repoCfg.projectId : null,
+      projectName: repoCfg ? repoCfg.projectName : null,
+      createdAt: Date.now(),
+      since: history.since,
+    });
+  }
+  saveShadowQueue(q);
+  if (opts.quiet) return; // hook 模式:静默入队
+  log('');
+  ok('影子起草了 ' + bold(n + '') + ' 条 · 进了队列 · 你审了才发');
+  log(sepia('  看: ') + vermilion('tinker shadow') + sepia('   ·   发: ') + vermilion('tinker shadow approve <编号>'));
+}
+
+function shadowList(opts) {
+  const q = loadShadowQueue();
+  if (opts.json) return outputJson({ ok: true, count: q.length, queue: q });
+  if (q.length === 0) {
+    log('');
+    log(sepia('  影子队列空的 · 跑 ') + vermilion('tinker shadow run') + sepia(' 让影子起草几条'));
+    return;
+  }
+  log('');
+  log(bold('  影子队列 · ' + q.length + ' 条待审') + sepia('  (你审了才发)'));
+  log('');
+  q.forEach((it, i) => {
+    log(vermilion('  ' + (i + 1) + '. ') + sepia('[' + (it.projectName || '未绑定项目') + ' · ' + agoZh(it.createdAt) + ']'));
+    const preview = (it.text || '').replace(/\n/g, ' ');
+    log('     ' + preview.slice(0, 90) + (preview.length > 90 ? '…' : ''));
+    if (it.rationale) log(sepia('     影子自评: ' + it.rationale));
+    log('');
+  });
+  log(sepia('  发: ') + vermilion('tinker shadow approve <编号>') + sepia('   ·   丢: ') + vermilion('tinker shadow discard <编号>'));
+}
+
+async function shadowApprove(arg, opts) {
+  const cfg = mustHaveConfig();
+  const q = loadShadowQueue();
+  const idx = parseInt(arg, 10) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= q.length) {
+    err('用法: tinker shadow approve <编号> · 先 ' + vermilion('tinker shadow') + ' 看编号');
+    process.exit(1);
+  }
+  const it = q[idx];
+  if (!it.projectId) {
+    err('这条没绑定项目 · 没法发 · 在项目目录里跑 tinker onboard 绑一下,或手动 tinker push');
+    process.exit(1);
+  }
+  try {
+    await apiAction(cfg, 'addUpdate', { projectId: it.projectId, text: it.text });
+  } catch (e) { err('发布失败: ' + e.message); process.exit(1); }
+  q.splice(idx, 1);
+  saveShadowQueue(q);
+  ok('发了 → ' + (it.projectName || it.projectId) + sepia(' · 队列还剩 ' + q.length + ' 条'));
+}
+
+function shadowDiscard(arg, opts) {
+  const q = loadShadowQueue();
+  const idx = parseInt(arg, 10) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= q.length) {
+    err('用法: tinker shadow discard <编号>');
+    process.exit(1);
+  }
+  q.splice(idx, 1);
+  saveShadowQueue(q);
+  ok('丢了 · 队列还剩 ' + q.length + ' 条');
+}
+
 async function cmdDraft(opts) {
   const cfg = mustHaveConfig();
   const since = opts.since || '1h';
@@ -10520,6 +10645,12 @@ function help() {
   log(sepia('  ') + vermilion('日常 · 半自动'));
   log('  ' + vermilion('tinker draft') + sepia('                       LLM 看 git 历史 · 起草 1-3 条候选到 .tinker/drafts/'));
   log('  ' + vermilion('tinker draft --since 30m') + sepia('           自定义时间窗'));
+  log('');
+  log(sepia('  ') + bold('重度影子 · 自己起草 · 你审了才发'));
+  log('  ' + vermilion('tinker shadow run') + sepia('                 影子看 git 历史起草进展 · 入队不发 (可挂 hook/定时 自己动)'));
+  log('  ' + vermilion('tinker shadow') + sepia('                     看影子攒的待审草稿'));
+  log('  ' + vermilion('tinker shadow approve <编号>') + sepia('       审过 · 发出去'));
+  log('  ' + vermilion('tinker shadow discard <编号>') + sepia('       丢掉这条'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
@@ -11186,6 +11317,7 @@ async function main() {
       case 'edit-ship': await cmdEditShip(opts); break;
       case 'update': await cmdUpdate({ checkOnly: args.includes('--check-only') }); break;
       case 'draft': await cmdDraft(opts); break;
+      case 'shadow': await cmdShadow(args[1], args[2], opts); break;
       case 'hook':
         if (args[1] === 'install') await cmdHookInstall();
         else if (args[1] === 'uninstall') cmdHookUninstall();
