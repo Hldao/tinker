@@ -1107,17 +1107,40 @@ function saveShadowQueue(q) {
 async function cmdShadow(sub, arg, opts) {
   if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
   if (sub === 'run') return shadowRun(opts);
+  if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve' || sub === 'send') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
   if (sub === 'clear') { saveShadowQueue([]); ok('影子队列清空了'); return; }
-  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | clear]'));
+  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | auto on/off | clear]'));
   process.exit(1);
+}
+
+// 让影子"真自己动"的开关(opt-in)· on 之后 commit 后影子自动起草入队(只拟不发 · 仍要你 approve)
+// 默认 off · 因为自动起草每次 commit 都调一次 LLM(花你自己的钥匙)· 得你主动开
+function shadowAuto(arg) {
+  const cfg = mustHaveConfig();
+  if (arg === 'on' || arg === 'draft') {
+    cfg.shadowAuto = true; saveConfig(cfg);
+    ok('影子自动起草:开 · 以后 commit 后影子自动把进展拟进队列(只拟不发 · 你 ' + vermilion('tinker shadow approve') + ' 才发)');
+    log(sepia('  注意:每次 commit 会调一次 LLM(花你自己的钥匙)· 不想了跑 ') + vermilion('tinker shadow auto off'));
+    return;
+  }
+  if (arg === 'off') {
+    cfg.shadowAuto = false; saveConfig(cfg);
+    ok('影子自动起草:关 · 要起草手动跑 ' + vermilion('tinker shadow run'));
+    return;
+  }
+  log('');
+  log(sepia('  影子自动起草: ') + (cfg.shadowAuto ? vermilion('开') : '关'));
+  log(sepia('  开/关: ') + vermilion('tinker shadow auto on') + sepia(' / ') + vermilion('tinker shadow auto off'));
 }
 
 // run:影子自己动 · 看 git 历史用你口吻起草进展 · 入队(不发)
 // 可被 post-commit hook / 定时器调 · --quiet 时没东西就不吭声(hook 友好)
 async function shadowRun(opts) {
   const cfg = mustHaveConfig();
+  // hook(--quiet)模式:只有用户开了 shadow auto 才动 · 没开就静默退出(零开销零花钱)
+  if (opts.quiet && !cfg.shadowAuto) return;
   if (!inGitRepo()) {
     if (!opts.quiet) err('不在 git 仓库 · 影子起草需要 git 历史');
     process.exit(opts.quiet ? 0 : 1);
@@ -2257,6 +2280,8 @@ const HOOK_END = '# <<< tinker-hook-v2 <<<';
 const HOOK_BLOCK = `${HOOK_BEGIN}
 # 装/改/卸: tinker hook install | uninstall
 command -v tinker >/dev/null 2>&1 && tinker check --from-hook --json >/dev/null 2>&1 || true
+# 影子自动起草(opt-in · tinker shadow auto on 才生效 · 没开是零开销 no-op)
+command -v tinker >/dev/null 2>&1 && tinker shadow run --quiet >/dev/null 2>&1 || true
 ${HOOK_END}
 `;
 
