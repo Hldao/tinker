@@ -1097,21 +1097,47 @@ async function cmdProjects(opts = {}) {
 // 只拟不自动发 = 零风险 · 后面更重的(夜班写码/自动发)都挂这套骨架上
 // ============================================
 const SHADOW_QUEUE_FILE = path.join(CONFIG_DIR, 'shadow-queue.json');
+const SHADOW_SENT_FILE = path.join(CONFIG_DIR, 'shadow-sent.json'); // 自动发的记录 · 给撤回用
+const SHADOW_UNDO_WINDOW_MS = 30 * 60 * 1000; // 自动发后 30 分钟内可撤回
 function loadShadowQueue() {
   try { return JSON.parse(fs.readFileSync(SHADOW_QUEUE_FILE, 'utf-8')); } catch { return []; }
 }
 function saveShadowQueue(q) {
   fs.writeFileSync(SHADOW_QUEUE_FILE, JSON.stringify(q, null, 2));
 }
+function loadShadowSent() {
+  try { return JSON.parse(fs.readFileSync(SHADOW_SENT_FILE, 'utf-8')); } catch { return []; }
+}
+function saveShadowSent(s) {
+  fs.writeFileSync(SHADOW_SENT_FILE, JSON.stringify(s, null, 2));
+}
+// 自主档位:off(默认) | draft(自动起草入队 · 你审了才发) | send(低风险自动发 · 30分钟内可撤回)
+// 兼容老的布尔值 true = draft
+function shadowAutoLevel(cfg) {
+  const v = cfg && cfg.shadowAuto;
+  if (v === 'send') return 'send';
+  if (v === 'draft' || v === true) return 'draft';
+  return 'off';
+}
+// 发布一条影子草稿 → 真发到对应项目 · 返回 updateId(给撤回用)
+async function publishShadowItem(cfg, it) {
+  const res = await apiAction(cfg, 'addUpdate', { projectId: it.projectId, text: it.text });
+  const updateId = res && (res.id || (res.result && res.result.id)) || null;
+  const sent = loadShadowSent();
+  sent.push({ updateId, projectId: it.projectId, projectName: it.projectName || null, text: it.text, sentAt: Date.now() });
+  saveShadowSent(sent);
+  return updateId;
+}
 
 async function cmdShadow(sub, arg, opts) {
   if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
   if (sub === 'run') return shadowRun(opts);
   if (sub === 'auto') return shadowAuto(arg);
-  if (sub === 'approve' || sub === 'send') return shadowApprove(arg, opts);
+  if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
+  if (sub === 'undo') return shadowUndo(arg, opts);
   if (sub === 'clear') { saveShadowQueue([]); ok('影子队列清空了'); return; }
-  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | auto on/off | clear]'));
+  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | undo | auto off/draft/send | clear]'));
   process.exit(1);
 }
 
@@ -1120,27 +1146,36 @@ async function cmdShadow(sub, arg, opts) {
 function shadowAuto(arg) {
   const cfg = mustHaveConfig();
   if (arg === 'on' || arg === 'draft') {
-    cfg.shadowAuto = true; saveConfig(cfg);
-    ok('影子自动起草:开 · 以后 commit 后影子自动把进展拟进队列(只拟不发 · 你 ' + vermilion('tinker shadow approve') + ' 才发)');
-    log(sepia('  注意:每次 commit 会调一次 LLM(花你自己的钥匙)· 不想了跑 ') + vermilion('tinker shadow auto off'));
+    cfg.shadowAuto = 'draft'; saveConfig(cfg);
+    ok('影子档位:draft(起草)· commit 后影子自动把进展拟进队列(只拟不发 · 你 ' + vermilion('tinker shadow approve') + ' 才发)');
+    log(sepia('  每次 commit 调一次 LLM(花你自己的钥匙)· 关:') + vermilion('tinker shadow auto off'));
+    return;
+  }
+  if (arg === 'send') {
+    cfg.shadowAuto = 'send'; saveConfig(cfg);
+    ok('影子档位:send(自动发)· commit 后影子起草并' + vermilion('直接发') + '到对应项目');
+    log(sepia('  ⚠️ 这是自动往你 feed 发东西 · 发完会桌面通知 · 30 分钟内可 ') + vermilion('tinker shadow undo') + sepia(' 撤回'));
+    log(sepia('  保守点用 ') + vermilion('tinker shadow auto draft') + sepia('(只拟不发)· 关:') + vermilion('tinker shadow auto off'));
     return;
   }
   if (arg === 'off') {
-    cfg.shadowAuto = false; saveConfig(cfg);
-    ok('影子自动起草:关 · 要起草手动跑 ' + vermilion('tinker shadow run'));
+    cfg.shadowAuto = 'off'; saveConfig(cfg);
+    ok('影子自动:关 · 要起草手动跑 ' + vermilion('tinker shadow run'));
     return;
   }
+  const lvl = shadowAutoLevel(cfg);
+  const lvlCn = lvl === 'send' ? 'send(自动发)' : lvl === 'draft' ? 'draft(自动起草入队)' : '关';
   log('');
-  log(sepia('  影子自动起草: ') + (cfg.shadowAuto ? vermilion('开') : '关'));
-  log(sepia('  开/关: ') + vermilion('tinker shadow auto on') + sepia(' / ') + vermilion('tinker shadow auto off'));
+  log(sepia('  影子当前档位: ') + (lvl === 'off' ? '关' : vermilion(lvlCn)));
+  log(sepia('  档位: ') + vermilion('off') + sepia(' / ') + vermilion('draft') + sepia('(拟不发)/ ') + vermilion('send') + sepia('(自动发 · 可撤回)'));
 }
 
 // run:影子自己动 · 看 git 历史用你口吻起草进展 · 入队(不发)
 // 可被 post-commit hook / 定时器调 · --quiet 时没东西就不吭声(hook 友好)
 async function shadowRun(opts) {
   const cfg = mustHaveConfig();
-  // hook(--quiet)模式:只有用户开了 shadow auto 才动 · 没开就静默退出(零开销零花钱)
-  if (opts.quiet && !cfg.shadowAuto) return;
+  // hook(--quiet)模式:只有开了 shadow auto(draft/send)才动 · 关着就静默退出(零开销零花钱)
+  if (opts.quiet && shadowAutoLevel(cfg) === 'off') return;
   if (!inGitRepo()) {
     if (!opts.quiet) err('不在 git 仓库 · 影子起草需要 git 历史');
     process.exit(opts.quiet ? 0 : 1);
@@ -1162,12 +1197,13 @@ async function shadowRun(opts) {
     if (!opts.quiet) log(sepia('  影子看了一圈 · 觉得没什么值得发的'));
     return;
   }
-  const q = loadShadowQueue();
+  const level = shadowAutoLevel(cfg);
+  const items = [];
   let n = 0;
   for (const c of candidates) {
     const text = sanitizeDraft(c && c.text ? c.text : '');
     if (!text.trim()) continue;
-    q.push({
+    items.push({
       id: 's-' + Date.now() + '-' + (n++),
       kind: 'update',
       text,
@@ -1178,10 +1214,35 @@ async function shadowRun(opts) {
       since: history.since,
     });
   }
+
+  // send 档:低风险(进展类)直接发 + 30分钟可撤回 · 没绑项目的退回队列
+  if (level === 'send') {
+    let sent = 0; const q = loadShadowQueue();
+    for (const it of items) {
+      if (!it.projectId) { q.push(it); continue; } // 没法发 · 退队列
+      try {
+        await publishShadowItem(cfg, it);
+        sent++;
+      } catch (e) { it.note = '自动发失败: ' + e.message; q.push(it); }
+    }
+    saveShadowQueue(q);
+    if (sent > 0) {
+      try { fireDesktop({ title: '影子替你发了', body: sent + ' 条进展已发到 ' + (items[0].projectName || '项目') + ' · 30分钟内 tinker shadow undo 可撤回' }); } catch {}
+    }
+    if (opts.quiet) return;
+    log('');
+    ok('影子自动发了 ' + bold(sent + '') + ' 条' + (q.length ? sepia(' · ' + q.length + ' 条没绑项目退回队列') : ''));
+    if (sent > 0) log(sepia('  发错了? 30 分钟内 ') + vermilion('tinker shadow undo') + sepia(' 撤回最近一条'));
+    return;
+  }
+
+  // draft 档(及手动 run):只拟不发 · 入队
+  const q = loadShadowQueue();
+  for (const it of items) q.push(it);
   saveShadowQueue(q);
-  if (opts.quiet) return; // hook 模式:静默入队
+  if (opts.quiet) return;
   log('');
-  ok('影子起草了 ' + bold(n + '') + ' 条 · 进了队列 · 你审了才发');
+  ok('影子起草了 ' + bold(items.length + '') + ' 条 · 进了队列 · 你审了才发');
   log(sepia('  看: ') + vermilion('tinker shadow') + sepia('   ·   发: ') + vermilion('tinker shadow approve <编号>'));
 }
 
@@ -1220,11 +1281,11 @@ async function shadowApprove(arg, opts) {
     process.exit(1);
   }
   try {
-    await apiAction(cfg, 'addUpdate', { projectId: it.projectId, text: it.text });
+    await publishShadowItem(cfg, it);
   } catch (e) { err('发布失败: ' + e.message); process.exit(1); }
   q.splice(idx, 1);
   saveShadowQueue(q);
-  ok('发了 → ' + (it.projectName || it.projectId) + sepia(' · 队列还剩 ' + q.length + ' 条'));
+  ok('发了 → ' + (it.projectName || it.projectId) + sepia(' · 队列还剩 ' + q.length + ' 条 · 30分钟内 ') + vermilion('tinker shadow undo') + sepia(' 可撤回'));
 }
 
 function shadowDiscard(arg, opts) {
@@ -1237,6 +1298,27 @@ function shadowDiscard(arg, opts) {
   q.splice(idx, 1);
   saveShadowQueue(q);
   ok('丢了 · 队列还剩 ' + q.length + ' 条');
+}
+
+// 撤回影子最近自动发(或 approve 发)的那条 · 30 分钟窗口内
+async function shadowUndo(arg, opts) {
+  const cfg = mustHaveConfig();
+  const sent = loadShadowSent();
+  if (sent.length === 0) { log(sepia('  影子最近没发过东西 · 没什么可撤回')); return; }
+  const last = sent[sent.length - 1];
+  if (Date.now() - last.sentAt > SHADOW_UNDO_WINDOW_MS) {
+    err('最近这条发出去超过 30 分钟了 · 过了撤回窗口 · 要删手动跑 ' + vermilion('tinker delete ' + (last.updateId || '<id>')));
+    process.exit(1);
+  }
+  if (!last.updateId) { err('这条没记到 updateId · 没法自动撤 · 手动 ' + vermilion('tinker delete')); process.exit(1); }
+  try {
+    const found = await findMyUpdate(cfg, last.updateId);
+    if (!found) { sent.pop(); saveShadowSent(sent); log(sepia('  那条 update 已经不在了(可能手动删过)· 撤回记录清掉')); return; }
+    await apiAction(cfg, 'deleteUpdate', { projectId: found.project.id, updateIdx: found.idx });
+  } catch (e) { err('撤回失败: ' + e.message); process.exit(1); }
+  sent.pop();
+  saveShadowSent(sent);
+  ok('撤回了影子最近发的那条 → ' + (last.projectName || last.projectId));
 }
 
 async function cmdDraft(opts) {
@@ -10687,11 +10769,13 @@ function help() {
   log('  ' + vermilion('tinker draft') + sepia('                       LLM 看 git 历史 · 起草 1-3 条候选到 .tinker/drafts/'));
   log('  ' + vermilion('tinker draft --since 30m') + sepia('           自定义时间窗'));
   log('');
-  log(sepia('  ') + bold('重度影子 · 自己起草 · 你审了才发'));
-  log('  ' + vermilion('tinker shadow run') + sepia('                 影子看 git 历史起草进展 · 入队不发 (可挂 hook/定时 自己动)'));
+  log(sepia('  ') + bold('重度影子 · 自己起草'));
+  log('  ' + vermilion('tinker shadow run') + sepia('                 影子看 git 历史起草进展'));
   log('  ' + vermilion('tinker shadow') + sepia('                     看影子攒的待审草稿'));
   log('  ' + vermilion('tinker shadow approve <编号>') + sepia('       审过 · 发出去'));
   log('  ' + vermilion('tinker shadow discard <编号>') + sepia('       丢掉这条'));
+  log('  ' + vermilion('tinker shadow auto off/draft/send') + sepia('  自主档位 · draft 自动起草入队 · send 自动发(可撤回)'));
+  log('  ' + vermilion('tinker shadow undo') + sepia('                撤回影子最近发的那条 (30分钟内)'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
