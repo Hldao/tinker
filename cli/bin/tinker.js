@@ -174,7 +174,10 @@ async function apiState(cfg) {
 }
 async function apiMe(cfg) {
   const res = await safeFetch(cfg, '/api/auth/me', { headers: authHeaders(cfg) });
-  return res.json();
+  const j = await res.json();
+  // server 把用户信息包在 user 字段里返回 ({"user":{...}}) · 解包后再给调用方
+  // 兼容老结构 (直接平铺) · 取不到 user 就返回原对象
+  return (j && j.user) ? j.user : j;
 }
 async function apiAction(cfg, type, payload) {
   // x-tinker-no-state: CLI 不渲染全站 state · 让 server 跳过 buildState 别回 179KB
