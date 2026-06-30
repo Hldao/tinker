@@ -1149,6 +1149,7 @@ async function cmdShadow(sub, arg, opts) {
   if (sub === 'record' || sub === 'stats') return shadowRecord(opts);
   if (sub === 'merge') return shadowMerge(arg, opts);
   if (sub === 'automerge') return shadowAutoMerge(arg);
+  if (sub === 'agent') return shadowAgentCmd(arg, opts);
   if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
@@ -1481,6 +1482,22 @@ async function shadowMerge(arg, opts) {
   log(sepia('  反悔: ') + vermilion('git revert -m 1 ' + sha));
 }
 
+// 配置夜班用的编程 agent(配一次 · night 默认用它)· agent 命令在工作树里跑 · 用 $TINKER_TASK 拿任务
+function shadowAgentCmd(arg, opts) {
+  const cfg = mustHaveConfig();
+  if (arg === 'set') {
+    const cmd = (opts.agent || opts.text || '').trim();
+    if (!cmd) { err('用法: tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\''); process.exit(1); }
+    cfg.shadowAgent = cmd; saveConfig(cfg);
+    ok('夜班 agent 配好了 · 以后 ' + vermilion('tinker shadow night --task "..." --test "..."') + ' 不用再带 --agent');
+    return;
+  }
+  if (arg === 'clear' || arg === 'off') { delete cfg.shadowAgent; saveConfig(cfg); ok('夜班 agent 清掉了'); return; }
+  log('');
+  log(sepia('  夜班 agent: ') + (cfg.shadowAgent ? vermilion(cfg.shadowAgent) : '没配 · night 时 --agent 现给'));
+  log(sepia('  配: ') + vermilion('tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\''));
+}
+
 // 重度影子第3格 · 夜班写代码(骨架)
 // 隔离 git 工作树 → (可插拔 agent)写代码 → 跑测试 → 绿了留分支给你审 · 从不自动合
 // 用法: tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程agent命令(在工作树里跑)"]
@@ -1494,7 +1511,7 @@ async function shadowNight(opts) {
     process.exit(1);
   }
   const testCmd = (opts.test || '').trim();
-  const agentCmd = (opts.agent || '').trim();
+  const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
   const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
   const branch = 'shadow/night-' + Date.now();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tinker-night-'));
@@ -11035,6 +11052,7 @@ function help() {
   log('  ' + vermilion('tinker shadow record') + sepia('              影子工牌/战绩:发出·撤回·夜班采纳率(第4格自动合的前提)'));
   log('  ' + vermilion('tinker shadow merge [分支]') + sepia('         采纳:把夜班分支合进 main + 记一笔(攒采纳战绩)'));
   log('  ' + vermilion('tinker shadow automerge on/off') + sepia('     第4格自动合 · 默认关 · 只在战绩达标(采纳≥5 率≥80%)才真合'));
+  log('  ' + vermilion('tinker shadow agent set --agent "..."') + sepia('  配夜班编程 agent(配一次 · 如 claude -p "$TINKER_TASK")'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
