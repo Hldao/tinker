@@ -1147,6 +1147,8 @@ async function cmdShadow(sub, arg, opts) {
   if (sub === 'run') return shadowRun(opts);
   if (sub === 'night') return shadowNight(opts);
   if (sub === 'record' || sub === 'stats') return shadowRecord(opts);
+  if (sub === 'merge') return shadowMerge(arg, opts);
+  if (sub === 'automerge') return shadowAutoMerge(arg);
   if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
@@ -1382,12 +1384,109 @@ function shadowRecord(opts) {
 }
 function ok2(s) { return '\x1b[38;5;28m' + s + '\x1b[0m'; }
 
+// ============================================
+// 重度影子第4格 · 自动合(默认关 · 严格战绩门槛 · 只在挣够信任后才开)
+// 原则:自主权用验收换。门槛没到 → 永远退回"留分支待审"
+// ============================================
+const SHADOW_MERGE_MIN_ACCEPTED = 5;   // 至少被你采纳过 5 次
+const SHADOW_MERGE_MIN_RATE = 0.8;     // 采纳率 ≥ 80%
+
+function shadowMainBranch(repoRoot) {
+  for (const b of ['main', 'master']) {
+    try { execSync('git rev-parse --verify --quiet ' + b, { cwd: repoRoot, stdio: 'ignore' }); return b; } catch {}
+  }
+  return null;
+}
+
+// 能不能自动合:开了开关 + 战绩达标 · 返回 {ok, reason}
+// 采纳用战绩记录里的 'merged' 算(合完分支会删,git 查不到,记录最可靠)
+function shadowCanAutoMerge(cfg) {
+  if (!cfg.shadowAutoMerge) return { ok: false, reason: '自动合没开(tinker shadow automerge on)' };
+  const rec = loadShadowRecord();
+  const mergedBranches = new Set(rec.filter(r => r.type === 'merged' && r.branch).map(r => r.branch));
+  const greenBranches = [...new Set(rec.filter(r => r.type === 'night-green' && r.branch).map(r => r.branch))];
+  let existing = new Set();
+  try { execSync("git branch --list 'shadow/night-*'", { encoding: 'utf-8' }).split('\n').forEach(l => { const b = l.replace(/[*\s]/g, ''); if (b) existing.add(b); }); } catch {}
+  let accepted = 0, rejected = 0;
+  for (const b of greenBranches) {
+    if (mergedBranches.has(b)) accepted++;
+    else if (!existing.has(b)) rejected++;   // 绿过、没合、也不在了 = 被你删了 = 拒绝(待审的不算分母)
+  }
+  const denom = accepted + rejected;
+  const rate = denom ? accepted / denom : 0;
+  if (accepted < SHADOW_MERGE_MIN_ACCEPTED) return { ok: false, reason: '采纳 ' + accepted + ' < ' + SHADOW_MERGE_MIN_ACCEPTED + ' · 战绩还不够' };
+  if (rate < SHADOW_MERGE_MIN_RATE) return { ok: false, reason: '采纳率 ' + Math.round(rate * 100) + '% < ' + (SHADOW_MERGE_MIN_RATE * 100) + '%' };
+  return { ok: true, reason: '战绩达标(采纳 ' + accepted + ' · 率 ' + Math.round(rate * 100) + '%)' };
+}
+
+// 把一个 shadow 分支合进 main · 用 main 的临时工作树(不碰你当前 checkout)· 只接受干净合并
+// 返回 merge commit sha · 冲突/失败抛错
+function mergeShadowBranch(repoRoot, branch) {
+  const main = shadowMainBranch(repoRoot);
+  if (!main) throw new Error('找不到 main/master 分支');
+  const cur = (() => { try { return execSync('git symbolic-ref --short HEAD', { cwd: repoRoot, encoding: 'utf-8' }).trim(); } catch { return ''; } })();
+  if (cur === main) {
+    execSync('git merge --no-ff --no-edit ' + branch, { cwd: repoRoot, stdio: 'ignore' });
+    return execSync('git rev-parse --short HEAD', { cwd: repoRoot, encoding: 'utf-8' }).trim();
+  }
+  // 不在 main 上:用 main 的临时工作树合(worktree 共享 .git · 合完 main ref 前进)
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tinker-merge-'));
+  fs.rmSync(tmp, { recursive: true, force: true });
+  execSync('git worktree add "' + tmp + '" ' + main, { cwd: repoRoot, stdio: 'ignore' });
+  try {
+    execSync('git merge --no-ff --no-edit ' + branch, { cwd: tmp, stdio: 'ignore' });
+    const sha = execSync('git rev-parse --short HEAD', { cwd: tmp, encoding: 'utf-8' }).trim();
+    return sha;
+  } catch (e) {
+    try { execSync('git merge --abort', { cwd: tmp, stdio: 'ignore' }); } catch {}
+    throw new Error('合并有冲突/失败 · 已放弃 · 退回留分支待审');
+  } finally {
+    try { execSync('git worktree remove --force "' + tmp + '"', { cwd: repoRoot, stdio: 'ignore' }); } catch {}
+  }
+}
+
+function shadowAutoMerge(arg) {
+  const cfg = mustHaveConfig();
+  if (arg === 'on') {
+    cfg.shadowAutoMerge = true; saveConfig(cfg);
+    ok('影子自动合:开 · 但只在战绩达标(采纳≥' + SHADOW_MERGE_MIN_ACCEPTED + ' 且率≥' + (SHADOW_MERGE_MIN_RATE * 100) + '%)时才真合 · 否则照旧留分支待审');
+    const g = shadowCanAutoMerge(cfg);
+    log(sepia('  当前: ') + (g.ok ? ok2('达标 · 会自动合') : '还不达标 · ' + g.reason + ' → 仍留分支待审'));
+    return;
+  }
+  if (arg === 'off') { cfg.shadowAutoMerge = false; saveConfig(cfg); ok('影子自动合:关 · 夜班绿灯一律留分支等你审'); return; }
+  const g = shadowCanAutoMerge(cfg);
+  log('');
+  log(sepia('  影子自动合: ') + (cfg.shadowAutoMerge ? vermilion('开') : '关') + sepia(' · 门槛: ') + (g.ok ? ok2(g.reason) : g.reason));
+  log(sepia('  开/关: ') + vermilion('tinker shadow automerge on') + sepia(' / ') + vermilion('tinker shadow automerge off'));
+}
+
+// 手动采纳:把夜班分支合进 main + 记一笔(攒采纳战绩的正路)
+async function shadowMerge(arg, opts) {
+  mustHaveConfig();
+  if (!inGitRepo()) { err('要在 git 仓库里'); process.exit(1); }
+  const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+  let branch = arg;
+  if (!branch) {
+    const list = execSync("git branch --list 'shadow/night-*'", { cwd: repoRoot, encoding: 'utf-8' }).split('\n').map(l => l.replace(/[*\s]/g, '')).filter(Boolean).sort();
+    branch = list[list.length - 1];
+    if (!branch) { err('没有 shadow/night-* 分支可合 · 先 ' + vermilion('tinker shadow night ...')); process.exit(1); }
+  }
+  let sha;
+  try { sha = mergeShadowBranch(repoRoot, branch); }
+  catch (e) { err(e.message); process.exit(1); }
+  recordShadowEvent({ type: 'merged', branch, mergeCommit: sha });
+  try { execSync('git branch -D ' + branch, { cwd: repoRoot, stdio: 'ignore' }); } catch {}
+  ok('采纳合并了 ' + bold(branch) + ' → main(merge commit ' + sha + ')');
+  log(sepia('  反悔: ') + vermilion('git revert -m 1 ' + sha));
+}
+
 // 重度影子第3格 · 夜班写代码(骨架)
 // 隔离 git 工作树 → (可插拔 agent)写代码 → 跑测试 → 绿了留分支给你审 · 从不自动合
 // 用法: tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程agent命令(在工作树里跑)"]
 // --agent 命令在工作树目录里执行 · 能用环境变量 TINKER_TASK 拿到任务描述
 async function shadowNight(opts) {
-  mustHaveConfig();
+  const cfg = mustHaveConfig();
   if (!inGitRepo()) { err('夜班要在 git 仓库里跑'); process.exit(1); }
   const task = (opts.task || '').trim();
   if (!task) {
@@ -1448,9 +1547,24 @@ async function shadowNight(opts) {
 
   log('');
   if (kept) {
+    // 第4格:战绩达标且开了自动合 → 直接合进 main;否则留分支待审
+    const gate = shadowCanAutoMerge(cfg);
+    if (gate.ok) {
+      try {
+        const sha = mergeShadowBranch(repoRoot, branch);
+        recordShadowEvent({ type: 'merged', branch, mergeCommit: sha, auto: true });
+        try { execSync('git branch -D ' + branch, { cwd: repoRoot, stdio: 'ignore' }); } catch {}
+        ok('影子夜班完工 · 测试通过 ✓ · ' + gate.reason + ' · 已' + bold('自动合进 main') + '(' + sha + ')');
+        log(sepia('  反悔: ') + vermilion('git revert -m 1 ' + sha));
+        try { fireDesktop({ title: '影子夜班 · 已自动合', body: '任务绿了且战绩达标 · 已合进 main · 不对 git revert -m 1 ' + sha }); } catch {}
+        return;
+      } catch (e) {
+        log(sepia('  (本想自动合,但' + e.message + ')'));
+      }
+    }
     ok('影子夜班完工 · ' + (testCmd ? '测试通过 ✓' : '有改动') + ' · 留了分支 ' + bold(branch) + ' 等你审(没自动合)');
     log(sepia('  看改了啥: ') + vermilion('git log -p ' + branch));
-    log(sepia('  满意就合: ') + vermilion('git merge ' + branch) + sepia('   ·   不要: ') + vermilion('git branch -D ' + branch));
+    log(sepia('  采纳: ') + vermilion('tinker shadow merge ' + branch) + sepia('   ·   不要: ') + vermilion('git branch -D ' + branch));
     try { fireDesktop({ title: '影子夜班完工', body: '任务绿了 · 分支 ' + branch + ' 待你 review' }); } catch {}
   } else if (agentErr) {
     err('影子夜班中断 · agent 出错: ' + agentErr + ' · 改动已丢弃,没留分支');
@@ -10919,6 +11033,8 @@ function help() {
   log('  ' + vermilion('tinker shadow undo') + sepia('                撤回影子最近发的那条 (30分钟内)'));
   log('  ' + vermilion('tinker shadow night --task "..." --test "..." --agent "..."') + sepia('  夜班:隔离写码→跑测试→绿了留分支待审(从不自动合)'));
   log('  ' + vermilion('tinker shadow record') + sepia('              影子工牌/战绩:发出·撤回·夜班采纳率(第4格自动合的前提)'));
+  log('  ' + vermilion('tinker shadow merge [分支]') + sepia('         采纳:把夜班分支合进 main + 记一笔(攒采纳战绩)'));
+  log('  ' + vermilion('tinker shadow automerge on/off') + sepia('     第4格自动合 · 默认关 · 只在战绩达标(采纳≥5 率≥80%)才真合'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
