@@ -130,10 +130,18 @@ function authHeaders(cfg) {
 // 统一 fetch 包装 · 把 404/401/403/网络错误翻成 actionable 中文提示
 async function safeFetch(cfg, path, init) {
   let res;
+  // 给网络请求加超时 · 连不上/极慢时快速失败,别把 Claude Code hook 卡到 30s 超时
+  // 默认 5s · 可用 TINKER_HTTP_TIMEOUT 环境变量调
+  const timeoutMs = parseInt(process.env.TINKER_HTTP_TIMEOUT || '5000', 10);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    res = await fetch(cfg.serverUrl + path, init);
+    res = await fetch(cfg.serverUrl + path, { ...(init || {}), signal: ctrl.signal });
   } catch (e) {
-    throw new Error('连不上 server (' + cfg.serverUrl + ') · 网络不通或地址变了 · 跑 `tinker login` 重新配 server + 钥匙');
+    const why = e && e.name === 'AbortError' ? '超时(>' + Math.round(timeoutMs / 1000) + 's)' : '网络不通或地址变了';
+    throw new Error('连不上 server (' + cfg.serverUrl + ') · ' + why + ' · 跑 `tinker login` 重新配 server + 钥匙');
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) {
     // 看响应体 · 但 404 时 server 可能返 HTML
@@ -2303,9 +2311,17 @@ async function fetchPrefsFromServer() {
   try {
     const cfg = loadConfig();
     if (!cfg || !cfg.serverUrl || !cfg.token) return null;
-    const res = await fetch(cfg.serverUrl + '/api/user/prefs', {
-      headers: { 'Authorization': 'Bearer ' + cfg.token },
-    });
+    // 加超时 · 否则连不上 prod 时这个后台 fetch 的 socket 一直挂着 · Node 进程退不出去
+    // (getPrefsSync 是 fire-and-forget 调它的 · hook 命令会因此卡到 Claude Code 的 30s 上限)
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), parseInt(process.env.TINKER_HTTP_TIMEOUT || '5000', 10));
+    let res;
+    try {
+      res = await fetch(cfg.serverUrl + '/api/user/prefs', {
+        headers: { 'Authorization': 'Bearer ' + cfg.token },
+        signal: ctrl.signal,
+      });
+    } finally { clearTimeout(timer); }
     if (!res.ok) return null;
     const data = await res.json();
     if (!data || !data.ok) return null;
