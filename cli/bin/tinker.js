@@ -1098,7 +1098,19 @@ async function cmdProjects(opts = {}) {
 // ============================================
 const SHADOW_QUEUE_FILE = path.join(CONFIG_DIR, 'shadow-queue.json');
 const SHADOW_SENT_FILE = path.join(CONFIG_DIR, 'shadow-sent.json'); // 自动发的记录 · 给撤回用
+const SHADOW_RECORD_FILE = path.join(CONFIG_DIR, 'shadow-record.jsonl'); // 影子战绩 · append-only · 信任层基础
 const SHADOW_UNDO_WINDOW_MS = 30 * 60 * 1000; // 自动发后 30 分钟内可撤回
+// 影子干的每件事都留一笔 · 这是"工牌/战绩"的原始数据 · 第4格(自动合)要靠它判断信不信得过
+function recordShadowEvent(ev) {
+  try {
+    fs.appendFileSync(SHADOW_RECORD_FILE, JSON.stringify({ at: Date.now(), ...ev }) + '\n');
+  } catch {}
+}
+function loadShadowRecord() {
+  try {
+    return fs.readFileSync(SHADOW_RECORD_FILE, 'utf-8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { return []; }
+}
 function loadShadowQueue() {
   try { return JSON.parse(fs.readFileSync(SHADOW_QUEUE_FILE, 'utf-8')); } catch { return []; }
 }
@@ -1126,6 +1138,7 @@ async function publishShadowItem(cfg, it) {
   const sent = loadShadowSent();
   sent.push({ updateId, projectId: it.projectId, projectName: it.projectName || null, text: it.text, sentAt: Date.now() });
   saveShadowSent(sent);
+  recordShadowEvent({ type: 'sent', updateId, projectName: it.projectName || null });
   return updateId;
 }
 
@@ -1133,12 +1146,13 @@ async function cmdShadow(sub, arg, opts) {
   if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
   if (sub === 'run') return shadowRun(opts);
   if (sub === 'night') return shadowNight(opts);
+  if (sub === 'record' || sub === 'stats') return shadowRecord(opts);
   if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
   if (sub === 'undo') return shadowUndo(arg, opts);
   if (sub === 'clear') { saveShadowQueue([]); ok('影子队列清空了'); return; }
-  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | undo | auto off/draft/send | clear]'));
+  err('用法: ' + vermilion('tinker shadow') + sepia(' [run | list | approve <n> | discard <n> | undo | night | record | auto off/draft/send | clear]'));
   process.exit(1);
 }
 
@@ -1319,8 +1333,54 @@ async function shadowUndo(arg, opts) {
   } catch (e) { err('撤回失败: ' + e.message); process.exit(1); }
   sent.pop();
   saveShadowSent(sent);
+  recordShadowEvent({ type: 'undone', updateId: last.updateId, projectName: last.projectName || null });
   ok('撤回了影子最近发的那条 → ' + (last.projectName || last.projectId));
 }
+
+// 影子工牌 / 战绩 · 信任层:影子干过啥、被采纳多少、被撤回多少 · 第4格(自动合)的判断依据
+function shadowRecord(opts) {
+  const rec = loadShadowRecord();
+  const sent = rec.filter(r => r.type === 'sent').length;
+  const undone = rec.filter(r => r.type === 'undone').length;
+  const greens = rec.filter(r => r.type === 'night-green');
+  const reds = rec.filter(r => r.type === 'night-red');
+
+  // 夜班绿灯分支现在去向:合并采纳 / 待审 / 已删
+  let merged = new Set(), existing = new Set();
+  if (inGitRepo()) {
+    const base = (execSync('git rev-parse --verify --quiet main || echo', { encoding: 'utf-8' }).trim()) ? 'main' : 'HEAD';
+    try { execSync('git branch --merged ' + base + " --list 'shadow/night-*'", { encoding: 'utf-8' }).split('\n').forEach(l => { const b = l.replace(/[*\s]/g, ''); if (b) merged.add(b); }); } catch {}
+    try { execSync("git branch --list 'shadow/night-*'", { encoding: 'utf-8' }).split('\n').forEach(l => { const b = l.replace(/[*\s]/g, ''); if (b) existing.add(b); }); } catch {}
+  }
+  let accepted = 0, pending = 0, gone = 0;
+  for (const g of greens) {
+    if (merged.has(g.branch)) accepted++;
+    else if (existing.has(g.branch)) pending++;
+    else gone++;
+  }
+
+  if (opts.json) {
+    return outputJson({ ok: true, sent, undone, night: { green: greens.length, red: reds.length, accepted, pending, gone } });
+  }
+  log('');
+  log(bold('  影子工牌 · 战绩'));
+  log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
+  log(sepia('  起草发出: ') + bold(sent + '') + sepia(' 条') + (undone ? sepia('  · 被你撤回 ') + vermilion(undone + '') + sepia(' 条') : sepia('  · 没被撤回过')));
+  log(sepia('  夜班开工: ') + bold((greens.length + reds.length) + '') + sepia(' 次  · 绿灯 ') + bold(greens.length + '') + sepia(' · 红灯丢弃 ') + (reds.length ? vermilion(reds.length + '') : '0'));
+  if (greens.length) {
+    log(sepia('  绿灯分支去向: ') + ok2('采纳合并 ' + accepted) + sepia(' · 待审 ') + pending + sepia(' · 已删 ') + gone);
+  }
+  log('');
+  // 给第4格一个朴素的信任读数:撤回率低 + 采纳率高 = 可以考虑放更多自主权
+  const sendTrust = sent ? Math.round((1 - undone / sent) * 100) : null;
+  const nightTrust = (accepted + gone) ? Math.round(accepted / (accepted + gone) * 100) : null;
+  if (sendTrust !== null) log(sepia('  发出留存率: ') + (sendTrust >= 80 ? ok2(sendTrust + '%') : vermilion(sendTrust + '%')) + sepia('(没被撤回的占比)'));
+  if (nightTrust !== null) log(sepia('  夜班采纳率: ') + (nightTrust >= 60 ? ok2(nightTrust + '%') : vermilion(nightTrust + '%')) + sepia('(已审过的里被合并的占比)'));
+  if (sendTrust === null && nightTrust === null) log(sepia('  还没攒下战绩 · 影子多干几次就有数了'));
+  log('');
+  log(sepia('  战绩是第4格(让影子自动合)的前提 · 攒够采纳率才谈得上给更多自主权'));
+}
+function ok2(s) { return '\x1b[38;5;28m' + s + '\x1b[0m'; }
 
 // 重度影子第3格 · 夜班写代码(骨架)
 // 隔离 git 工作树 → (可插拔 agent)写代码 → 跑测试 → 绿了留分支给你审 · 从不自动合
@@ -1381,6 +1441,10 @@ async function shadowNight(opts) {
   // 清工作树 · 绿了分支留着给你审 · 没绿就连分支一起删
   try { execSync('git worktree remove --force "' + tmp + '"', { cwd: repoRoot, stdio: 'ignore' }); } catch {}
   if (!kept) { try { execSync('git branch -D ' + branch, { cwd: repoRoot, stdio: 'ignore' }); } catch {} }
+
+  recordShadowEvent(kept
+    ? { type: 'night-green', branch, task: task.slice(0, 80), tested: !!testCmd }
+    : { type: 'night-red', task: task.slice(0, 80), reason: agentErr ? 'agent-error' : (!changed ? 'no-change' : 'test-fail') });
 
   log('');
   if (kept) {
@@ -10854,6 +10918,7 @@ function help() {
   log('  ' + vermilion('tinker shadow auto off/draft/send') + sepia('  自主档位 · draft 自动起草入队 · send 自动发(可撤回)'));
   log('  ' + vermilion('tinker shadow undo') + sepia('                撤回影子最近发的那条 (30分钟内)'));
   log('  ' + vermilion('tinker shadow night --task "..." --test "..." --agent "..."') + sepia('  夜班:隔离写码→跑测试→绿了留分支待审(从不自动合)'));
+  log('  ' + vermilion('tinker shadow record') + sepia('              影子工牌/战绩:发出·撤回·夜班采纳率(第4格自动合的前提)'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
