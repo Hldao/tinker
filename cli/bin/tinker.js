@@ -1147,6 +1147,7 @@ async function cmdShadow(sub, arg, opts) {
   if (sub === 'run') return shadowRun(opts);
   if (sub === 'night') return shadowNight(opts);
   if (sub === 'record' || sub === 'stats') return shadowRecord(opts);
+  if (sub === 'learn') return shadowLearn(opts);
   if (sub === 'merge') return shadowMerge(arg, opts);
   if (sub === 'automerge') return shadowAutoMerge(arg);
   if (sub === 'agent') return shadowAgentCmd(arg, opts);
@@ -1386,6 +1387,63 @@ function shadowRecord(opts) {
 }
 function ok2(s) { return '\x1b[38;5;28m' + s + '\x1b[0m'; }
 
+// 影子学习 · 看战绩反哺档案:学出用户爱 quick 还是 thorough、要不要写久点
+// 默认只给建议;--apply 才真改档案。数据不够就老实说不够。
+function shadowLearn(opts) {
+  const cfg = mustHaveConfig();
+  const rec = loadShadowRecord();
+  const prof = loadShadowProfile(cfg);
+  const mergedBranches = new Set(rec.filter(r => r.type === 'merged' && r.branch).map(r => r.branch));
+  let existing = new Set();
+  try { execSync("git branch --list 'shadow/night-*'", { encoding: 'utf-8' }).split('\n').forEach(l => { const b = l.replace(/[*\s]/g, ''); if (b) existing.add(b); }); } catch {}
+  // 按深度统计:采纳 / 拒绝(绿过没合也不在了)· 待审不计
+  const byDepth = { quick: { acc: 0, rej: 0 }, thorough: { acc: 0, rej: 0 } };
+  for (const g of rec.filter(r => r.type === 'night-green')) {
+    const d = g.depth === 'thorough' ? 'thorough' : 'quick';
+    if (mergedBranches.has(g.branch)) byDepth[d].acc++;
+    else if (!existing.has(g.branch)) byDepth[d].rej++;
+  }
+  const timeouts = rec.filter(r => r.type === 'night-red' && r.reason === 'timeout').length;
+  const testFails = rec.filter(r => r.type === 'night-red' && r.reason === 'test-fail').length;
+  const decided = byDepth.quick.acc + byDepth.quick.rej + byDepth.thorough.acc + byDepth.thorough.rej;
+
+  const suggestions = [];
+  // 深度:哪个采纳率明显高就建议默认用它(各至少 3 个已决样本)
+  const rate = (o) => (o.acc + o.rej) ? o.acc / (o.acc + o.rej) : null;
+  const rq = rate(byDepth.quick), rt = rate(byDepth.thorough);
+  if (rq !== null && rt !== null && byDepth.quick.acc + byDepth.quick.rej >= 3 && byDepth.thorough.acc + byDepth.thorough.rej >= 3) {
+    if (rq - rt >= 0.25 && prof.depth !== 'quick') suggestions.push({ field: 'depth', to: 'quick', why: 'quick 采纳率 ' + Math.round(rq * 100) + '% 明显高于 thorough ' + Math.round(rt * 100) + '%' });
+    if (rt - rq >= 0.25 && prof.depth !== 'thorough') suggestions.push({ field: 'depth', to: 'thorough', why: 'thorough 采纳率 ' + Math.round(rt * 100) + '% 明显高于 quick ' + Math.round(rq * 100) + '%' });
+  }
+  // 时长:总超时 → 建议加时间
+  if (timeouts >= 2) suggestions.push({ field: 'minutes', to: prof.minutes + 8, why: '有 ' + timeouts + ' 次因超时中断 · 给影子多点时间' });
+
+  if (opts.json) return outputJson({ ok: true, byDepth, timeouts, testFails, suggestions });
+  log('');
+  log(bold('  影子学习 · 从战绩里看规律'));
+  log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
+  if (decided < 3 && timeouts < 2) {
+    log(sepia('  已决样本 ' + decided + ' 个 · 数据还不够 · 让影子多干几次(夜班被你采纳/扔掉才算一次)再来学'));
+    return;
+  }
+  log(sepia('  quick:    采纳 ') + byDepth.quick.acc + sepia(' · 扔 ') + byDepth.quick.rej + (rq !== null ? sepia(' · 率 ') + Math.round(rq * 100) + '%' : ''));
+  log(sepia('  thorough: 采纳 ') + byDepth.thorough.acc + sepia(' · 扔 ') + byDepth.thorough.rej + (rt !== null ? sepia(' · 率 ') + Math.round(rt * 100) + '%' : ''));
+  if (timeouts) log(sepia('  超时中断: ') + timeouts + ' 次');
+  log('');
+  if (suggestions.length === 0) { log(sepia('  暂时没啥要调的 · 影子这么干挺合你意')); return; }
+  log(bold('  建议:'));
+  suggestions.forEach(s => log(vermilion('  · ' + s.field + ' → ' + s.to) + sepia('  (' + s.why + ')')));
+  if (opts.apply) {
+    cfg.shadowProfile = cfg.shadowProfile || {};
+    suggestions.forEach(s => { cfg.shadowProfile[s.field] = s.to; });
+    saveConfig(cfg);
+    log('');
+    ok('已按建议更新影子档案(' + vermilion('tinker shadow profile') + ' 看)');
+  } else {
+    log(sepia('  应用: ') + vermilion('tinker shadow learn --apply'));
+  }
+}
+
 // ============================================
 // 重度影子第4格 · 自动合(默认关 · 严格战绩门槛 · 只在挣够信任后才开)
 // 原则:自主权用验收换。门槛没到 → 永远退回"留分支待审"
@@ -1597,8 +1655,8 @@ async function shadowNight(opts) {
   if (!kept) { try { execSync('git branch -D ' + branch, { cwd: repoRoot, stdio: 'ignore' }); } catch {} }
 
   recordShadowEvent(kept
-    ? { type: 'night-green', branch, task: task.slice(0, 80), tested: !!testCmd }
-    : { type: 'night-red', task: task.slice(0, 80), reason: agentErr ? 'agent-error' : (!changed ? 'no-change' : 'test-fail') });
+    ? { type: 'night-green', branch, task: task.slice(0, 80), tested: !!testCmd, depth, minutes }
+    : { type: 'night-red', task: task.slice(0, 80), depth, minutes, reason: agentErr ? (/timed out|timeout/i.test(agentErr) ? 'timeout' : 'agent-error') : (!changed ? 'no-change' : 'test-fail') });
 
   log('');
   if (kept) {
@@ -11092,6 +11150,7 @@ function help() {
   log('  ' + vermilion('tinker shadow automerge on/off') + sepia('     第4格自动合 · 默认关 · 只在战绩达标(采纳≥5 率≥80%)才真合'));
   log('  ' + vermilion('tinker shadow agent set --agent "..."') + sepia('  配夜班编程 agent(配一次 · 如 claude -p "$TINKER_TASK")'));
   log('  ' + vermilion('tinker shadow profile set --depth --minutes --test') + sepia('  自定义你的影子:写多深/多久/默认测试'));
+  log('  ' + vermilion('tinker shadow learn [--apply]') + sepia('       影子看战绩学规律 · 建议(或直接调)你的档案 depth/时长'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
@@ -11341,6 +11400,7 @@ function parseArgs(args) {
     else if (a === '--agent') opts.agent = args[++i];
     else if (a === '--minutes') opts.minutes = args[++i];
     else if (a === '--depth') opts.depth = args[++i];
+    else if (a === '--apply') opts.apply = true;
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
