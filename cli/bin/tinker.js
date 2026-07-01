@@ -1142,6 +1142,61 @@ async function publishShadowItem(cfg, it) {
   return updateId;
 }
 
+// ============================================
+// 任务板 · 任务排队 → 夜班从里面领(通往"网上公司"的底座)
+// 本地版(~/.tinker/tasks.json)· 以后搬服务器就能团队共享
+// ============================================
+const TASK_FILE = path.join(CONFIG_DIR, 'tasks.json');
+function loadTasks() { try { return JSON.parse(fs.readFileSync(TASK_FILE, 'utf-8')); } catch { return []; } }
+function saveTasks(t) { fs.writeFileSync(TASK_FILE, JSON.stringify(t, null, 2)); }
+// 领下一个待办 · 标 doing · 给夜班用
+function pullNextTask() {
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.status === 'todo');
+  if (!t) return null;
+  t.status = 'doing'; t.startedAt = Date.now();
+  saveTasks(tasks);
+  return t;
+}
+function updateTaskStatus(id, status, extra) {
+  const tasks = loadTasks();
+  const t = tasks.find(x => x.id === id);
+  if (t) { t.status = status; Object.assign(t, extra || {}); saveTasks(tasks); }
+}
+
+const TASK_STATUS_CN = { todo: '待做', doing: '在做', review: '待审', done: '完成', failed: '没过' };
+async function cmdTask(sub, arg, opts) {
+  if (sub === 'add') {
+    const desc = (arg && !arg.startsWith('-')) ? arg : (opts.text || '').trim();
+    if (!desc) { err('用法: ' + vermilion('tinker task add "要做的事" --test "测试命令"')); process.exit(1); }
+    const tasks = loadTasks();
+    const t = { id: 't-' + Date.now(), desc: desc.trim(), test: (opts.test || '').trim(), status: 'todo', createdAt: Date.now() };
+    tasks.push(t); saveTasks(tasks);
+    ok('任务入板 · ' + bold(desc.trim()) + (t.test ? sepia(' · 测试: ' + t.test) : sepia(' · 没给测试(夜班会问 / 你补 --test)')));
+    return;
+  }
+  if (sub === 'done') { updateTaskStatus(arg, 'done'); ok('标完成 ' + (arg || '')); return; }
+  if (sub === 'drop' || sub === 'rm') {
+    const tasks = loadTasks().filter(x => x.id !== arg);
+    saveTasks(tasks); ok('删了 ' + (arg || '')); return;
+  }
+  if (sub === 'clear') { saveTasks([]); ok('任务板清空'); return; }
+  // 默认 list
+  const tasks = loadTasks();
+  if (opts.json) return outputJson({ ok: true, tasks });
+  if (tasks.length === 0) { log(''); log(sepia('  任务板空的 · 加一个: ') + vermilion('tinker task add "要做的事" --test "..."')); return; }
+  log('');
+  log(bold('  任务板 · ' + tasks.length + ' 条'));
+  log('');
+  for (const t of tasks) {
+    const badge = t.status === 'review' ? vermilion('[待审]') : sepia('[' + (TASK_STATUS_CN[t.status] || t.status) + ']');
+    log('  ' + badge + ' ' + sepia(t.id.slice(0, 8)) + '  ' + t.desc + (t.test ? sepia('  · 测试 ' + t.test) : ''));
+    if (t.status === 'review' && t.branch) log(sepia('        影子做完了 → 分支 ' + t.branch + ' · 采纳 tinker shadow merge ' + t.branch));
+  }
+  log('');
+  log(sepia('  夜班领下一个: ') + vermilion('tinker shadow night') + sepia('(不带 --task 就从板上领)'));
+}
+
 async function cmdShadow(sub, arg, opts) {
   if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
   if (sub === 'run') return shadowRun(opts);
@@ -1596,13 +1651,19 @@ function shadowProfileCmd(arg, opts) {
 async function shadowNight(opts) {
   const cfg = mustHaveConfig();
   if (!inGitRepo()) { err('夜班要在 git 仓库里跑'); process.exit(1); }
-  const task = (opts.task || '').trim();
+  const prof = loadShadowProfile(cfg);
+  // 没给 --task 就从任务板领一个待办
+  let boardTask = null;
+  let task = (opts.task || '').trim();
   if (!task) {
-    err('用法: ' + vermilion('tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程命令"]'));
+    boardTask = pullNextTask();
+    if (boardTask) { task = boardTask.desc; log(sepia('  从任务板领了: ') + task + sepia('(' + boardTask.id.slice(0, 8) + ')')); }
+  }
+  if (!task) {
+    err('用法: ' + vermilion('tinker shadow night --task "要做的事" --test "测试命令"') + sepia(' · 或先 ') + vermilion('tinker task add "..."') + sepia(' 再直接 ') + vermilion('tinker shadow night'));
     process.exit(1);
   }
-  const prof = loadShadowProfile(cfg);
-  const testCmd = (opts.test || prof.test || '').trim();
+  const testCmd = (opts.test || (boardTask && boardTask.test) || prof.test || '').trim();
   const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
   const depth = (opts.depth ? (['thorough', 'deep', '重', '周全'].includes(opts.depth) ? 'thorough' : 'quick') : prof.depth);
   const minutes = opts.minutes ? (parseInt(opts.minutes, 10) || prof.minutes) : prof.minutes;
@@ -1667,6 +1728,7 @@ async function shadowNight(opts) {
         const sha = mergeShadowBranch(repoRoot, branch);
         recordShadowEvent({ type: 'merged', branch, mergeCommit: sha, auto: true });
         try { execSync('git branch -D ' + branch, { cwd: repoRoot, stdio: 'ignore' }); } catch {}
+        if (boardTask) updateTaskStatus(boardTask.id, 'done', { branch, mergeCommit: sha });
         ok('影子夜班完工 · 测试通过 ✓ · ' + gate.reason + ' · 已' + bold('自动合进 main') + '(' + sha + ')');
         log(sepia('  反悔: ') + vermilion('git revert -m 1 ' + sha));
         try { fireDesktop({ title: '影子夜班 · 已自动合', body: '任务绿了且战绩达标 · 已合进 main · 不对 git revert -m 1 ' + sha }); } catch {}
@@ -1675,15 +1737,19 @@ async function shadowNight(opts) {
         log(sepia('  (本想自动合,但' + e.message + ')'));
       }
     }
+    if (boardTask) updateTaskStatus(boardTask.id, 'review', { branch });
     ok('影子夜班完工 · ' + (testCmd ? '测试通过 ✓' : '有改动') + ' · 留了分支 ' + bold(branch) + ' 等你审(没自动合)');
     log(sepia('  看改了啥: ') + vermilion('git log -p ' + branch));
     log(sepia('  采纳: ') + vermilion('tinker shadow merge ' + branch) + sepia('   ·   不要: ') + vermilion('git branch -D ' + branch));
     try { fireDesktop({ title: '影子夜班完工', body: '任务绿了 · 分支 ' + branch + ' 待你 review' }); } catch {}
   } else if (agentErr) {
+    if (boardTask) updateTaskStatus(boardTask.id, 'failed');
     err('影子夜班中断 · agent 出错: ' + agentErr + ' · 改动已丢弃,没留分支');
   } else if (!changed) {
+    if (boardTask) updateTaskStatus(boardTask.id, 'failed');
     log(sepia('  影子夜班:没产生任何改动(agent 没动文件 / 没给 agent)· 没留分支'));
   } else {
+    if (boardTask) updateTaskStatus(boardTask.id, 'failed');
     err('影子夜班没通过测试 · 改动已丢弃,没留分支');
     if (testOut) log(sepia('  测试输出(尾部):') + '\n  ' + testOut.split('\n').slice(-8).join('\n  '));
   }
@@ -11151,6 +11217,11 @@ function help() {
   log('  ' + vermilion('tinker shadow agent set --agent "..."') + sepia('  配夜班编程 agent(配一次 · 如 claude -p "$TINKER_TASK")'));
   log('  ' + vermilion('tinker shadow profile set --depth --minutes --test') + sepia('  自定义你的影子:写多深/多久/默认测试'));
   log('  ' + vermilion('tinker shadow learn [--apply]') + sepia('       影子看战绩学规律 · 建议(或直接调)你的档案 depth/时长'));
+  log('');
+  log(sepia('  ') + bold('任务板 · 排队给影子领'));
+  log('  ' + vermilion('tinker task add "要做的事" --test "..."') + sepia('  加任务入板'));
+  log('  ' + vermilion('tinker task') + sepia('                       看任务板(待做/在做/待审/完成)'));
+  log('  ' + vermilion('tinker shadow night') + sepia('(不带 --task)     影子从板上领下一个待做,写完回写状态'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
@@ -11825,6 +11896,7 @@ async function main() {
       case 'update': await cmdUpdate({ checkOnly: args.includes('--check-only') }); break;
       case 'draft': await cmdDraft(opts); break;
       case 'shadow': await cmdShadow(args[1], args[2], opts); break;
+      case 'task': await cmdTask(args[1], args[2], opts); break;
       case 'hook':
         if (args[1] === 'install') await cmdHookInstall();
         else if (args[1] === 'uninstall') cmdHookUninstall();
