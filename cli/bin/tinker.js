@@ -1099,6 +1099,8 @@ async function cmdProjects(opts = {}) {
 const SHADOW_QUEUE_FILE = path.join(CONFIG_DIR, 'shadow-queue.json');
 const SHADOW_SENT_FILE = path.join(CONFIG_DIR, 'shadow-sent.json'); // 自动发的记录 · 给撤回用
 const SHADOW_RECORD_FILE = path.join(CONFIG_DIR, 'shadow-record.jsonl'); // 影子战绩 · append-only · 信任层基础
+const SHADOW_WORK_DIR = path.join(CONFIG_DIR, 'shadow-work'); // 长任务的隔离工作区(跑着的 / 失败留着看的)
+const SHADOW_OUT_DIR = path.join(CONFIG_DIR, 'shadow-out');   // 做完的交付物 · 等你复核
 const SHADOW_UNDO_WINDOW_MS = 30 * 60 * 1000; // 自动发后 30 分钟内可撤回
 // 影子干的每件事都留一笔 · 这是"工牌/战绩"的原始数据 · 第4格(自动合)要靠它判断信不信得过
 function recordShadowEvent(ev) {
@@ -1200,6 +1202,8 @@ async function cmdTask(sub, arg, opts) {
 async function cmdShadow(sub, arg, opts) {
   if (!sub || sub.startsWith('-') || sub === 'list' || sub === 'review') return shadowList(opts);
   if (sub === 'run') return shadowRun(opts);
+  if (sub === 'do') return shadowDo(opts);
+  if (sub === 'out') return shadowOut(arg, opts);
   if (sub === 'night') return shadowNight(opts);
   if (sub === 'record' || sub === 'stats') return shadowRecord(opts);
   if (sub === 'learn') return shadowLearn(opts);
@@ -1690,6 +1694,90 @@ function shadowProfileCmd(arg, opts) {
   log(sepia('  默认测试: ') + (p.test ? vermilion(p.test) : sepia('(没设 · night 时用 --test 给)')));
   log('');
   log(sepia('  改: ') + vermilion('tinker shadow profile set --depth thorough --minutes 20 --test "npm test"'));
+}
+
+// 影子做长任务(泛化版 · 不止写代码)· 隔离工作区 → agent 干活产出文件 → 可选验收 → 丢复核夹待审
+// 进度存 .shadow.log(可 tail · 也是"存档":崩了工作区还在)· 跟写代码共用同一套骨架,只是产出=文件不是 git 分支
+async function shadowDo(opts) {
+  const cfg = mustHaveConfig();
+  const prof = loadShadowProfile(cfg);
+  let boardTask = null;
+  let task = (opts.task || '').trim();
+  if (!task) { boardTask = pullNextTask(); if (boardTask) { task = boardTask.desc; log(sepia('  从任务板领了: ') + task); } }
+  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--check "验收命令"]') + sepia(' · 或先 tinker task add')); process.exit(1); }
+  const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
+  if (!agentCmd) { err('先配 agent: ' + vermilion('tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\'')); process.exit(1); }
+  const checkCmd = (opts.check || (boardTask && boardTask.test) || '').trim();
+  const minutes = opts.minutes ? (parseInt(opts.minutes, 10) || prof.minutes) : prof.minutes;
+
+  const id = 'do-' + Date.now();
+  const ws = path.join(SHADOW_WORK_DIR, id);
+  fs.mkdirSync(ws, { recursive: true });
+  const logFile = path.join(ws, '.shadow.log');
+  fs.writeFileSync(path.join(ws, '.task.txt'), task);
+
+  log('');
+  log(sepia('  影子开工(长任务 · ' + minutes + ' 分钟上限)· 隔离工作区'));
+  log(sepia('  任务: ') + task);
+  log(sepia('  进度/存档: ') + vermilion('tail -f ' + logFile));
+
+  const depthHint = prof.depth === 'thorough' ? '尽量周全' : '先做出能交付的版本';
+  const prompt = task + '\n\n把产出写成文件保存在当前目录(报告/文档就写成 .md · 数据就写成对应文件)。只用当前目录,别改别处。' + depthHint + '。';
+  let agentErr = null;
+  const logFd = fs.openSync(logFile, 'a');
+  try {
+    execSync(agentCmd, { cwd: ws, env: { ...process.env, TINKER_TASK: prompt, TINKER_DEPTH: prof.depth }, stdio: ['ignore', logFd, logFd], timeout: minutes * 60 * 1000 });
+  } catch (e) { agentErr = /timed out|timeout/i.test(e.message || '') ? '超时(' + minutes + '分钟)· 产出可能不完整,工作区留着' : (e.message || 'agent 出错'); }
+  finally { try { fs.closeSync(logFd); } catch {} }
+
+  const deliverables = fs.readdirSync(ws).filter(f => !f.startsWith('.'));
+  let checkPass = null, checkOut = '';
+  if (checkCmd && !agentErr && deliverables.length) {
+    log(sepia('  验收: ') + checkCmd);
+    try { checkOut = execSync(checkCmd, { cwd: ws, encoding: 'utf-8', timeout: 5 * 60 * 1000 }); checkPass = true; }
+    catch (e) { checkPass = false; checkOut = ((e.stdout || '') + (e.stderr || '')).toString(); }
+  }
+  const green = !agentErr && deliverables.length > 0 && (checkCmd ? checkPass === true : true);
+  recordShadowEvent(green
+    ? { type: 'do-done', id, task: task.slice(0, 80), files: deliverables.length, depth: prof.depth }
+    : { type: 'do-fail', id, task: task.slice(0, 80), reason: agentErr ? 'agent-error' : (!deliverables.length ? 'no-output' : 'check-fail') });
+
+  log('');
+  if (green) {
+    fs.mkdirSync(SHADOW_OUT_DIR, { recursive: true });
+    const out = path.join(SHADOW_OUT_DIR, id);
+    fs.renameSync(ws, out);
+    if (boardTask) updateTaskStatus(boardTask.id, 'review', { out });
+    ok('影子做完了 · 产出 ' + bold(deliverables.length + '') + ' 个文件' + (checkCmd ? ' · 验收通过 ✓' : '') + ' · 在复核夹等你看');
+    log(sepia('  文件: ') + deliverables.join('、'));
+    log(sepia('  打开看: ') + vermilion('open "' + out + '"') + sepia('   ·   列全部待审: ') + vermilion('tinker shadow out'));
+    try { fireDesktop({ title: '影子做完了', body: task.slice(0, 40) + ' · 产出在复核夹待你看' }); } catch {}
+  } else {
+    if (boardTask) updateTaskStatus(boardTask.id, 'failed');
+    const why = agentErr || (!deliverables.length ? '没产出文件' : '产出没过验收');
+    err('影子这趟没成 · ' + why + ' · 工作区留着看: ' + ws);
+    if (checkOut) log(sepia('  验收输出尾部:') + '\n  ' + checkOut.split('\n').slice(-6).join('\n  '));
+  }
+}
+
+function shadowOut(arg, opts) {
+  let ids = [];
+  try { ids = fs.readdirSync(SHADOW_OUT_DIR).filter(d => fs.statSync(path.join(SHADOW_OUT_DIR, d)).isDirectory()); } catch {}
+  if (opts && opts.json) return outputJson({ ok: true, pending: ids });
+  if (ids.length === 0) { log(''); log(sepia('  复核夹空的 · 影子做完的长任务会放这 · ') + vermilion('tinker shadow do --task "..."')); return; }
+  log('');
+  log(bold('  影子交付物 · ' + ids.length + ' 件待你看'));
+  log('');
+  for (const id of ids.sort()) {
+    const dir = path.join(SHADOW_OUT_DIR, id);
+    let task = ''; try { task = fs.readFileSync(path.join(dir, '.task.txt'), 'utf-8').trim(); } catch {}
+    const files = fs.readdirSync(dir).filter(f => !f.startsWith('.'));
+    log(vermilion('  ' + id) + sepia('  ' + task.slice(0, 50)));
+    log(sepia('     文件: ') + files.join('、'));
+    log(sepia('     看: ') + vermilion('open "' + dir + '"'));
+  }
+  log('');
+  log(sepia('  不要某件: 直接删文件夹 ') + vermilion('rm -rf ~/.tinker/shadow-out/<id>'));
 }
 
 // 重度影子第3格 · 夜班写代码(骨架)
@@ -11251,6 +11339,10 @@ function help() {
   log('  ' + vermilion('tinker draft') + sepia('                       LLM 看 git 历史 · 起草 1-3 条候选到 .tinker/drafts/'));
   log('  ' + vermilion('tinker draft --since 30m') + sepia('           自定义时间窗'));
   log('');
+  log(sepia('  ') + bold('影子做长任务(不止写代码 · 调研/文档/整理都行)'));
+  log('  ' + vermilion('tinker shadow do --task "..." [--check "验收命令"]') + sepia('  隔离干活→产出文件→丢复核夹待审'));
+  log('  ' + vermilion('tinker shadow out') + sepia('                  看影子做完的交付物(待你看)'));
+  log('');
   log(sepia('  ') + bold('重度影子 · 自己起草'));
   log('  ' + vermilion('tinker shadow run') + sepia('                 影子看 git 历史起草进展'));
   log('  ' + vermilion('tinker shadow') + sepia('                     看影子攒的待审草稿'));
@@ -11523,6 +11615,7 @@ function parseArgs(args) {
     else if (a === '--apply') opts.apply = true;
     else if (a === '--hours') opts.hours = args[++i];
     else if (a === '--repo') opts.repo = args[++i];
+    else if (a === '--check') opts.check = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
