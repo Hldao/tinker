@@ -13,9 +13,10 @@ description: Tinker 工作室协作，端到端加密。用户说"接力 / 交�
 
 1. 写一句 50-100 字说明，气质像"X 做了一半，卡在 Y，你接着 Z"，不是发布会语气
 2. 找接收方 handle，以 `tinker studio info <slug>` 成员列表为准，**别猜拼音**（猫猫的 handle 是 `@猫猫` 不是 `@maomao`，写错变死信对方收不到）。没指定就走 active studio 广播
-3. `tinker handoff -m "<说明>" [-t @<handle>]`
+3. 不确定就先 `tinker handoff -m "<说明>" [-t @<handle>] --no-situation --dry-run --json` 预览发给谁/带什么/多大，看清楚再去掉 `--dry-run` 真发
+4. `tinker handoff -m "<说明>" [-t @<handle>]`
 
-包里含 situation JSON + git diff + voice fingerprint + cwd。
+包里含 situation JSON + git diff + voice fingerprint + cwd。handoff 发出对方就收到，没法撤回，所以 dry-run 预览尤其值。
 
 ### 接收（SessionStart 看到 inbox reminder）
 

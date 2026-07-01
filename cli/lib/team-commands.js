@@ -841,6 +841,23 @@ async function cmdHandoff(opts) {
     process.exit(1);
   }
 
+  // v0.14 dry-run · handoff 一旦发出对方就收到 · 没法撤回 · 这里只预览发给谁/带什么/多大 · 不发不加密
+  if (opts.dryRun) {
+    const sizeKB = (plain.length / 1024).toFixed(1);
+    if (opts.json) {
+      outputJson({ ok: true, dryRun: true, action: 'handoff', broadcast: useStudio, target: useStudio ? { studio: activeStudio.slug } : { handle: to }, message, situationId: situationId || null, dossierBytes: plain.length });
+      return;
+    }
+    log('');
+    log(sepia('  dry-run · 不会发送 (handoff 发出不可撤回 · 先看清楚)'));
+    log('  发给:  ' + bold(useStudio ? ('工作室广播 → ' + activeStudio.name + ' (' + activeStudio.slug + ')') : ('@' + to)));
+    log('  说明:  ' + message);
+    log('  现场:  ' + (situationId ? ('带 · ' + situationId) : '不带'));
+    log('  打包:  ' + sizeKB + 'KB' + sepia(' (situation + git diff + voice fingerprint)'));
+    log('');
+    return;
+  }
+
   // v0.55 拆信封懒取 · 重料拆出去存 blob · bridge 只发轻信封
   // 没重料 / legacy studio 没 id (blob 命名空间靠 studio id) → 退回整包 inline (v1)
   const canSplit = !!activeStudio.id;

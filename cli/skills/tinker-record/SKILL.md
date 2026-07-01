@@ -13,6 +13,7 @@ description: 帮 Tinker 用户记一笔进展、标记卡住、完工上线，�
 - `tinker stuck -m "..."` 标记卡住，让在意 ta 的人看到
 - `tinker ship -m "一句话感想"` 完工仪式，进陈列馆，自动抓 productLink 截图当封面
 - `tinker recent --json --limit 10` 看作者近期 update，起草前防重复
+- 任何 push / ship 都能加 `--dry-run`（配 `--json`）先预览：会发到哪个项目、内容、voice 打分（push）/ 封面来源、求反馈（ship），不真发。代发不确定时先 dry-run 看一眼
 
 ## voice 守门（最关键，先读这段）
 

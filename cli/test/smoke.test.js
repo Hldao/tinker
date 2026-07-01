@@ -20,6 +20,23 @@ function freshHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tinker-smoke-'));
 }
 
+// 带 config + 工作室的 HOME · 给需要登录/工作室态的命令用 (server 指向死地址 · 真发会快速失败)
+function homeWithStudio() {
+  const home = freshHome();
+  fs.mkdirSync(path.join(home, '.tinker'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.tinker', 'config.json'),
+    JSON.stringify({ serverUrl: 'http://127.0.0.1:1', token: 'tk_x', handle: 'me' }));
+  fs.writeFileSync(path.join(home, '.tinker', 'studios.json'),
+    JSON.stringify({ active: 'demo', studios: [{ slug: 'demo', name: 'Demo', secret: 'realsecret123456', id: 's1' }] }));
+  return home;
+}
+
+// 从混合输出里挑出那行 JSON (有些命令会先打本地日志再输出 json)
+function lastJson(out) {
+  const line = out.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+  return JSON.parse(line);
+}
+
 // 跑一条命令 · 返回 { status, out }（out = stdout+stderr 合并 · 去掉颜色码）
 function run(args, { home } = {}) {
   const HOME = home || freshHome();
@@ -124,6 +141,17 @@ test('action 坏 JSON → BAD_JSON', () => {
   assert.equal(j.ok, false);
   assert.equal(j.code, 'BAD_JSON');
   assert.equal(status, 1);
+});
+
+// handoff --dry-run 离线可测 (dry-run 点在本地 packDossier 之后 · 发送之前 · 不连网)
+// 注:push/ship 的 --dry-run 要先 apiState 拉项目列表 · 离线测不了 · 需真 server · 这里只守 handoff
+test('handoff --dry-run · 离线预览不发送', () => {
+  const { out } = run(['handoff', '-m', '测试预览别当真', '--no-situation', '--dry-run', '--json'], { home: homeWithStudio() });
+  const j = lastJson(out);
+  assert.equal(j.ok, true);
+  assert.equal(j.dryRun, true);
+  assert.equal(j.action, 'handoff');
+  assert.equal(j.broadcast, true);
 });
 
 // ============================================

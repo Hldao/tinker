@@ -1326,6 +1326,21 @@ async function cmdPush(opts) {
   pushText = (pushText || '').trim();
   if (!pushText) { err('内容不能空'); process.exit(1); }
 
+  // v0.14 dry-run · 只回显会发什么 (含 voice 打分) · 不真发 · AI 代发前预览
+  if (opts.dryRun) {
+    const p = mine.find(x => x.id === projectId);
+    const vc = require('../lib/voice-check').detectAIVoice(pushText);
+    const gateHint = vc.score >= 3 ? '会被强拒(需 --force)' : vc.score === 2 ? 'TTY 会弹确认' : '通过';
+    if (opts.json) { outputJson({ ok: true, dryRun: true, action: 'push', projectId, project: p && p.name, text: pushText, voiceScore: vc.score, voiceGate: gateHint }); return; }
+    log('');
+    log(sepia('  dry-run · 不会发送'));
+    log('  项目:      ' + bold((p && p.name) || projectId));
+    log('  内容:      ' + pushText);
+    log('  voice 守门: ' + (vc.score >= 2 ? bold('score ' + vc.score) : 'score ' + vc.score) + sepia(' · ' + gateHint) + (vc.list && vc.list.length ? sepia(' (' + vc.list.join('/') + ')') : ''));
+    log('');
+    return;
+  }
+
   // v0.20 voice 守门 · 防裸奔 AI 直出 (尤其 -m 直接 push 没经 draft 的)
   const gate = await gateVoiceCheck(pushText, opts);
   if (!gate.ok) process.exit(1);
@@ -1733,6 +1748,22 @@ async function cmdShip(opts) {
   if (opts.feedbackAsk) feedbackAsk = opts.feedbackAsk;
 
   const p = mine.find(x => x.id === projectId);
+
+  // v0.14 dry-run · 回显完工会发生什么 · 不改状态 · 不抓截图 · 不进陈列馆
+  if (opts.dryRun) {
+    const coverPlan = opts.image ? ('本地图 ' + opts.image)
+      : (!opts.noScreenshot && p.productLink) ? ('首页截图 (会抓 ' + p.productLink + ')')
+      : '无封面';
+    if (opts.json) { outputJson({ ok: true, dryRun: true, action: 'ship', projectId, project: p.name, reflection, seekingFeedback, feedbackAsk, cover: coverPlan }); return; }
+    log('');
+    log(sepia('  dry-run · 不会发送 · 不改状态'));
+    log('  项目:   ' + bold(p.name) + sepia(' · status → live'));
+    log('  感想:   ' + reflection);
+    log('  封面:   ' + coverPlan);
+    log('  求反馈: ' + (seekingFeedback ? (feedbackAsk || '勾上 · 没填具体问题') : '否'));
+    log('');
+    return;
+  }
 
   // 决定 images:
   //   --image <path>  : 用本地图(优先)
@@ -8318,12 +8349,12 @@ function help() {
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
   log(sepia('  ') + vermilion('直接发'));
-  log('  ' + vermilion('tinker push -m "..."') + sepia('               一句话直接发'));
+  log('  ' + vermilion('tinker push -m "..."') + sepia('               一句话直接发') + dim(' (加 --dry-run 先预览发到哪/voice 打分)'));
   log('  ' + vermilion('tinker push') + sepia('                        交互式 · 默认最近一条 commit 作为建议'));
   log('  ' + vermilion('tinker stuck -m "..."') + sepia('              标项目卡住 + 写"卡在哪" · 通知关心你的人'));
   log('');
   log(sepia('  ') + vermilion('完工'));
-  log('  ' + vermilion('tinker ship -m "..."') + sepia('               改 done + 写完工感想 · 默认抓 productLink 截图当陈列馆封面'));
+  log('  ' + vermilion('tinker ship -m "..."') + sepia('               改 done + 写完工感想 · 默认抓 productLink 截图当陈列馆封面') + dim(' (--dry-run 预览)'));
   log('  ' + vermilion('tinker ship -m "..." --feedback-ask "..."') + sepia(' · 加上"想知道"的具体问题'));
   log('  ' + vermilion('tinker ship -m "..." --no-feedback') + sepia('    · 不勾求反馈'));
   log('  ' + vermilion('tinker ship -m "..." --image ./shot.png') + sepia('     · 用本地图当封面 (优先于自动截图)'));
@@ -8403,7 +8434,7 @@ function help() {
   log('  ' + vermilion('tinker studio list / info <slug> / leave <slug>') + sepia('  其余操作 · 跑 tinker studio help 看全'));
   log('');
   log(sepia('  ') + vermilion('接力 · 队友 AI 异步往返'));
-  log('  ' + vermilion('tinker handoff -m "..." [-t @<who>] [--no-situation]') + sepia('  打包现场发队友 · 自动挑的现场会显示 · 不对加 --no-situation'));
+  log('  ' + vermilion('tinker handoff -m "..." [-t @<who>] [--no-situation]') + sepia('  打包现场发队友 · 自动挑的现场会显示 · 不对加 --no-situation') + dim(' (--dry-run 预览发给谁/多大 · 发出不可撤回)'));
   log('  ' + vermilion('tinker outbox [关键词] [--days N]') + sepia('   翻我发过的私信 / handoff · 给关键词全量搜回 (借图片字段那种老上下文)'));
   log('  ' + vermilion('tinker handoff reply <msgId> [--by-claude]') + sepia('  接力方回稿给原发起方 (接到哪步 · 留了什么)'));
   log('  ' + vermilion('tinker handoff reply <msgId> publish "<content>"') + sepia(' 落地回稿 + bridge 回投递 + 自动标 inbox 完成'));
@@ -8940,13 +8971,15 @@ function cmdSchema(opts = {}) {
         { arg: '<file.md>', purpose: '从草稿文件发布 (含 autopsy 生成的 experience 草稿)' },
         { flag: '--as-experience', purpose: '把这条标为踩坑经验 (发完自动 markAsExperience)' },
         { flag: '--yes / -y', purpose: '跳过确认 (autopsy 草稿一键发用)' },
-      ], jsonOutput: false, example: 'tinker push .tinker/drafts/experience-xxx.md --as-experience' },
+        { flag: '--dry-run', purpose: '只回显会发到哪个项目/内容/voice 打分 · 不真发 (配 --json 拿结构化预览)' },
+      ], jsonOutput: false, example: 'tinker push -m "..." --dry-run --json' },
       { name: 'ship', purpose: '完工仪式 · 进陈列馆', args: [
         { flag: '-m / --message', purpose: '感想' },
         { flag: '-p / --project', purpose: '项目 id' },
         { flag: '--image <path>', purpose: '本地图当封面' },
         { flag: '--no-screenshot', purpose: '不带封面' },
-      ], jsonOutput: false, example: 'tinker ship -m "..."' },
+        { flag: '--dry-run', purpose: '只回显项目/感想/封面来源/求反馈 · 不改状态不抓截图不进陈列馆' },
+      ], jsonOutput: false, example: 'tinker ship -m "..." --dry-run --json' },
       { name: 'stuck', purpose: '标卡住 + 写"卡在哪" + 通知关心你的人', args: [
         { flag: '-m / --message', purpose: '卡在哪' },
       ], jsonOutput: false, example: 'tinker stuck -m "..."' },
