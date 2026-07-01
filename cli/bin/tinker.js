@@ -1207,6 +1207,7 @@ async function cmdShadow(sub, arg, opts) {
   if (sub === 'automerge') return shadowAutoMerge(arg);
   if (sub === 'agent') return shadowAgentCmd(arg, opts);
   if (sub === 'profile') return shadowProfileCmd(arg, opts);
+  if (sub === 'schedule') return shadowSchedule(arg, opts);
   if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
@@ -1559,6 +1560,53 @@ function mergeShadowBranch(repoRoot, branch) {
     try { execSync('git worktree remove --force "' + tmp + '"', { cwd: repoRoot, stdio: 'ignore' }); } catch {}
   }
 }
+
+// 定时 · 让影子按时自己从任务板领活跑(macOS launchd)· 仍留分支待审(自动合另有战绩闸门)
+const SCHEDULE_LABEL = 'com.tinker.shadow.night';
+const SCHEDULE_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', SCHEDULE_LABEL + '.plist');
+function shadowSchedule(arg, opts) {
+  mustHaveConfig();
+  if (arg === 'off' || arg === 'stop') {
+    try { execSync('launchctl unload "' + SCHEDULE_PLIST + '"', { stdio: 'ignore' }); } catch {}
+    try { fs.rmSync(SCHEDULE_PLIST, { force: true }); } catch {}
+    ok('影子定时:关');
+    return;
+  }
+  if (arg === 'on') {
+    if (process.platform !== 'darwin') {
+      log(sepia('  自动安装目前只支持 macOS(launchd)。Linux 手动挂 cron:'));
+      log('  ' + vermilion('0 */6 * * * cd ' + (opts.repo || '<你的repo>') + ' && ' + (safeWhichTinker() || 'tinker') + ' shadow night'));
+      return;
+    }
+    const repo = (opts.repo || (inGitRepo() ? execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim() : '')).trim();
+    if (!repo) { err('要给 --repo <路径>(影子在哪干活)· 或在某个 git 仓库里跑'); process.exit(1); }
+    const hours = parseFloat(opts.hours || '6') || 6;
+    const seconds = Math.max(300, Math.round(hours * 3600));
+    const tinkerBin = safeWhichTinker() || 'tinker';
+    const cmd = 'cd "' + repo + '" && "' + tinkerBin + '" shadow night >> "' + path.join(os.homedir(), '.tinker', 'shadow-schedule.log') + '" 2>&1';
+    const plist = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n' +
+      '<key>Label</key><string>' + SCHEDULE_LABEL + '</string>\n' +
+      '<key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>' + cmd.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</string></array>\n' +
+      '<key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>\n' +
+      '<key>StartInterval</key><integer>' + seconds + '</integer>\n' +
+      '<key>RunAtLoad</key><false/>\n</dict></plist>\n';
+    fs.mkdirSync(path.dirname(SCHEDULE_PLIST), { recursive: true });
+    fs.writeFileSync(SCHEDULE_PLIST, plist);
+    try { execSync('launchctl unload "' + SCHEDULE_PLIST + '"', { stdio: 'ignore' }); } catch {}
+    try { execSync('launchctl load "' + SCHEDULE_PLIST + '"', { stdio: 'ignore' }); }
+    catch (e) { err('装定时失败: ' + e.message); process.exit(1); }
+    ok('影子定时:开 · 每 ' + hours + ' 小时从任务板领一个干 · 在 ' + repo);
+    log(sepia('  影子会留分支等你审(除非你开了自动合且战绩达标)· 日志: ~/.tinker/shadow-schedule.log'));
+    log(sepia('  关: ') + vermilion('tinker shadow schedule off'));
+    return;
+  }
+  // status
+  const on = fs.existsSync(SCHEDULE_PLIST);
+  log('');
+  log(sepia('  影子定时: ') + (on ? vermilion('开') : '关'));
+  log(sepia('  开: ') + vermilion('tinker shadow schedule on --hours 6 [--repo <路径>]') + sepia('   ·   关: ') + vermilion('tinker shadow schedule off'));
+}
+function safeWhichTinker() { try { return execSync('command -v tinker', { encoding: 'utf-8' }).trim(); } catch { return ''; } }
 
 function shadowAutoMerge(arg) {
   const cfg = mustHaveConfig();
@@ -11222,6 +11270,7 @@ function help() {
   log('  ' + vermilion('tinker task add "要做的事" --test "..."') + sepia('  加任务入板'));
   log('  ' + vermilion('tinker task') + sepia('                       看任务板(待做/在做/待审/完成)'));
   log('  ' + vermilion('tinker shadow night') + sepia('(不带 --task)     影子从板上领下一个待做,写完回写状态'));
+  log('  ' + vermilion('tinker shadow schedule on --hours 6 --repo <路径>') + sepia('  定时:每 N 小时自己领活跑(macOS)· off 关'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
@@ -11472,6 +11521,8 @@ function parseArgs(args) {
     else if (a === '--minutes') opts.minutes = args[++i];
     else if (a === '--depth') opts.depth = args[++i];
     else if (a === '--apply') opts.apply = true;
+    else if (a === '--hours') opts.hours = args[++i];
+    else if (a === '--repo') opts.repo = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
