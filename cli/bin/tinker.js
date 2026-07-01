@@ -1150,6 +1150,7 @@ async function cmdShadow(sub, arg, opts) {
   if (sub === 'merge') return shadowMerge(arg, opts);
   if (sub === 'automerge') return shadowAutoMerge(arg);
   if (sub === 'agent') return shadowAgentCmd(arg, opts);
+  if (sub === 'profile') return shadowProfileCmd(arg, opts);
   if (sub === 'auto') return shadowAuto(arg);
   if (sub === 'approve') return shadowApprove(arg, opts);
   if (sub === 'discard' || sub === 'drop') return shadowDiscard(arg, opts);
@@ -1498,6 +1499,38 @@ function shadowAgentCmd(arg, opts) {
   log(sepia('  配: ') + vermilion('tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\''));
 }
 
+// 影子档案 · 用户自定义自己的影子:写多深 / 写多久 / 默认测试
+// 存 cfg.shadowProfile · 夜班读它 · 以后"学习"就是拿工牌数据反哺这里
+function loadShadowProfile(cfg) {
+  const p = (cfg && cfg.shadowProfile) || {};
+  return {
+    depth: p.depth === 'thorough' ? 'thorough' : 'quick',
+    minutes: (typeof p.minutes === 'number' && p.minutes > 0) ? p.minutes : 12,
+    test: p.test || '',
+  };
+}
+
+function shadowProfileCmd(arg, opts) {
+  const cfg = mustHaveConfig();
+  if (arg === 'clear' || arg === 'reset') { delete cfg.shadowProfile; saveConfig(cfg); ok('影子档案清空 · 回默认(quick · 12 分钟)'); return; }
+  if (arg === 'set') {
+    cfg.shadowProfile = cfg.shadowProfile || {};
+    if (opts.depth) cfg.shadowProfile.depth = ['thorough', 'deep', '重', '周全'].includes(opts.depth) ? 'thorough' : 'quick';
+    if (opts.minutes) { const m = parseInt(opts.minutes, 10); if (m > 0) cfg.shadowProfile.minutes = m; }
+    if (opts.test !== undefined) cfg.shadowProfile.test = (opts.test || '').trim();
+    saveConfig(cfg);
+    ok('影子档案更新了');
+  }
+  const p = loadShadowProfile(cfg);
+  log('');
+  log(bold('  影子档案') + sepia('  (你自己定 · 夜班照这个来)'));
+  log(sepia('  写多深: ') + vermilion(p.depth === 'thorough' ? 'thorough · 周全(考虑边界)' : 'quick · 快(别过度设计)'));
+  log(sepia('  写多久: ') + vermilion(p.minutes + ' 分钟') + sepia(' · 单次上限'));
+  log(sepia('  默认测试: ') + (p.test ? vermilion(p.test) : sepia('(没设 · night 时用 --test 给)')));
+  log('');
+  log(sepia('  改: ') + vermilion('tinker shadow profile set --depth thorough --minutes 20 --test "npm test"'));
+}
+
 // 重度影子第3格 · 夜班写代码(骨架)
 // 隔离 git 工作树 → (可插拔 agent)写代码 → 跑测试 → 绿了留分支给你审 · 从不自动合
 // 用法: tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程agent命令(在工作树里跑)"]
@@ -1510,8 +1543,11 @@ async function shadowNight(opts) {
     err('用法: ' + vermilion('tinker shadow night --task "要做的事" --test "测试命令" [--agent "编程命令"]'));
     process.exit(1);
   }
-  const testCmd = (opts.test || '').trim();
+  const prof = loadShadowProfile(cfg);
+  const testCmd = (opts.test || prof.test || '').trim();
   const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
+  const depth = (opts.depth ? (['thorough', 'deep', '重', '周全'].includes(opts.depth) ? 'thorough' : 'quick') : prof.depth);
+  const minutes = opts.minutes ? (parseInt(opts.minutes, 10) || prof.minutes) : prof.minutes;
   const repoRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
   const branch = 'shadow/night-' + Date.now();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tinker-night-'));
@@ -1526,10 +1562,12 @@ async function shadowNight(opts) {
 
   let agentErr = null;
   if (agentCmd) {
-    log(sepia('  影子写代码中: ') + agentCmd);
+    log(sepia('  影子写代码中(' + depth + ' · 上限 ' + minutes + ' 分钟): ') + agentCmd);
+    // 深度写进给影子的任务提示 · quick=别过度设计 / thorough=考虑边界
+    const depthHint = depth === 'thorough' ? '\n\n(写周全些 · 考虑边界情况和错误处理)' : '\n\n(快速实现即可 · 别过度设计,先跑通)';
     try {
-      execSync(agentCmd, { cwd: tmp, env: { ...process.env, TINKER_TASK: task }, stdio: 'inherit', timeout: 10 * 60 * 1000 });
-    } catch (e) { agentErr = e.message || 'agent 非零退出'; }
+      execSync(agentCmd, { cwd: tmp, env: { ...process.env, TINKER_TASK: task + depthHint, TINKER_DEPTH: depth }, stdio: 'inherit', timeout: minutes * 60 * 1000 });
+    } catch (e) { agentErr = e.message || 'agent 非零退出/超时'; }
   } else {
     log(sepia('  (没给 --agent · 跳过"写代码" · 只验工作树+测试骨架)'));
   }
@@ -11053,6 +11091,7 @@ function help() {
   log('  ' + vermilion('tinker shadow merge [分支]') + sepia('         采纳:把夜班分支合进 main + 记一笔(攒采纳战绩)'));
   log('  ' + vermilion('tinker shadow automerge on/off') + sepia('     第4格自动合 · 默认关 · 只在战绩达标(采纳≥5 率≥80%)才真合'));
   log('  ' + vermilion('tinker shadow agent set --agent "..."') + sepia('  配夜班编程 agent(配一次 · 如 claude -p "$TINKER_TASK")'));
+  log('  ' + vermilion('tinker shadow profile set --depth --minutes --test') + sepia('  自定义你的影子:写多深/多久/默认测试'));
   log('  ' + vermilion('tinker push <file.md>') + sepia('              从草稿文件发布(读完文件 · 把不想发的段落删掉再发)'));
   log('  ' + vermilion('tinker push <file.md> --only=1,3') + sepia('   只发指定候选'));
   log('');
@@ -11299,6 +11338,8 @@ function parseArgs(args) {
     else if (a === '--task') opts.task = args[++i];
     else if (a === '--test') opts.test = args[++i];
     else if (a === '--agent') opts.agent = args[++i];
+    else if (a === '--minutes') opts.minutes = args[++i];
+    else if (a === '--depth') opts.depth = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
