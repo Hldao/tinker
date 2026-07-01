@@ -23,6 +23,7 @@ const TEMPLATE = `${BEGIN_MARKER}
 | 说"完工 / 上线 / deploy 了" (真发布) | 建议 \`tinker ship -m "一句话感想"\` 进陈列馆 |
 | 问"今天我都做了啥" | \`tinker goodnight --json\` |
 | 问"@xxx 在做什么 / 到哪了 / 进度" (口语直接问) | 跑 \`tinker ask @xxx "<用户的问题>" --json\` · 影子基于 ta 共享进展替 ta 汇报一段(比 feed 更直接易懂)· 把答案转述给用户 · ta 没配 LLM key 时才退回 \`tinker feed @xxx --json\` |
+| 说"帮我写 / 让影子写 / 夜里做 <某功能/某改动>"(要影子替 ta 写代码) | 让影子夜班上:1) 跟用户确认「要做啥」和「用哪条命令验(测试)」· 没有可验的测试就先问,别硬跑;2) 跑 \`tinker shadow night --task "<明确任务>" --test "<测试命令>"\`;3) 影子在隔离工作树写码+跑测试,绿了留分支 \`shadow/night-xxx\`(不碰 main),红了丢弃;4) 把结果转告用户,让 **ta 自己**决定 \`tinker shadow merge\` 采纳还是 \`git branch -D\` 扔掉。写多深/多久看 \`tinker shadow profile\`。**这是写代码,谨慎:只在用户真要你替 ta 写时触发,务必带测试,永远留分支等 ta 审,别自作主张合并。** |
 
 **关键词命中只是候选** · 看上下文判断是不是真事件 · 不每次都建议 · 误触发率高了用户烦。
 
