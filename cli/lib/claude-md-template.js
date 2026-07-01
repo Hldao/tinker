@@ -22,7 +22,7 @@ const TEMPLATE = `${BEGIN_MARKER}
 | 说"砍了 / 不做了" (有理由的取舍) | 建议 \`tinker push -m "..."\` 说为什么砍 |
 | 说"完工 / 上线 / deploy 了" (真发布) | 建议 \`tinker ship -m "一句话感想"\` 进陈列馆 |
 | 问"今天我都做了啥" | \`tinker goodnight --json\` |
-| 问"@xxx 在做什么 / 到哪一步了" | \`tinker feed @xxx --json --limit 10\` 拉 ta 的公开流 |
+| 问"@xxx 在做什么 / 到哪了 / 进度" (口语直接问) | 跑 \`tinker ask @xxx "<用户的问题>" --json\` · 影子基于 ta 共享进展替 ta 汇报一段(比 feed 更直接易懂)· 把答案转述给用户 · ta 没配 LLM key 时才退回 \`tinker feed @xxx --json\` |
 
 **关键词命中只是候选** · 看上下文判断是不是真事件 · 不每次都建议 · 误触发率高了用户烦。
 

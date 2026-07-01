@@ -11183,7 +11183,7 @@ function help() {
   log(sepia('  用户开新项目                       → ') + vermilion('tinker project new --name "..." --desc "..."'));
   log(sepia('  hook 触发了 pending 等响应          → ') + vermilion('tinker resolve <choice> -m "..."'));
   log(sepia('  查 post-commit hook 触发的待处理      → ') + vermilion('tinker pending --json'));
-  log(sepia('  用户问"猫猫在做什么 / 到哪一步了"      → ') + vermilion('tinker feed @maomao --json'));
+  log(sepia('  用户口语问"猫猫在做什么 / 到哪了"      → ') + vermilion('tinker ask @猫猫 "<问题>" --json') + sepia('(影子替 ta 答 · 比 feed 直接)· 没配 key 才退回 ') + vermilion('feed @猫猫 --json'));
   log(sepia('  ') + dim('  LLM 主动调:session 开头 / 用户问"今天怎么样" / commit 之后 · 看有没有漏掉的 ship / clever-fix 等'));
   log(sepia('  非 Claude Code (Cursor/Aider 等) · 没有 hook → ') + vermilion('tinker maybe-check --text "<用户消息>" --json'));
   log(sepia('  ') + dim('  上面这个跟 Claude Code hook 共用词典 + 冷却 · LLM 主动调拿命中 reminder'));
