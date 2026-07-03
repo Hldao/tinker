@@ -419,13 +419,17 @@
   .about-term .aht-body { padding: 22px 24px; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 13.5px; line-height: 1.7; min-height: 340px; }
   .about-term .aht-body .p { color: #6ee7a8; }
   .about-term .aht-body .cmd { color: #f5f1e8; }
-  .about-term .aht-body .out { color: #b8b0a8; white-space: pre-line; padding: 4px 0 16px; }
+  .about-term .aht-body .out { color: #b8b0a8; white-space: pre-line; padding: 4px 0 16px; animation: aboutOutIn .42s cubic-bezier(.22,.61,.36,1) both; }
   .about-term-cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 28px; }
   .about-term-cta button { background: var(--vermilion); color: #fff; border: none; border-radius: 8px; padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
   .about-term-cta button:hover { background: #a53809; transform: translateY(-1px); }
   .about-term-cta .ghost { color: #a8a29e; cursor: pointer; font-size: 13.5px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
   .about-term-cta .ghost:hover { color: #fff; }
   @media (max-width: 640px) { .about-term .aht-body { font-size: 12.5px; padding: 18px 16px; } }
+  @keyframes aboutOutIn { from { opacity: 0; transform: translateY(5px); filter: blur(3px); } to { opacity: 1; transform: none; filter: blur(0); } }
+  .screen.active .about-eyebrow2 { animation: heroRise .5s cubic-bezier(.22,.61,.36,1) both; }
+  .screen.active .about-term { animation: heroRise .6s cubic-bezier(.22,.61,.36,1) .08s both; }
+  @media (prefers-reduced-motion: reduce) { .screen.active .about-eyebrow2, .screen.active .about-term, .about-term .aht-body .out { animation: none !important; } }
   .app-hero-band .app-status { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
   .app-hero-band .app-status .workshop-bench, .app-hero-band .app-status .workshop-tools-line { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: #a8a29e; margin: 0; }
   .app-hero-band .app-status .num { color: var(--vermilion); }
