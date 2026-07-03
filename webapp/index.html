@@ -408,7 +408,6 @@
   .app-hero-band .app-hero-cta button:hover { background: #a53809; transform: translateY(-1px); }
   .app-hero-band .app-hero-cta .ghost { color: #d6d3d1; cursor: pointer; font-size: 13.5px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
   .app-hero-band .app-hero-cta .ghost:hover { color: #fff; }
-  #screen-cli .cli-guest-hero .app-hero-inner { padding-top: 96px; }
   /* 关于页 · 整页一个终端 · tinker about 逐段跑出来 */
   .about-term-band { background: #0f0c0b; min-height: calc(100vh - 116px); padding: 52px 0 96px; }
   .about-term-inner { max-width: 880px; margin: 0 auto; padding: 0 clamp(22px, 6vw, 48px); }
@@ -7950,7 +7949,7 @@ function renderScreen(name, ...args) {
     if (t) t.classList.add('active');
     document.body.dataset.screen = name;   // 给 CSS 认当前页 · 宽屏: 卡片/网格页 (工坊/方法库) 框架放宽 · 见 body[data-screen] 规则
     // 沉浸式深色应用页(顶部深色 + 铺满终端 hero + 浅色 body · 跟 setup 一套)
-    document.body.classList.toggle('app-immersive', ['feed', 'workshop', 'studio', 'methods', 'showcase', 'notifications', 'project', 'account', 'about'].includes(name) || (name === 'cli' && !!currentUser.handle));
+    document.body.classList.toggle('app-immersive', ['feed', 'workshop', 'studio', 'methods', 'showcase', 'notifications', 'project', 'account', 'about', 'cli'].includes(name));
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (name === 'feed') renderFeed();
     else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
@@ -9770,7 +9769,6 @@ function renderCli() {
     #screen-cli .cli-page { max-width: 100%; }
     #screen-cli .cli-code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; }
     /* 登出态 = 营销漏斗页 · 藏报头走自己的极简顶栏;登录态 = 纯参考页 · 用应用报头(app-immersive) */
-    ${loggedIn ? '' : 'body[data-screen="cli"] .masthead { display: none; }'}
     body[data-screen="cli"] main { max-width: 100% !important; padding: 0 !important; }
     #screen-cli .cli-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 22px clamp(24px, 6vw, 72px); }
     #screen-cli .cli-brand { font-family: Georgia, serif; font-size: 21px; color: #fff; font-weight: 600; letter-spacing: .5px; cursor: pointer; }
@@ -9933,22 +9931,10 @@ function renderCli() {
     <p class="cli-foot">完整命令随时 <code class="cli-code">tinker --help</code> · 每条都支持 <code class="cli-code">--json</code> 给你的 AI 读 · 想重装钥匙看 <span class="cli-ref-link" onclick="showScreen('setup')">上手页 →</span></p>
   </div>
   ` : `
-  <div class="cli-page">
-    <div class="cli-progress"><i id="cli-progress-fill"></i></div>
-    <nav class="cli-topbar">
-      <div class="cli-brand" onclick="goHome()">Tinker<span class="cn">捣鼓</span></div>
-      <div class="cli-topnav">
-        <span onclick="goHome()">首页</span>
-        <span onclick="showScreen('methods')">方法库</span>
-        <span onclick="showScreen('feed')">逛逛工坊</span>
-        ${currentUser.handle ? `<button onclick="goHome()">回工坊 →</button>` : `<button onclick="cliStart()">登录 / 注册</button>`}
-      </div>
-    </nav>
-    <div class="app-hero-band cli-guest-hero">
-      ${appHero({ eyebrow: 'TINKER CLI · 命令行', title: '发动机<span class="accent">在命令行</span>', sub: '网页你能手动记、手动沉淀。但真正干活的,是一个跟你一起写代码的 AI 队友。你照常做东西,它替你把该记的记下、把长活干完、把方法借来借去。', termCap: '在你的终端里 · 它长这样', termLines: CLI_TERM, cta: '<button onclick="cliStart()">注册,开始用 →</button><span class="ghost" onclick="cliScrollToList()">先看它能干什么 ↓</span>' })}
-    </div>
-
-    <div class="cli-body">
+  <div class="app-hero-band">
+    ${appHero({ eyebrow: 'TINKER CLI · 命令行', title: '发动机<span class="accent">在命令行</span>', sub: '网页你能手动记、手动沉淀。但真正干活的,是一个跟你一起写代码的 AI 队友。你照常做东西,它替你把该记的记下、把长活干完、把方法借来借去。', termCap: '在你的终端里 · 它长这样', termLines: CLI_TERM, cta: '<button onclick="cliStart()">注册,开始用 →</button><span class="ghost" onclick="cliScrollToList()">先看它能干什么 ↓</span>' })}
+  </div>
+  <div class="app-body cli-ref-body">
     <div class="cli-install-band reveal">
       <span class="lab">怎么装</span>
       <span class="txt">现在还是 alpha,装法糙一点,<a onclick="showScreen('workshop','daodao')">@daodao 的工坊</a>里有步骤。等发到 npm,就一行命令的事。</span>
@@ -9972,11 +9958,9 @@ function renderCli() {
     </div>
 
     <p class="cli-foot">注册装好后,这些命令就能直接跑 · 完整命令随时 <code class="cli-code">tinker --help</code>,每条都支持 <code class="cli-code">--json</code> 给你的 AI 读。</p>
-    </div>
   </div>
   `}`;
   armFx(document.getElementById('cli-content'));
-  if (!loggedIn) initCliProgress();
   appHeroReplay();
 }
 
