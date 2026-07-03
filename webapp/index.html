@@ -89,7 +89,7 @@
   .screen.active .app-htitle { animation: heroRise .55s cubic-bezier(.22,.61,.36,1) .05s both; }
   .screen.active .app-hsub, .screen.active .app-status, .screen.active .workshop-tagline { animation: heroRise .55s cubic-bezier(.22,.61,.36,1) .1s both; }
   .screen.active .app-hero-demo, .screen.active .aht-cap { animation: heroRise .6s cubic-bezier(.22,.61,.36,1) .14s both; }
-  @keyframes heroRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+  @keyframes heroRise { from { opacity: 0; transform: translateY(12px); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
   @media (prefers-reduced-motion: reduce) { .screen.active .app-eyebrow, .screen.active .app-htitle, .screen.active .app-hsub, .screen.active .app-status, .screen.active .workshop-tagline, .screen.active .app-hero-demo, .screen.active .aht-cap { animation: none; } }
 
   /* FEED */
@@ -9357,7 +9357,7 @@ function injectFxStyles() {
   const s = document.createElement('style');
   s.id = 'fx-styles';
   s.textContent = `
-    .fx-on .reveal { opacity: 0; transform: translateY(9px); transition: opacity .5s ease, transform .5s ease; }
+    .fx-on .reveal { opacity: 0; transform: translateY(10px); transition: opacity .55s cubic-bezier(.22,.61,.36,1), transform .55s cubic-bezier(.22,.61,.36,1); }
     .reveal.in { opacity: 1 !important; transform: none !important; }
     /* 卡片淡入后 · hover 上浮不能被 .reveal.in 的 transform:none 顶掉 · 用更高特异度补回来 */
     .fx-on .entry.in:hover, .fx-on .pcard.in:hover, .fx-on .showcase-card.in:hover { transform: translateY(-2px) !important; }
