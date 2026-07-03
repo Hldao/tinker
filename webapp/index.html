@@ -409,6 +409,24 @@
   .app-hero-band .app-hero-cta .ghost { color: #d6d3d1; cursor: pointer; font-size: 13.5px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
   .app-hero-band .app-hero-cta .ghost:hover { color: #fff; }
   #screen-cli .cli-guest-hero .app-hero-inner { padding-top: 96px; }
+  /* 关于页 · 整页一个终端 · tinker about 逐段跑出来 */
+  .about-term-band { background: #0f0c0b; min-height: calc(100vh - 116px); padding: 52px 0 96px; }
+  .about-term-inner { max-width: 880px; margin: 0 auto; padding: 0 clamp(22px, 6vw, 48px); }
+  .about-term-inner .about-eyebrow2 { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--vermilion); font-weight: 700; margin-bottom: 16px; }
+  .about-term { background: #0b0908; border: 1px solid #2a2421; border-radius: 12px; overflow: hidden; box-shadow: 0 30px 70px -30px rgba(0,0,0,.6); }
+  .about-term .aht-bar { display: flex; gap: 7px; padding: 12px 14px; background: #151110; border-bottom: 1px solid #2a2421; }
+  .about-term .aht-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a332f; }
+  .about-term .aht-bar span:first-child { background: #c2410c; }
+  .about-term .aht-body { padding: 22px 24px; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 13.5px; line-height: 1.7; min-height: 340px; }
+  .about-term .aht-body .p { color: #6ee7a8; }
+  .about-term .aht-body .cmd { color: #f5f1e8; }
+  .about-term .aht-body .out { color: #b8b0a8; white-space: pre-line; padding: 4px 0 16px; }
+  .about-term-cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 28px; }
+  .about-term-cta button { background: var(--vermilion); color: #fff; border: none; border-radius: 8px; padding: 12px 22px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+  .about-term-cta button:hover { background: #a53809; transform: translateY(-1px); }
+  .about-term-cta .ghost { color: #a8a29e; cursor: pointer; font-size: 13.5px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
+  .about-term-cta .ghost:hover { color: #fff; }
+  @media (max-width: 640px) { .about-term .aht-body { font-size: 12.5px; padding: 18px 16px; } }
   .app-hero-band .app-status { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
   .app-hero-band .app-status .workshop-bench, .app-hero-band .app-status .workshop-tools-line { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: #a8a29e; margin: 0; }
   .app-hero-band .app-status .num { color: var(--vermilion); }
@@ -7036,101 +7054,7 @@
   </section>
 
   <section class="screen" id="screen-about">
-    <div class="about-container">
-
-      <!-- HERO -->
-      <div class="about-hero">
-        <div class="about-eyebrow">关于</div>
-        <h1 class="about-h1">捣鼓<span class="about-h1-sep">·</span>Tinker</h1>
-        <p class="about-tagline">你用 AI 做东西，它替你把代码之外最值钱的那层攒下来。</p>
-      </div>
-
-      <!-- 一段话 elevator -->
-      <div class="about-section about-intro">
-        <p>GitHub 替写代码的人存代码。</p>
-        <p>这里替用 AI 做东西的人，存代码之外那层：你为什么这么选，你怎么把它做通的。</p>
-        <p>那层东西过几个月自己都忘，偏偏最值钱。在这儿它攒下来，你回得去，别人借得走，你的 AI 整段读得进。</p>
-        <p>不必懂代码，也不必证明自己"成了程序员"。</p>
-      </div>
-
-      <!-- 不做什么 -->
-      <div class="about-section">
-        <div class="about-section-label">不做什么</div>
-        <ul class="about-dont-list">
-          <li>不做推荐算法，不做热门，不做 trending。</li>
-          <li>不做点赞数、粉丝数、浏览量。</li>
-          <li>不做等级、认证、verified 这种标记。</li>
-          <li>不做"X 天月入 $Y"那种焦虑营销。</li>
-        </ul>
-      </div>
-
-      <!-- 做什么 · 4 件事 -->
-      <div class="about-section">
-        <div class="about-section-label">做什么</div>
-
-        <div class="about-do-item">
-          <h3 class="about-do-title">把"为什么这么选"留下来</h3>
-          <p>做东西一路都在做选择：选了这个工具不选那个，走了这条路绕开那条。这些"为什么"代码里看不见，git 里查不到，过几个月自己都忘了。在这儿把它记成一条决策，用你的口吻。三个月后你回得去，你的 AI 也能替你想。这是这里最想让你攒下来的东西。</p>
-        </div>
-
-        <div class="about-do-item">
-          <h3 class="about-do-title">把跑通的手艺沉淀成方法</h3>
-          <p>做通一件事，别让它埋在某条进展里。存成方法，它有两层：「卡片那层」给人看，一眼知道它解决什么、要不要借走；「正文那层」给 AI 用，整段复制进你的 AI 对话，直接当上下文。一份沉淀，人跟 AI 都用得上。</p>
-        </div>
-
-        <div class="about-do-item">
-          <h3 class="about-do-title">求得到，也被真用上</h3>
-          <p>缺个方法，一句话求一个，知道的人、或者他的 AI，接得上。你沉淀的东西反过来也一样：人能借走照着做，AI 能直接读进对话。不是点赞，是「我借了你的方法，跑通了」。有人因为你也成了事，比一千个赞重要。</p>
-        </div>
-
-        <div class="about-do-item">
-          <h3 class="about-do-title">卡住、放弃，也是主角</h3>
-          <p>这不是卖点，是这里的脾气。卡住、试错、放弃，都跟"做完了"一样值得看，不是只有成功的事才能露面。改成「跑通了」时写一句感想，进<span class="about-link" onclick="showScreen('showcase')">陈列馆</span>，但仍然不投票、不排行。</p>
-        </div>
-
-        <div class="about-do-item">
-          <h3 class="about-do-title">作品要能被真的体验到</h3>
-          <p>不能只贴截图加 AI 写的介绍。网页能点开试、小程序能扫码、app 能下到，只要陌生人不联系你就能真的上手，就算。</p>
-        </div>
-      </div>
-
-      <!-- 发动机在命令行 · CLI 价值露出 -->
-      <div class="about-section">
-        <div class="about-section-label">发动机在命令行</div>
-        <p class="about-cli-lead">网页上你能手动记一笔，手动沉淀方法。但这些本来不该靠手动。真正干活的，是一个跟着你一起写代码的命令行小工具。</p>
-        <div class="cli-loop">
-          <div class="cli-loop-step"><p>你照常用 AI 写东西，它蹲在旁边，不打扰。</p></div>
-          <div class="cli-loop-step"><p>做了个选型，它替你把"为什么选这个不选那个"记成一条决策。跑通个手艺，它顺手沉淀成方法。都用你的口吻。</p></div>
-          <div class="cli-loop-step"><p><span class="cli-loop-aside">这些不是日记。</span>是你三个月后回得去、别人借得走、AI 整段读得进对话的东西。</p></div>
-        </div>
-        <p class="cli-borrow">反过来你缺方法时，一句话，它替你去<span class="about-link" onclick="showScreen('methods')">方法库</span>求一个，或者把别人跑通的整段拉进你跟 AI 的对话。省得复制粘贴来回翻。</p>
-        <p class="cli-install">想让它跟着你写？现在还是 alpha，装法糙一点，<span class="about-link" onclick="showScreen('workshop','daodao')">@daodao 的工坊</span>里有步骤。等发到 npm，就一行命令的事。</p>
-        <div class="about-cta-row">
-          <button onclick="showScreen('cli')" class="about-cta-primary">看命令行能干什么 →</button>
-        </div>
-      </div>
-
-      <!-- 关于产品本身 -->
-      <div class="about-section about-meta">
-        <div class="about-section-label">这个产品自己</div>
-        <p>Tinker 是用 Claude Code 做的，跑在 Node 跟 Docker 上。</p>
-        <p>开发过程本身就公开在 <span class="mention" onclick="showScreen('workshop','daodao')">@daodao</span> 的「Tinker · 捣鼓」项目里，每一次卡住、每一次跑通都能看见。这就是它自己的第一份样品。</p>
-
-        <div class="about-cta-row">
-          <button onclick="showScreen('workshop','daodao')" class="about-cta-primary">看 @daodao 的工坊 →</button>
-          <span class="about-cta-secondary" onclick="showScreen('onboard')">还是先去入场仪式做个小东西</span>
-        </div>
-      </div>
-
-      <!-- ALPHA 横幅 · 下沉到底 -->
-      <div class="about-alpha">
-        <div class="about-section-label">现在是什么阶段</div>
-        <p>这是早期 alpha 版本，跑在阿里云大陆的自有服务器上（暂用 IP 访问，daogu.cc 在备案）。数据存在 sqlite 里、定期备份，登录走邮箱一次性链接。还是早期，很多地方没经过大量真实使用打磨。</p>
-        <p>适合团队内部互相测试，别放重要私密数据。</p>
-        <p class="about-alpha-thanks">遇到问题、看了哪里没懂、或者想聊聊，都欢迎说一声，真实反馈最有用。</p>
-      </div>
-
-    </div>
+    <div id="about-content"></div>
   </section>
 
   <section class="screen" id="screen-landing">
@@ -8026,7 +7950,7 @@ function renderScreen(name, ...args) {
     if (t) t.classList.add('active');
     document.body.dataset.screen = name;   // 给 CSS 认当前页 · 宽屏: 卡片/网格页 (工坊/方法库) 框架放宽 · 见 body[data-screen] 规则
     // 沉浸式深色应用页(顶部深色 + 铺满终端 hero + 浅色 body · 跟 setup 一套)
-    document.body.classList.toggle('app-immersive', ['feed', 'workshop', 'studio', 'methods', 'showcase', 'notifications', 'project', 'account'].includes(name) || (name === 'cli' && !!currentUser.handle));
+    document.body.classList.toggle('app-immersive', ['feed', 'workshop', 'studio', 'methods', 'showcase', 'notifications', 'project', 'account', 'about'].includes(name) || (name === 'cli' && !!currentUser.handle));
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (name === 'feed') renderFeed();
     else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
@@ -8042,7 +7966,7 @@ function renderScreen(name, ...args) {
     else if (name === 'method') renderMethodDetail(args[0]);
     else if (name === 'update') renderUpdateDetail(args[0]);
     else if (name === 'account') renderAccount();
-    // about 是静态内容,不需要 render
+    else if (name === 'about') renderAbout();
     // 主视图偏好只由显式点视图切换器 (switchMainView · 它自己已 setStoredMainView) 改
     // 之前"进任一屏都记忆": 每次渲染 showcase 都记成 gallery · 点项目的"在陈列馆"/直接开 #/g 后
     //   "工坊"主页就被粘在陈列馆 · 回不到 feed (用户反馈的 bug)
@@ -10420,6 +10344,39 @@ function appHeroReplay() {
   if (!el) return;
   let lines = []; try { lines = JSON.parse(el.getAttribute('data-term') || '[]'); } catch (e) {}
   if (lines.length) typeInto(el, lines, ++_fxGen);
+}
+
+// 关于页 · 整页一个终端 · 每段关于内容当一条 tinker about 命令跑出来(命令逐字打 · 输出整段秒出)
+const ABOUT_TERM = [
+  { cmd: 'tinker about', out: '捣鼓 · Tinker\n你用 AI 做东西,它替你把代码之外最值钱的那层攒下来。' },
+  { cmd: 'tinker about --why', out: 'GitHub 替写代码的人存代码。\n这里替用 AI 做东西的人,存代码之外那层:你为什么这么选,你怎么把它做通的。\n那层东西过几个月自己都忘,偏偏最值钱。在这儿它攒下来,你回得去,别人借得走,你的 AI 整段读得进。\n不必懂代码,也不必证明自己"成了程序员"。' },
+  { cmd: 'tinker about --dont', out: '✗ 不做推荐算法,不做热门,不做 trending。\n✗ 不做点赞数、粉丝数、浏览量。\n✗ 不做等级、认证、verified 这种标记。\n✗ 不做"X 天月入 $Y"那种焦虑营销。' },
+  { cmd: 'tinker about --do', out: '▸ 把"为什么这么选"留下来\n  做东西一路都在做选择:选了这个工具不选那个。这些"为什么"代码里看不见、git 里查不到,过几个月自己都忘。记成一条决策,用你的口吻,三个月后回得去,AI 也能替你想。\n\n▸ 把跑通的手艺沉淀成方法\n  存成方法有两层:卡片那层给人看,正文那层给 AI 用,整段复制进对话当上下文。一份沉淀,人跟 AI 都用得上。\n\n▸ 求得到,也被真用上\n  缺个方法一句话求一个,知道的人或他的 AI 接得上。不是点赞,是"我借了你的方法,跑通了"。\n\n▸ 卡住、放弃,也是主角\n  卡住、试错、放弃,跟"做完了"一样值得看。改成"跑通了"时写一句感想进陈列馆,但仍不投票、不排行。\n\n▸ 作品要能被真的体验到\n  不能只贴截图加 AI 写的介绍。网页能点开、小程序能扫、app 能下,陌生人不联系你就能上手,才算。' },
+  { cmd: 'tinker about --cli', out: '发动机在命令行。\n网页上你能手动记、手动沉淀。但这些本不该靠手动 —— 真正干活的,是一个跟着你写代码的命令行小工具。\n你照常用 AI 写,它蹲旁边不打扰;做了选型它记成决策,跑通手艺它沉淀成方法,都用你的口吻。\n缺方法时一句话,它替你去方法库求一个,或把别人跑通的整段拉进你跟 AI 的对话。' },
+  { cmd: 'tinker about --self', out: 'Tinker 是用 Claude Code 做的,跑在 Node 跟 Docker 上。\n开发过程本身就公开在 @daodao 的「Tinker · 捣鼓」项目里,每次卡住、每次跑通都看得见。这就是它自己的第一份样品。' },
+  { cmd: 'tinker about --stage', out: '早期 alpha,跑在阿里云大陆自有服务器(暂用 IP · daogu.cc 备案中)。数据存 sqlite、定期备份,登录走邮箱一次性链接。\n适合团队内部互测,别放重要私密数据。\n遇到问题、哪里没懂、想聊聊,都欢迎说一声,真实反馈最有用。' },
+];
+function renderAbout() {
+  const root = document.getElementById('about-content');
+  if (!root) return;
+  root.innerHTML = `
+    <div class="about-term-band">
+      <div class="about-term-inner">
+        <div class="about-eyebrow2">关于 · tinker about</div>
+        <div class="about-term">
+          <div class="aht-bar"><span></span><span></span><span></span></div>
+          <div class="aht-body" id="about-term-body"></div>
+        </div>
+        <div class="about-term-cta">
+          <button onclick="showScreen('cli')">看命令行能干什么 →</button>
+          <button onclick="showScreen('workshop','daodao')">看 @daodao 的工坊 →</button>
+          <span class="ghost" onclick="showScreen('onboard')">先去入场仪式做个小东西</span>
+        </div>
+      </div>
+    </div>`;
+  injectFxStyles();
+  const el = document.getElementById('about-term-body');
+  if (el) typeInto(el, ABOUT_TERM, ++_fxGen);
 }
 
 async function renderMethodsLibrary(initialQuery, listOnly) {
