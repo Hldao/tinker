@@ -8368,15 +8368,22 @@ function renderFeed() {
   // 顶部 hero (跟 setup 一套) · 只填一次
   const feedHeroSlot = document.getElementById('feed-hero-slot');
   if (feedHeroSlot && !feedHeroSlot.firstChild) {
+    const _feAbbr = t => { t = (t || '').replace(/\s+/g, ' ').replace(/["`]/g, '').trim(); return t.length > 20 ? t.slice(0, 20) + '…' : t; };
+    const _feEvts = getFeedEvents().slice(0, 2);
+    const feedHeroLines = _feEvts.length
+      ? _feEvts.map((e, i) => i === 0
+          ? { cmd: 'tinker feed', out: '@' + e.owner + ' · ' + _feAbbr(e.text) }
+          : { cmd: 'tinker feed @' + e.owner, out: 'ta 最近 · ' + _feAbbr(e.text) })
+      : [
+          { cmd: 'tinker feed', out: '谁在捣鼓什么 · 一眼看过去' },
+          { cmd: 'tinker feed @某人', out: 'ta 最近做通了什么 · 卡在哪' },
+        ];
     feedHeroSlot.innerHTML = appHero({
       eyebrow: '工坊 · feed',
       title: '今天有<span class="accent">动静</span>',
       sub: '大家在做的、做出来的 — 路过看一眼别人在捣鼓什么。',
       termCap: '全站最新动静',
-      termLines: [
-        { cmd: 'tinker feed', out: '@daodao 改支付 · @maomao 报课通了' },
-        { cmd: 'tinker feed @daodao', out: 'ta 最近:卡在 webhook · 3 条进展' },
-      ],
+      termLines: feedHeroLines,
     });
     appHeroReplay();
   }
