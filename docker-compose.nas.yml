@@ -29,6 +29,11 @@ services:
       - /dev/net/tun:/dev/net/tun
     cap_add:
       - NET_ADMIN
+    # 端口发布在 tailscale 容器上 (tinker-nas 共用其网络) · 于是两条路都通:
+    #   - 局域网:同网内直接 http://<NAS内网IP>:8788 (自己在家 · 不用装 tailscale)
+    #   - 远程:队友走 http://<NAS的tailnet-ip>:8788 (装 tailscale 进同一 tailnet)
+    ports:
+      - "${PORT:-8788}:8788"
     restart: unless-stopped
 
   tinker-nas:
