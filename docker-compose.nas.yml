@@ -9,17 +9,36 @@
 #
 # 在绿联 UGOS 上跑:
 #   1. 把这个仓库弄到 NAS 上 (git clone · 见 NAS 部署说明)
-#   2. 复制 .env.nas.example 为 .env.nas · 填 DEEPSEEK_API_KEY 和 NAS_FILES_DIR
+#   2. 复制 .env.nas.example 为 .env.nas · 填 DEEPSEEK_API_KEY、NAS_FILES_DIR、TS_AUTHKEY
 #   3. docker compose --env-file .env.nas -f docker-compose.nas.yml up -d --build
+#   4. 在 Tailscale 后台看到 tinker-nas 这台设备 · 拿它的 100.x 地址 · 队友开 http://<那地址>:8788
 
 services:
+  # Tailscale 边车 · 让服务进 tailnet · tinker-nas 共用它的网络拿到 100.x 地址
+  # 队友装 Tailscale 登进同一 tailnet 后 · 开 http://<nas的tailnet-ip>:8788 即可 · 不碰路由不穿透
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tinker-tailscale
+    hostname: tinker-nas                      # tailnet 里显示的设备名
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}            # 从 Tailscale 后台 Settings → Keys 生成一个
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--accept-dns=false
+    volumes:
+      - ./data-nas/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
   tinker-nas:
     build: .
     image: tinker-nas:latest
     container_name: tinker-nas
     restart: unless-stopped
-    ports:
-      - "${PORT:-8788}:8788"
+    depends_on:
+      - tailscale
+    network_mode: service:tailscale           # 共用 tailscale 的网络 · 端口跟着它走 · 自己不再发布
     environment:
       NODE_ENV: production
       PORT: 8788
