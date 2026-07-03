@@ -6971,11 +6971,12 @@
         <button onclick="goHome()">工坊</button>
         <button onclick="showScreen('methods')">方法库</button>
         <button onclick="showScreen('cli')">命令行</button>
-        <button onclick="navMyWorkshop()">我的工坊</button>
-        <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+        <button class="nav-authed" onclick="navMyWorkshop()">我的工坊</button>
+        <button class="nav-authed" onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
       </nav>
-      <button class="masthead-cta serif" onclick="navAddUpdate()">+ 记一笔</button>
+      <button class="masthead-cta serif nav-authed" onclick="navAddUpdate()">+ 记一笔</button>
+      <button class="masthead-cta serif nav-guest" style="display:none" onclick="cliStart()">登录 / 注册</button>
     </div>
   </div>
   <!-- v0.49.2 dateline · 卷期号 + 找沉到右末 · 副行已删 -->
@@ -13494,6 +13495,10 @@ document.addEventListener('click', (e) => {
 })();
 
 function refreshMastheadHandle() {
+  // 报头导航按登录态显隐:游客只看浏览项 + 登录/注册 · 我的工坊/通知/记一笔藏到登录后
+  const authed = !!currentUser.handle;
+  document.querySelectorAll('.masthead .nav-authed').forEach(n => { n.style.display = authed ? '' : 'none'; });
+  document.querySelectorAll('.masthead .nav-guest').forEach(n => { n.style.display = authed ? 'none' : ''; });
   const el = document.getElementById('masthead-handle-area');
   if (!el) return;
   if (currentUser.handle) {
