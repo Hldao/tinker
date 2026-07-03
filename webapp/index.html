@@ -75,19 +75,27 @@
   .display { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; }
 
   /* HEADER */
-  .masthead { border-bottom: 2px solid var(--ink); background: var(--bg); }
-  .masthead .title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 28px; letter-spacing: -0.02em; color: var(--ink); }
-  .masthead .title-cn { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; color: var(--ink); letter-spacing: 0.02em; }
+  .masthead { border-bottom: 1px solid var(--rule); background: var(--bg); transition: background-color .34s ease, border-color .34s ease; }
+  .masthead .title { font-family: 'Newsreader', serif; font-weight: 500; font-size: 28px; letter-spacing: -0.02em; color: var(--ink); transition: color .34s ease; }
+  .masthead .title-cn { font-family: 'Newsreader', 'Songti SC', 'STSong', 'Noto Serif SC', serif; font-weight: 500; font-size: 24px; color: var(--vermilion); letter-spacing: 0.02em; transition: color .34s ease; }
   .masthead .tagline { color: var(--sepia); font-style: normal; }
   .masthead a, .masthead button { color: var(--ink); border-bottom: 1px solid transparent; transition: border-color 0.15s; cursor: pointer; }
   .masthead a:hover, .masthead button:hover { border-bottom-color: var(--ink); }
 
   .screen { display: none; }
   .screen.active { display: block; }
+  /* 切屏硬切不露背景 = 不闪 · 生动感靠内容入场:hero 文字逐条淡入(深底上淡入深底 · 不闪)+ body 卡片淡入 */
+  .screen.active .app-eyebrow { animation: heroRise .5s cubic-bezier(.22,.61,.36,1) both; }
+  .screen.active .app-htitle { animation: heroRise .55s cubic-bezier(.22,.61,.36,1) .05s both; }
+  .screen.active .app-hsub, .screen.active .app-status, .screen.active .workshop-tagline { animation: heroRise .55s cubic-bezier(.22,.61,.36,1) .1s both; }
+  .screen.active .app-hero-demo, .screen.active .aht-cap { animation: heroRise .6s cubic-bezier(.22,.61,.36,1) .14s both; }
+  @keyframes heroRise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .screen.active .app-eyebrow, .screen.active .app-htitle, .screen.active .app-hsub, .screen.active .app-status, .screen.active .workshop-tagline, .screen.active .app-hero-demo, .screen.active .aht-cap { animation: none; } }
 
   /* FEED */
-  .feed-title { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-weight: 500; font-size: 44px; letter-spacing: -0.02em; line-height: 1.05; color: var(--ink); }
-  .feed-sub { color: var(--sepia); font-family: 'Newsreader', serif; font-size: 16px; }
+  .feed-title { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-weight: 600; font-size: 25px; letter-spacing: -0.01em; line-height: 1.2; color: var(--ink); }
+  .feed-title::before { content: '▸ '; color: var(--vermilion); font-weight: 400; }
+  .feed-sub { color: var(--sepia); font-family: 'Newsreader', serif; font-size: 15px; }
   /* 方法库两页没有人类操作按钮 · 用一行轻指引告诉新人怎么自己发起 (求方法 / 沉淀方法) */
   .feed-sub-guide { color: var(--sepia); font-family: 'Newsreader', serif; font-size: 13.5px; line-height: 1.65; margin-top: 7px; }
   .feed-sub-guide b { color: var(--ink-soft); font-weight: 600; }
@@ -236,7 +244,10 @@
   .view-pill.active .view-icon { opacity: 1; }
   .view-pill:hover .view-icon { opacity: 1; }
 
-  .entry { display: grid; grid-template-columns: 72px 1fr; gap: 24px; padding: 28px 0; border-bottom: 1px solid var(--rule); cursor: pointer; transition: background 0.15s; position: relative; }
+  .entry { display: grid; grid-template-columns: 72px 1fr; gap: 20px; padding: 20px 22px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); margin-bottom: 12px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; position: relative; }
+  .entry::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--vermilion); transform: scaleY(0); transform-origin: top; transition: transform 0.18s; }
+  .entry:hover { border-color: var(--vermilion); transform: translateY(-2px); box-shadow: 0 10px 30px -14px rgba(28,25,23,0.28); }
+  .entry:hover::before { transform: scaleY(1); }
   .entry:hover { background: rgba(194, 65, 12, 0.04); }
   /* v0.70 stuck 事件视觉标记 · 取代 chip filter · 互助信号自己流动到用户面前 · spec §5.3 */
   .entry-stuck::before {
@@ -269,8 +280,8 @@
   .method-tag-chip.is-discipline::before { content: ''; margin: 0; }
   /* v0.83 方法库子页 · masthead 方法库 进入 · 跨用户跨项目 */
   .methods-lib-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
-  .methods-lib-search { flex: 1; min-width: 240px; font-family: 'Newsreader', serif; font-size: 16px; padding: 10px 14px; background: var(--paper); border: 1px solid var(--rule); border-radius: 2px; color: var(--ink); transition: border-color 0.15s; }
-  .methods-lib-search:focus { outline: none; border-color: var(--moss); }
+  .methods-lib-search { flex: 1; min-width: 240px; font-family: 'Newsreader', serif; font-size: 16px; padding: 11px 15px; background: var(--paper); border: 1px solid var(--rule); border-radius: 9px; color: var(--ink); transition: border-color 0.15s, box-shadow 0.15s; }
+  .methods-lib-search:focus { outline: none; border-color: var(--vermilion); box-shadow: 0 0 0 3px rgba(194,65,12,.1); }
   .methods-lib-search::placeholder { color: var(--sepia-light); font-style: normal; }
   .methods-lib-tabs { display: flex; gap: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
   .methods-lib-tab { color: var(--sepia); cursor: pointer; padding: 4px 2px; border-bottom: 1px solid transparent; transition: color 0.15s, border-color 0.15s; }
@@ -370,8 +381,71 @@
   /* WORKSHOP */
   .workshop-name { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 48px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
   .workshop-tagline { font-family: 'Newsreader', serif; font-style: normal; color: var(--sepia); font-size: 19px; }
+  /* 应用页 · 沉浸式深色顶 (报头也深 + 终端铺满贴顶栏) · 跟上手页一样 · 用 body.app-immersive 一处统管 */
+  body.app-immersive .masthead { background: #0f0c0b !important; border-bottom-color: #241f1c !important; }
+  body.app-immersive .masthead .title { color: #fff !important; }
+  body.app-immersive .masthead .title-cn { color: var(--vermilion) !important; }
+  body.app-immersive .masthead .masthead-nav-primary button { color: #e8e3dd !important; opacity: 1 !important; }
+  body.app-immersive .masthead .masthead-nav-primary button:hover { color: #fff !important; }
+  body.app-immersive .masthead-dateline { display: none !important; }
+  body.app-immersive main { max-width: 100% !important; padding: 0 !important; }
+  body.app-immersive .masthead .masthead-main-row { max-width: 100% !important; padding-left: clamp(24px,6vw,72px) !important; padding-right: clamp(24px,6vw,72px) !important; }
+  /* 深色 hero band 铺满贴顶栏 · 内容居中 · 下面浅色 body */
+  .app-hero-band { background: #0f0c0b; }
+  .app-hero-band .page-term, .app-hero-band .ws-term { max-width: 1040px; margin: 0 auto; border-left: none; border-right: none; border-top: none; border-radius: 0; box-shadow: none; }
+  .app-body { max-width: 1080px; margin: 0 auto; padding: 34px clamp(24px,6vw,72px) 76px; }
+  /* app hero · 左标题 右会打字的终端 (setup 那套 · 全站复用) */
+  @keyframes wtblink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+  .app-hero-band .app-hero-inner { max-width: 1080px; margin: 0 auto; padding: 60px clamp(24px,6vw,72px) 64px; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(28px,5vw,56px); align-items: center; }
+  .app-hero-band .app-hero-copy { position: relative; }
+  .app-hero-band .app-eyebrow { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--vermilion); font-weight: 700; }
+  .app-hero-band .app-htitle { font-family: 'Fraunces','Songti SC','Newsreader',serif; font-size: 42px; line-height: 1.05; color: #fff; margin: 12px 0 12px; letter-spacing: -0.01em; }
+  .app-hero-band .app-htitle .accent { color: var(--vermilion); }
+  .app-hero-band .app-hsub { font-size: 15px; line-height: 1.8; color: #d6d3d1; max-width: 460px; }
+  .app-hero-band .app-hero-copy .workshop-tagline { color: #d6d3d1; }
+  .app-hero-band .app-hero-cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 22px; }
+  .app-hero-band .app-hero-cta button { background: var(--vermilion); color: #fff; border: none; border-radius: 8px; padding: 12px 24px; font-size: 14.5px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+  .app-hero-band .app-hero-cta button:hover { background: #a53809; transform: translateY(-1px); }
+  .app-hero-band .app-hero-cta .ghost { color: #d6d3d1; cursor: pointer; font-size: 13.5px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
+  .app-hero-band .app-hero-cta .ghost:hover { color: #fff; }
+  #screen-cli .cli-guest-hero .app-hero-inner { padding-top: 96px; }
+  .app-hero-band .app-status { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .app-hero-band .app-status .workshop-bench, .app-hero-band .app-status .workshop-tools-line { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: #a8a29e; margin: 0; }
+  .app-hero-band .app-status .num { color: var(--vermilion); }
+  .app-hero-band .app-hero-copy .workshop-account-link { position: absolute; top: 0; right: 0; color: #8a817a; }
+  .app-hero-band .aht-cap { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: #78716c; margin-bottom: 8px; }
+  .app-hero-band .aht { background: #0b0908; border: 1px solid #2a2421; border-radius: 10px; overflow: hidden; }
+  .app-hero-band .aht-bar { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid #2a2421; }
+  .app-hero-band .aht-bar span { width: 9px; height: 9px; border-radius: 50%; background: #3a332e; }
+  .app-hero-band .aht-bar span:first-child { background: #e2703a; }
+  .app-hero-band .aht-body { padding: 14px 16px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; line-height: 2; min-height: 148px; }
+  .app-hero-band .aht-body .p { color: #6ee7a8; }
+  .app-hero-band .aht-body .cmd { color: #f5f1e8; }
+  .app-hero-band .aht-body .out { color: #8a817a; padding-left: 14px; }
+  .app-hero-band .aht-body .fx-cur { color: #6ee7a8; }
+  @media (max-width: 760px) { .app-hero-band .app-hero-inner { grid-template-columns: 1fr; } }
+  /* 通用顶部终端组件 · 每页顶上放一个 · 内容各自换 (pageTermHero) */
+  .page-term { position: relative; background: #0f0c0b; border: 1px solid #2a2421; border-radius: 12px; overflow: hidden; margin-bottom: 26px; box-shadow: 0 26px 66px -32px rgba(0,0,0,0.55); }
+  .page-term .pt-bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; border-bottom: 1px solid #2a2421; background: #100d0b; }
+  .page-term .pt-bar > span { width: 11px; height: 11px; border-radius: 50%; background: #3a332e; }
+  .page-term .pt-bar > span:first-child { background: #e2703a; }
+  .page-term .pt-title { flex: 1; text-align: center; font-style: normal; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #8a817a; letter-spacing: .02em; }
+  .page-term .pt-body { padding: 18px 20px 20px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.95; }
+  .page-term .pt-run { color: #f3ede6; margin-top: 12px; } .page-term .pt-run:first-child { margin-top: 0; }
+  .page-term .pt-p { color: #6ee7a8; } .page-term .pt-flag { color: #e0b64a; }
+  .page-term .pt-out { color: #9a908a; padding-left: 18px; }
+  .page-term .pt-out .k { color: #e2703a; } .page-term .pt-out .ok { color: #5fbd83; } .page-term .pt-out .hl { color: #fff; }
+  .page-term .pt-u { color: #cfc7c0; padding-left: 18px; } .page-term .pt-u .g { color: #5fbd83; } .page-term .pt-u .t { color: #6a615b; float: right; }
+  .page-term .pt-cur { display: inline-block; width: 8px; height: 15px; background: #6ee7a8; vertical-align: -2px; animation: wtblink 1.05s step-end infinite; }
+  /* 进展 → 终端输出感 · > 提示符 + 等宽 (工坊/feed 共用) */
+  #screen-workshop .pcard-update-text, #screen-feed .pcard-update-text { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  #screen-workshop .pcard-update-text::before, #screen-feed .pcard-update-text::before { content: '> '; color: var(--moss); }
+  #screen-workshop .pcard-update-time, #screen-feed .pcard-update-time { font-family: ui-monospace, Menlo, monospace; }
   .section-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--sepia); letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--rule); padding-bottom: 6px; margin-bottom: 18px; }
-  .pcard { padding: 18px 0; border-bottom: 1px solid var(--rule); cursor: pointer; }
+  .pcard { position: relative; overflow: hidden; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); margin-bottom: 12px; cursor: pointer; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+  .pcard::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--vermilion); transform: scaleY(0); transform-origin: top; transition: transform 0.18s; }
+  .pcard:hover { border-color: var(--vermilion); transform: translateY(-2px); box-shadow: 0 10px 30px -14px rgba(28,25,23,0.28); }
+  .pcard:hover::before { transform: scaleY(1); }
   .pcard:hover .pcard-name { color: var(--vermilion); }
   .pcard-name { font-family: 'Newsreader', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; transition: color 0.15s; }
   .pcard-desc { color: var(--sepia); font-size: 14px; font-style: normal; margin-bottom: 8px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
@@ -402,7 +476,7 @@
   .pcard-update-text { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* PROJECT */
-  .pheader { border-bottom: 2px solid var(--ink); padding-bottom: 24px; margin-bottom: 32px; }
+  .pheader { border-bottom: 1px solid var(--rule); padding-bottom: 24px; margin-bottom: 32px; }
   .pname { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-size: 52px; font-weight: 500; letter-spacing: -0.025em; line-height: 1; margin-bottom: 12px; }
   .pdesc { font-family: 'Newsreader', serif; font-style: normal; color: var(--ink-soft); font-size: 22px; line-height: 1.4; margin-bottom: 20px; }
 
@@ -526,7 +600,7 @@
     margin-top: 22px;
   }
   .tl-time { color: var(--sepia); font-size: 13px; padding-top: 3px; font-family: 'JetBrains Mono', monospace; }
-  .tl-text { font-family: 'Newsreader', serif; font-size: 17px; line-height: 1.55; color: var(--ink); }
+  .tl-text { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 14px; line-height: 1.7; color: var(--ink); }
   .tl-prompt-box { margin-top: 12px; border-left: 2px solid var(--vermilion); padding: 12px 16px; background: var(--paper); }
   .tl-prompt-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--vermilion); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
   .tl-prompt-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-soft); line-height: 1.55; white-space: pre-wrap; margin-bottom: 10px; }
@@ -573,7 +647,10 @@
   .pcard-ship-quote { font-family: 'Newsreader', serif; font-size: 14px; color: var(--ink-soft); line-height: 1.6; border-left: 2px solid var(--vermilion); padding: 2px 0 2px 14px; margin: 8px 0 10px 0; background: transparent; }
 
   /* 陈列馆 card · 报纸编辑稿气质 · 每张卡片是一件完工的小作品 */
-  .showcase-card { padding: 28px 0; border-bottom: 1px solid var(--rule); position: relative; }
+  .showcase-card { padding: 22px 24px; border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); margin-bottom: 12px; overflow: hidden; position: relative; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+  .showcase-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--vermilion); transform: scaleY(0); transform-origin: top; transition: transform 0.18s; }
+  .showcase-card:hover { border-color: var(--vermilion); transform: translateY(-2px); box-shadow: 0 10px 30px -14px rgba(28,25,23,0.28); }
+  .showcase-card:hover::before { transform: scaleY(1); }
   .showcase-card:last-child { border-bottom: none; }
   .showcase-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 10px; flex-wrap: wrap; }
   .showcase-card-name { font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif; font-variation-settings: 'opsz' 144; font-weight: 500; font-size: 32px; letter-spacing: -0.02em; line-height: 1.1; color: var(--ink); cursor: pointer; transition: color 0.15s; margin-bottom: 4px; }
@@ -588,7 +665,7 @@
   /* 小屏适配 */
   @media (max-width: 480px) {
     .showcase-card-name { font-size: 26px; }
-    .showcase-card { padding: 22px 0; }
+    .showcase-card { padding: 18px 18px; }
   }
   .tl-feedback-ask-label { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--vermilion); letter-spacing: 0.22em; font-weight: 500; }
   .tl-feedback-ask-text { font-family: 'Newsreader', serif; font-size: 14.5px; color: var(--ink-soft); line-height: 1.55; margin-top: 6px; }
@@ -1009,8 +1086,8 @@
   .input-bare::placeholder { color: var(--sepia-light); font-style: normal; }
   .btn-act { font-family: 'Newsreader', serif; font-size: 16px; background: transparent; border: none; border-bottom: 1.5px solid var(--ink); color: var(--ink); padding: 4px 0; cursor: pointer; transition: all 0.15s; }
   .btn-act:hover { border-bottom-color: var(--vermilion); color: var(--vermilion); }
-  .btn-act-primary { background: var(--ink); color: var(--bg); padding: 8px 16px; border: none; font-family: 'Newsreader', serif; font-size: 15px; cursor: pointer; transition: all 0.15s; }
-  .btn-act-primary:hover { background: var(--vermilion); }
+  .btn-act-primary { background: var(--vermilion); color: #fff; padding: 9px 18px; border: none; border-radius: 8px; font-family: 'Newsreader', serif; font-size: 15px; cursor: pointer; transition: background 0.15s, transform 0.12s; }
+  .btn-act-primary:hover { background: #a53809; transform: translateY(-1px); }
   /* 提交进行中:guardSubmit 置 is-busy/disabled · 变灰 + 挡住再次点击 */
   .btn-act-primary:disabled, .btn-act-primary.is-busy, .is-busy { opacity: 0.5; cursor: default; pointer-events: none; }
 
@@ -1140,8 +1217,8 @@
 
   .entry {
     grid-template-columns: 76px 1fr;
-    gap: 26px;
-    padding: 30px 0;          /* v0.27: 36 → 30 (-6) */
+    gap: 22px;
+    padding: 22px 24px;
   }
   .entry-time {
     padding-top: 5px;
@@ -1158,7 +1235,7 @@
 
   /* —— WORKSHOP —— */
   .workshop-name { line-height: 1.05; }
-  .pcard { padding: 22px 0; }
+  .pcard { padding: 20px 22px; }
   .pcard-name { margin-bottom: 6px; }
   .pcard-desc { margin-bottom: 12px; line-height: 1.5; }
 
@@ -4425,25 +4502,27 @@
     background: transparent;
   }
   .masthead .masthead-nav-primary button:hover {
-    border-bottom-color: var(--ink);
+    border-bottom-color: var(--vermilion);
+    color: var(--vermilion);
   }
 
-  /* —— + 记一笔 · 独立 CTA · 浮起 —— */
+  /* —— + 记一笔 · 独立 CTA · 对齐登船/说明页的实心朱红按钮 —— */
   .masthead .masthead-cta {
     font-family: 'Newsreader', serif !important;
     font-size: 14px !important;
-    color: var(--vermilion) !important;
-    padding: 5px 13px !important;
-    border: 1px solid rgba(194, 65, 12, 0.32) !important;
-    background: rgba(194, 65, 12, 0.03) !important;
+    color: #fff !important;
+    padding: 7px 16px !important;
+    border: 1px solid var(--vermilion) !important;
+    border-radius: 8px !important;
+    background: var(--vermilion) !important;
     letter-spacing: 0.01em;
-    transition: background 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+    transition: background 0.18s ease, transform 0.18s ease;
     cursor: pointer;
   }
   .masthead .masthead-cta:hover {
-    background: rgba(194, 65, 12, 0.07) !important;
-    border-color: var(--vermilion) !important;
-    transform: translateY(-0.5px);
+    background: #a53809 !important;
+    border-color: #a53809 !important;
+    transform: translateY(-1px);
   }
 
   /* —— 副行 —— */
@@ -5055,7 +5134,7 @@
   @media (max-width: 720px) {
     .showcase-index { display: none; }
     .showcase-card-name { font-size: 30px !important; }
-    .showcase-card { padding: 36px 0 40px !important; }
+    .showcase-card { padding: 26px 28px 30px !important; }
   }
 
   /* ===============================================================
@@ -5470,7 +5549,7 @@
   /* —— v0.30 §5 账号页 —— */
   /* 左对齐版心 (去掉 margin:0 auto 的居中) · 宽度对齐关于页 prose (44rem) · 左边缘跟 masthead/全站齐 · 不再窄而居中地飘在 960 框里 */
   .account-page { max-width: 44rem; padding-top: 12px; }
-  .account-head { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 2px solid var(--ink); }
+  .account-head { margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
   .account-title {
     font-family: 'Fraunces', 'Songti SC', 'STSong', 'Noto Serif SC', 'Newsreader', serif;
     font-size: 42px; font-weight: 500; letter-spacing: -0.02em; line-height: 1;
@@ -6891,16 +6970,18 @@
       <nav class="masthead-nav-primary">
         <button onclick="goHome()">工坊</button>
         <button onclick="showScreen('methods')">方法库</button>
-        <button onclick="navMyWorkshop()">我的工坊</button>
-        <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+        <button onclick="showScreen('cli')">命令行</button>
+        <button class="nav-authed" onclick="navMyWorkshop()">我的工坊</button>
+        <button class="nav-authed" onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
       </nav>
-      <button class="masthead-cta serif" onclick="navAddUpdate()">+ 记一笔</button>
+      <button class="masthead-cta serif nav-authed" onclick="navAddUpdate()">+ 记一笔</button>
+      <button class="masthead-cta serif nav-guest" style="display:none" onclick="cliStart()">登录 / 注册</button>
     </div>
   </div>
   <!-- v0.49.2 dateline · 卷期号 + 找沉到右末 · 副行已删 -->
   <div class="max-w-3xl mx-auto px-8 pb-2 flex justify-between text-xs mono masthead-dateline" style="color: var(--sepia);">
-    <span>卷一 · 第 <span id="masthead-issue-num">002</span> 期 · 试运行 · <span id="masthead-handle-area"></span></span>
+    <span><span id="masthead-issue-num" class="hidden"></span><span id="masthead-handle-area"></span></span>
     <span class="dateline-right">
       <span id="masthead-date">2026 / 06 / 05</span>
       <span class="dateline-sep">·</span>
@@ -6912,14 +6993,8 @@
 <main class="max-w-3xl mx-auto px-8 py-12">
 
   <section class="screen active" id="screen-feed">
-    <!-- v0.61 编辑性 header · serif · 副标 + CTA 合一句 -->
-    <div class="mb-8">
-      <h1 class="feed-title mb-3">今天有动静</h1>
-      <p class="feed-sub mb-2">
-        大家在做的、做出来的 — 路过看一眼别人在捣鼓什么。
-        <span class="feed-cta-line" onclick="openPickProject()">或者也来记一笔 →</span>
-      </p>
-    </div>
+    <div class="app-hero-band" id="feed-hero-slot"></div>
+    <div class="app-body">
     <!-- v0.61 control ribbon · mono · 视图切换 + 状态 -->
     <div class="workshop-ribbon">
       <div class="workshop-ribbon-left">
@@ -6944,6 +7019,7 @@
     </div>
     <div id="feed-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
       — 就这些了。我们刚起步,宁可这里空,也不刷数据 —
+    </div>
     </div>
   </section>
 
@@ -7029,6 +7105,9 @@
         </div>
         <p class="cli-borrow">反过来你缺方法时，一句话，它替你去<span class="about-link" onclick="showScreen('methods')">方法库</span>求一个，或者把别人跑通的整段拉进你跟 AI 的对话。省得复制粘贴来回翻。</p>
         <p class="cli-install">想让它跟着你写？现在还是 alpha，装法糙一点，<span class="about-link" onclick="showScreen('workshop','daodao')">@daodao 的工坊</span>里有步骤。等发到 npm，就一行命令的事。</p>
+        <div class="about-cta-row">
+          <button onclick="showScreen('cli')" class="about-cta-primary">看命令行能干什么 →</button>
+        </div>
       </div>
 
       <!-- 关于产品本身 -->
@@ -7054,12 +7133,21 @@
     </div>
   </section>
 
+  <section class="screen" id="screen-landing">
+    <div id="landing-content"></div>
+  </section>
+
+  <section class="screen" id="screen-cli">
+    <div id="cli-content"></div>
+  </section>
+
+  <section class="screen" id="screen-setup">
+    <div id="setup-content"></div>
+  </section>
+
   <section class="screen" id="screen-showcase">
-    <!-- v0.61 编辑性 header -->
-    <div class="mb-6">
-      <h1 class="feed-title mb-3">做出来的</h1>
-      <p class="feed-sub">大家在做的、做出来的 — 按项目分组,看每个作品的积累。</p>
-    </div>
+    <div class="app-hero-band" id="showcase-hero-slot"></div>
+    <div class="app-body">
     <!-- v0.61 control ribbon · 跟动静屏共享样式 -->
     <div class="workshop-ribbon">
       <div class="workshop-ribbon-left">
@@ -7087,16 +7175,16 @@
     <div id="showcase-static-footer" class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule); display: none;">
       — 工坊里所有能玩到的项目都在这。时序看进展那一面在隔壁视图 —
     </div>
+    </div>
   </section>
 
   <section class="screen" id="screen-notifications">
-    <div class="mb-8">
-      <h1 class="feed-title mb-3">通知</h1>
-      <p class="feed-sub">谁因你的进展动了手、谁觉得有意思、谁留了便签 — 时间倒序</p>
-    </div>
+    <div class="app-hero-band" id="notif-hero-slot"></div>
+    <div class="app-body">
     <div id="notif-list"></div>
     <div class="mt-16 pt-6 border-t text-xs text-center mono" style="color: var(--sepia); border-color: var(--rule);">
       — 真实反馈一条算一条,不刷红点 —
+    </div>
     </div>
   </section>
 
@@ -7825,11 +7913,11 @@ async function apiListTokens() {
   if (!res.ok) throw new Error(data.error || '读取 token 失败');
   return data;
 }
-async function apiCreateToken(label) {
+async function apiCreateToken(label, tier) {
   const res = await fetch('/api/account/tokens', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label }),
+    body: JSON.stringify({ label, tier }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || '生成 token 失败');
@@ -7915,7 +8003,8 @@ function setStoredMainView(v) {
 
 // 主屏入口 (顶 nav 的 "工坊" 按钮 + brand logo 点击)
 function goHome() {
-  showScreen('feed');  // 工坊 / brand = 回首页动静 · 陈列馆走视图切换 pill 或 #/g · 不再"记住主视图"
+  // logo/工坊 → 回动静流(feed) · 登船页只作首次进站入口,不从应用内跳回
+  showScreen('feed');
 }
 
 // 视图切换 pill 点了走这里 · 切到对应屏 + 记忆
@@ -7930,27 +8019,37 @@ let _renderedHash = null;
 
 // 只渲染屏幕 DOM · 不碰 history · 给 showScreen 和 popstate/hash 路由共用
 function renderScreen(name, ...args) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  const t = document.getElementById('screen-' + name);
-  if (t) t.classList.add('active');
-  document.body.dataset.screen = name;   // 给 CSS 认当前页 · 宽屏: 卡片/网格页 (工坊/方法库) 框架放宽 · 见 body[data-screen] 规则
-  window.scrollTo({ top: 0, behavior: 'instant' });
-  if (name === 'feed') renderFeed();
-  else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
-  else if (name === 'studio') renderStudio(args[0]);
-  else if (name === 'project') renderProject(args[0], args[1]);
-  else if (name === 'onboard') renderOnboard();
-  else if (name === 'notifications') renderNotifications();
-  else if (name === 'showcase') renderShowcase(args[0]);
-  else if (name === 'methods') renderMethodsLibrary(args[0]);
-  else if (name === 'method') renderMethodDetail(args[0]);
-  else if (name === 'update') renderUpdateDetail(args[0]);
-  else if (name === 'account') renderAccount();
-  // about 是静态内容,不需要 render
-  // 主视图偏好只由显式点视图切换器 (switchMainView · 它自己已 setStoredMainView) 改
-  // 之前"进任一屏都记忆": 每次渲染 showcase 都记成 gallery · 点项目的"在陈列馆"/直接开 #/g 后
-  //   "工坊"主页就被粘在陈列馆 · 回不到 feed (用户反馈的 bug)
-  _renderedHash = buildHash(name, args);
+  // 真正切 DOM 的活儿 · 包进 View Transition 做快照交叉淡化(零露背景 · 不闪)
+  const apply = () => {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const t = document.getElementById('screen-' + name);
+    if (t) t.classList.add('active');
+    document.body.dataset.screen = name;   // 给 CSS 认当前页 · 宽屏: 卡片/网格页 (工坊/方法库) 框架放宽 · 见 body[data-screen] 规则
+    // 沉浸式深色应用页(顶部深色 + 铺满终端 hero + 浅色 body · 跟 setup 一套)
+    document.body.classList.toggle('app-immersive', ['feed', 'workshop', 'studio', 'methods', 'showcase', 'notifications', 'project', 'account'].includes(name) || (name === 'cli' && !!currentUser.handle));
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    if (name === 'feed') renderFeed();
+    else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
+    else if (name === 'studio') renderStudio(args[0]);
+    else if (name === 'project') renderProject(args[0], args[1]);
+    else if (name === 'onboard') renderOnboard();
+    else if (name === 'landing') renderLanding();
+    else if (name === 'cli') renderCli();
+    else if (name === 'setup') renderSetup();
+    else if (name === 'notifications') renderNotifications();
+    else if (name === 'showcase') renderShowcase(args[0]);
+    else if (name === 'methods') renderMethodsLibrary(args[0]);
+    else if (name === 'method') renderMethodDetail(args[0]);
+    else if (name === 'update') renderUpdateDetail(args[0]);
+    else if (name === 'account') renderAccount();
+    // about 是静态内容,不需要 render
+    // 主视图偏好只由显式点视图切换器 (switchMainView · 它自己已 setStoredMainView) 改
+    // 之前"进任一屏都记忆": 每次渲染 showcase 都记成 gallery · 点项目的"在陈列馆"/直接开 #/g 后
+    //   "工坊"主页就被粘在陈列馆 · 回不到 feed (用户反馈的 bug)
+    _renderedHash = buildHash(name, args);
+  };
+  // 切屏硬切(同色区块硬切不露背景 = 不闪)· 生动感交给 hero 文字入场 + 卡片淡入 + 终端打字
+  apply();
 }
 
 // 用户主动前进导航 → 渲染 + pushState 压一条 history
@@ -7974,8 +8073,11 @@ function buildHash(name, args) {
   if (name === 'project') return '#/p/' + encodeURIComponent(args[0] || '') + '/' + encodeURIComponent(args[1] || '');
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
+  if (name === 'cli') return '#/cli';
+  if (name === 'setup') return '#/setup';
   if (name === 'onboard') return '#/onboard';
   if (name === 'feed') return '#/';
+  if (name === 'landing') return '#/';
   if (name === 'methods') return args && args[0] ? '#/m/' + encodeURIComponent(args[0]) : '#/m';
   if (name === 'method') return '#/method/' + encodeURIComponent(args[0] || '');
   if (name === 'update') return '#/update/' + encodeURIComponent(args[0] || '');
@@ -7985,8 +8087,9 @@ function buildHash(name, args) {
   return '#/';
 }
 
-// 入站默认进首页动静 (feed 是工坊主页 · A 方案不再记忆主视图) · 陈列馆走 #/g 或视图切换 pill · 只渲染不压栈
+// 入站首页 · 没登录 → 登船页 (一眼看懂 · 引导注册) · 登录了 → 工坊动静流
 function renderHome() {
+  if (!currentUser.handle) return renderScreen('landing');
   renderScreen('feed');
 }
 
@@ -8002,6 +8105,8 @@ function navigateFromHash() {
   if (parts[0] === 'p' && parts[1] && parts[2]) return renderScreen('project', parts[1], parts[2]);
   if (parts[0] === 'notifications') return renderScreen('notifications');
   if (parts[0] === 'about') return renderScreen('about');
+  if (parts[0] === 'cli') return renderScreen('cli');
+  if (parts[0] === 'setup') return renderScreen('setup');
   if (parts[0] === 'onboard') return renderScreen('onboard');
   if (parts[0] === 'g') return renderScreen('showcase', parts[1]);       // 新短 hash
   if (parts[0] === 'showcase') return renderScreen('showcase', parts[1]); // 老链接兼容
@@ -8333,6 +8438,21 @@ function renderMethodTagRow(m) {
 }
 
 function renderFeed() {
+  // 顶部 hero (跟 setup 一套) · 只填一次
+  const feedHeroSlot = document.getElementById('feed-hero-slot');
+  if (feedHeroSlot && !feedHeroSlot.firstChild) {
+    feedHeroSlot.innerHTML = appHero({
+      eyebrow: '工坊 · feed',
+      title: '今天有<span class="accent">动静</span>',
+      sub: '大家在做的、做出来的 — 路过看一眼别人在捣鼓什么。',
+      termCap: '全站最新动静',
+      termLines: [
+        { cmd: 'tinker feed', out: '@daodao 改支付 · @maomao 报课通了' },
+        { cmd: 'tinker feed @daodao', out: 'ta 最近:卡在 webhook · 3 条进展' },
+      ],
+    });
+    appHeroReplay();
+  }
   let events = getFeedEvents();
 
   // v0.58 今日集体统计 · 跟陈列馆/工作室 mini-stats 系统呼应
@@ -8363,13 +8483,17 @@ function renderFeed() {
   // 只在"从今天 → 昨天" 等跨越时间边界时插入 label · 第一个"今天"group 不出现 label
   // (todayKey 在上面 v0.58 stats 段已经声明 · 直接复用 · 否则同 scope 重复 const 会语法错)
   const groups = groupEventsByDay(events);
+  // 入场:卡片逐个错落淡入 · delay 小幅递增并封顶 · 下方滚动进视口的不至于等太久
+  let _revIdx = 0;
+  const stagger = (el) => { el.classList.add('reveal'); el.style.transitionDelay = (Math.min(_revIdx++, 6) * 45) + 'ms'; return el; };
   groups.forEach(({ day, items, dateKey }, groupIdx) => {
     const skipLabel = (groupIdx === 0 && dateKey === todayKey);
     if (!skipLabel) {
-      list.appendChild(makeDayLabelEl(day, items.length));
+      list.appendChild(stagger(makeDayLabelEl(day, items.length)));
     }
-    items.forEach(e => list.appendChild(makeEntryEl(e)));
+    items.forEach(e => list.appendChild(stagger(makeEntryEl(e))));
   });
+  armReveals(list);
   // v0.78: footer 条件渲染 · feed 满了时 "我们刚起步" 显得多余甚至滑稽
   // 仅 events < 5 时显示 (空 / 稀疏时 anti-AI 焦虑营销文案才有意义)
   const footer = document.getElementById('feed-static-footer');
@@ -8519,6 +8643,14 @@ function workshopTaglineHtml(tagline, isMe) {
   return '';
 }
 
+function workshopReplayTerm() {
+  injectFxStyles();
+  const el = document.getElementById('workshop-hero-term');
+  if (!el) return;
+  let lines = []; try { lines = JSON.parse(el.getAttribute('data-term') || '[]'); } catch (e) {}
+  if (lines.length) typeInto(el, lines, ++_fxGen);
+}
+
 async function renderWorkshop(handle) {
   let user = state.users[handle];
   const root = document.getElementById('workshop-content');
@@ -8590,7 +8722,16 @@ async function renderWorkshop(handle) {
     ? `<div class="workshop-tools-line">常用 · ${topTools.join(' · ')}</div>`
     : '';
 
-  const renderPcards = (list, opts = {}) => list.map(p => {
+  // 顶部填满的终端 · whoami + 最近进展 (静态填满 · 不是小窗)
+  const heroUpdates = projects.flatMap(p => (p.updates || []).map(u => ({ text: u.text || '', at: u.at || 0 })))
+    .sort((a, b) => b.at - a.at).slice(0, 4);
+  const wsToolsTxt = topTools.length ? topTools.join(', ') : '—';
+  const heroTermLines = heroUpdates.length
+    ? heroUpdates.slice(0, 3).map(u => ({ cmd: 'tinker push -m "' + u.text.replace(/\s+/g, ' ').replace(/["`]/g, '').slice(0, 24) + '"', out: '✓ 记下了 · ' + shortAgo(u.at) }))
+    : [{ cmd: 'tinker push -m "今天做了点什么"', out: '✓ 记下了 · 用你的口吻' }, { cmd: 'tinker borrow "关键词"', out: '别人跑通的整段进你的 AI' }];
+  const heroTermData = escapeHtml(JSON.stringify(heroTermLines));
+
+  const renderPcards = (list, opts = {}) => list.map((p, pIdx) => {
     const ex = findExhibitUpdate(p);
     const exCfg = ex ? (EXHIBIT_KIND_COPY[ex.kind] || EXHIBIT_KIND_COPY.ship) : null;
     // v0.69: 在「也在做」区,自动沉(非 paused)的项目显示"一段时间没动",避免"进行中却出现在也在做"的语义冲突
@@ -8611,7 +8752,7 @@ async function renderWorkshop(handle) {
       </div>
     ` : '';
     return `
-    <div class="pcard" onclick="showScreen('project','${handle}','${p.slug}')">
+    <div class="pcard reveal" style="transition-delay:${Math.min(pIdx, 6) * 55}ms" onclick="showScreen('project','${handle}','${p.slug}')">
       <div class="pcard-name">${escapeHtml(p.name)}</div>
       <div class="pcard-desc">${escapeHtml(p.desc)}</div>
       <div class="pcard-meta">
@@ -8650,24 +8791,26 @@ async function renderWorkshop(handle) {
   //   · "跟进的"用 .tracking-pcard 视觉降级 · 防虚假繁荣
   //   · CLI 钥匙弱化 · 跟"编辑"拉层级
   root.innerHTML = `
-    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink); position: relative;">
-      ${isMe ? `<a class="workshop-account-link" onclick="showScreen('account')">账号 →</a>` : ''}
-      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMe ? '你的工坊' : '一间工坊'}</div>
-      <h1 class="workshop-name mb-3">@${handle}</h1>
-      <div id="workshop-tagline-slot">${workshopTaglineHtml(user.tagline, isMe)}</div>
-      ${benchHtml}
-      ${toolsHtml}
-      ${(user.studios && user.studios.length > 0)
-        ? ''
-        : (isMe ? `
-        <div class="workshop-affiliation">
-          还没挂任何工作室 ·
-          <a class="workshop-affiliation-link" onclick="openCreateStudio()">建一个</a>
-          或
-          <a class="workshop-affiliation-link" onclick="openAcceptInvite()">接受邀请</a>
+    <div class="app-hero-band">
+    <div class="app-hero-inner">
+      <div class="app-hero-copy">
+        ${isMe ? `<a class="workshop-account-link" onclick="showScreen('account')">账号 →</a>` : ''}
+        <div class="app-eyebrow">${isMe ? '你的工坊' : '一间工坊'}</div>
+        <h1 class="app-htitle">@${handle}</h1>
+        <div id="workshop-tagline-slot">${workshopTaglineHtml(user.tagline, isMe)}</div>
+        <div class="app-status">${benchHtml}${toolsHtml}</div>
+      </div>
+      <div class="app-hero-demo">
+        <div class="aht-cap">最近在做 · 你的动态</div>
+        <div class="aht">
+          <div class="aht-bar"><span></span><span></span><span></span></div>
+          <div class="aht-body" id="workshop-hero-term" data-term="${heroTermData}"></div>
         </div>
-      ` : '')}
+      </div>
     </div>
+    </div>
+    <div class="app-body">
+    ${(user.studios && user.studios.length > 0) ? '' : (isMe ? `<div class="workshop-affiliation" style="margin: -12px 0 22px;">还没挂任何工作室 · <a class="workshop-affiliation-link" onclick="openCreateStudio()">建一个</a> 或 <a class="workshop-affiliation-link" onclick="openAcceptInvite()">接受邀请</a></div>` : '')}
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
         <span>最近在动 (${recent.length})</span>
@@ -8763,8 +8906,8 @@ async function renderWorkshop(handle) {
     ${trackingPublic.length > 0 ? `
       <div class="mb-12">
         <div class="section-label">${isMe ? '我在跟进的' : `@${handle} 在跟进的`} (${trackingPublic.length})</div>
-        ${trackingPublic.map(({p, roleLabel}) => `
-          <div class="pcard tracking-pcard" onclick="showScreen('project','${p.owner}','${p.slug}')">
+        ${trackingPublic.map(({p, roleLabel}, tIdx) => `
+          <div class="pcard tracking-pcard reveal" style="transition-delay:${Math.min(tIdx, 6) * 55}ms" onclick="showScreen('project','${p.owner}','${p.slug}')">
             <div class="pcard-name">@${p.owner} / ${escapeHtml(p.name)}</div>
             <div class="pcard-meta">
               <span style="color: var(--vermilion);">— ${roleLabel}</span> · ${statusText(p.status)} · ${(p.tools||[]).slice(0,2).join(' · ')}
@@ -8773,7 +8916,18 @@ async function renderWorkshop(handle) {
         `).join('')}
       </div>
     ` : ''}
+    </div>
   `;
+  // hero 终端打字 · 把最近动态滚出来
+  injectFxStyles();
+  (function () {
+    const el = document.getElementById('workshop-hero-term');
+    if (!el) return;
+    let lines = []; try { lines = JSON.parse(el.getAttribute('data-term') || '[]'); } catch (e) {}
+    if (lines.length) typeInto(el, lines, ++_fxGen);
+  })();
+  // body 卡片滚动淡入 (跟 hero 打字互不干扰)
+  armReveals(root);
   // v0.38 异步拉 preview 数据 · 渲染厚卡板块到"最近在动"之前
   // 不再用 bulk dump 的 user.studios 当开关 (那个现在只含本人) · 直接按 handle 拉 · 空了内部不渲染
   loadAndRenderWorkshopStudios(handle, isMe);
@@ -8838,8 +8992,10 @@ async function renderStudio(slug) {
         </div>
       `).join('');
 
+  const shadowHtml = '';
+
   root.innerHTML = `
-    <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
+    <div class="mb-10 pb-8 border-b" style="border-color: var(--rule);">
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMember ? '你的工作室' : '一间工作室'}</div>
       <h1 class="workshop-name mb-3">${escapeHtml(s.name)}</h1>
       ${s.tagline ? `<p class="workshop-tagline">「${escapeHtml(s.tagline)}」</p>` : ''}
@@ -8853,6 +9009,7 @@ async function renderStudio(slug) {
       </div>
       <div class="studio-members-grid">${memberHtml}</div>
     </div>
+    ${shadowHtml}
     <div class="mb-12">
       <div class="section-label"><span>项目 (${s.projects.length})</span></div>
       ${projectsHtml}
@@ -8911,7 +9068,17 @@ async function renderProject(owner, slug) {
   // Figure counter for the project — count across all updates with images
   let figureIdx = 0;
 
+  // 顶部深色 hero 的演示终端 · 把这个项目最近几条进展当 tinker push 滚出来
+  const projHeroUpdates = (p.updates || []).filter(u => !u.isMethod).slice(0, 3);
+  const projTermLines = projHeroUpdates.length
+    ? projHeroUpdates.map(u => ({ cmd: 'tinker push -m "' + (u.text || '').replace(/\s+/g, ' ').replace(/["`]/g, '').slice(0, 24) + '"', out: '✓ 记下了 · ' + shortAgo(u.at) }))
+    : [{ cmd: 'tinker push -m "今天动了这个项目"', out: '✓ 记下了 · 用你的口吻' }, { cmd: 'tinker ship -m "一句话感想"', out: '进陈列馆 · 真做出来了' }];
+
   root.innerHTML = `
+    <div class="app-hero-band">
+      ${appHero({ eyebrow: '项目 · @' + owner, title: escapeHtml(p.name), sub: escapeHtml(p.desc || ''), termCap: '这个项目的动态', termLines: projTermLines })}
+    </div>
+    <div class="app-body">
     <div class="mb-6">
       <a class="react-action serif italic" style="border-bottom: none; color: var(--sepia);" onclick="showScreen('workshop','${owner}')">← @${owner} 的工坊</a>
     </div>
@@ -8947,8 +9114,6 @@ async function renderProject(owner, slug) {
             : `<span class="small-action" onclick="toggleHidden('${p.id}', true)" style="color: var(--sepia);">暂不入馆</span>`}
         ` : ''}
       </div>
-      <h1 class="pname">${escapeHtml(p.name)}</h1>
-      <p class="pdesc">${escapeHtml(p.desc)}</p>
       ${p.timeline ? `
         <section class="project-timeline">
           <div class="project-timeline-label">
@@ -9222,7 +9387,9 @@ async function renderProject(owner, slug) {
         ${p.productLink ? `<span class="react-action serif" style="display: inline-flex; align-items: center; gap: 6px;" onclick="copyText(this, ${JSON.stringify(p.productLink).replace(/"/g,'&quot;')})">${ICONS.external}只复制产物 URL</span>` : ''}
       </div>
     </div>
+    </div>
   `;
+  appHeroReplay();
 
   // 时间线卡片要全文 (展开看完整 / 复制 markdown) · 预览先顶上 · 全文后台拉回来再整页重画一次 settle
   // 闸门在 truncated 上:全文端点返回的 updates 不带 truncated · 重画时这里为 false · 不会再拉 · 不死循环
@@ -9255,6 +9422,901 @@ const STARTER_CATEGORY_ORDER = ['self', 'others', 'work', 'play'];
 function setStarterCategory(cat) {
   selectedStarterCategory = cat;
   renderOnboard();
+}
+
+// ============ 动效引擎 · 打字机终端 + 滚动淡入 + 悬停发光 ============
+// fx-on 只在 JS 真跑起来时才加到 body · 所以 JS 挂了内容照样可见 (不白屏)
+// 尊重系统"减少动效"设置
+let _fxGen = 0;
+function injectFxStyles() {
+  if (document.getElementById('fx-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'fx-styles';
+  s.textContent = `
+    .fx-on .reveal { opacity: 0; transform: translateY(9px); transition: opacity .5s ease, transform .5s ease; }
+    .reveal.in { opacity: 1 !important; transform: none !important; }
+    /* 卡片淡入后 · hover 上浮不能被 .reveal.in 的 transform:none 顶掉 · 用更高特异度补回来 */
+    .fx-on .entry.in:hover, .fx-on .pcard.in:hover, .fx-on .showcase-card.in:hover { transform: translateY(-2px) !important; }
+    .fx-cur { display:inline-block; color:#6ee7a8; animation: fxblink 1.5s ease-in-out infinite; }
+    @keyframes fxblink { 0%,40%{opacity:.9} 70%{opacity:.15} 100%{opacity:.9} }
+    .fx-on .cli-cmd, .fx-on .ld-pillar { transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .fx-on .cli-cmd:hover, .fx-on .ld-pillar:hover { box-shadow: 0 10px 30px -14px rgba(194,65,12,.5); }
+    @media (prefers-reduced-motion: reduce) { .fx-on .reveal { opacity:1 !important; transform:none !important; filter:none !important; transition:none !important; } .fx-cur { animation:none; } }
+  `;
+  document.head.appendChild(s);
+}
+function typeInto(el, lines, gen) {
+  el.innerHTML = '';
+  let li = 0;
+  function nextLine() {
+    if (gen !== _fxGen || !document.body.contains(el)) return;   // 换屏/重渲染 → 停
+    if (li >= lines.length) {
+      // 打完不熄火 · 末尾留一个一直闪的 prompt 光标
+      const row = document.createElement('div');
+      const p = document.createElement('span'); p.className = 'p'; p.textContent = '$ ';
+      const cur = document.createElement('span'); cur.className = 'fx-cur'; cur.textContent = '▊';
+      row.appendChild(p); row.appendChild(cur);
+      el.appendChild(row);
+      return;
+    }
+    const ln = lines[li++];
+    const row = document.createElement('div');
+    const p = document.createElement('span'); p.className = 'p'; p.textContent = '$ ';
+    const cmd = document.createElement('span'); cmd.className = 'cmd';
+    const cur = document.createElement('span'); cur.className = 'fx-cur'; cur.textContent = '▊';
+    row.appendChild(p); row.appendChild(cmd); row.appendChild(cur);
+    el.appendChild(row);
+    let ci = 0;
+    (function typeChar() {
+      if (gen !== _fxGen) return;
+      if (ci < ln.cmd.length) { cmd.textContent += ln.cmd[ci++]; setTimeout(typeChar, 28 + Math.random() * 42); }
+      else {
+        cur.remove();
+        if (ln.out) { const o = document.createElement('div'); o.className = 'out'; o.textContent = ln.out; el.appendChild(o); }
+        setTimeout(nextLine, 560);
+      }
+    })();
+  }
+  setTimeout(nextLine, 420);
+}
+// 只做滚动淡入 · 不打字终端 · 不 bump _fxGen (免得停掉正在打的 hero 终端)
+// 应用页 body 用这个 · hero 终端仍走 appHeroReplay · 两者互不干扰
+function armReveals(root) {
+  if (!root) return;
+  injectFxStyles();
+  document.body.classList.add('fx-on');
+  const reveals = root.querySelectorAll('.reveal');
+  if (!reveals.length) return;
+  if (!('IntersectionObserver' in window)) { reveals.forEach(el => el.classList.add('in')); return; }
+  const io = new IntersectionObserver((ents) => {
+    ents.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.1, rootMargin: '0px 0px -30px 0px' });
+  reveals.forEach(el => io.observe(el));
+  // 兜底:首屏内立即淡入 · 下方的等滚动
+  const inView = (el) => { const r = el.getBoundingClientRect(); return r.top < (window.innerHeight || 0) - 20 && r.bottom > 0; };
+  requestAnimationFrame(() => reveals.forEach(el => { if (inView(el)) el.classList.add('in'); }));
+}
+function armFx(root) {
+  if (!root) return;
+  injectFxStyles();
+  document.body.classList.add('fx-on');
+  const gen = ++_fxGen;
+  root.querySelectorAll('[data-term]').forEach(el => {
+    let lines = []; try { lines = JSON.parse(el.getAttribute('data-term')); } catch (e) {}
+    typeInto(el, lines, gen);
+  });
+  const reveals = root.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) { reveals.forEach(el => el.classList.add('in')); return; }
+  const io = new IntersectionObserver((ents) => {
+    ents.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+  reveals.forEach(el => io.observe(el));
+  // 兜底:首屏内的块立即淡入 (不依赖 IO 是否及时回调) · 真正在下方的仍等滚动触发
+  const inView = (el) => { const r = el.getBoundingClientRect(); return r.top < (window.innerHeight || 0) - 20 && r.bottom > 0; };
+  requestAnimationFrame(() => { if (gen === _fxGen) reveals.forEach(el => { if (inView(el)) el.classList.add('in'); }); });
+}
+
+// 登船页 + CLI 页 hero 里滚动的真实命令 (都是已上线能用的 · 不含还在测试的影子)
+const HERO_TERM = [
+  { cmd: 'tinker borrow "邮箱一次性登录"', out: '找到 3 条别人跑通的方法 · 整段拉进你的 AI 对话' },
+  { cmd: 'tinker push -m "选了 supabase 不自建 · 省了鉴权的活"', out: '记下了 · 一条决策 · 用你的口吻' },
+  { cmd: 'tinker ship -m "上线了 · 熬了三晚值了"', out: '自动截图当封面 · 进陈列馆' },
+];
+
+// CLI 说明页专用 · 每条说明都讲它替你解决的痛点 · 不是"命令干嘛"
+const CLI_TERM = [
+  { cmd: 'tinker login', out: '配一次 · 往后不用手动记 · 它自己跟着你写' },
+  { cmd: 'tinker push -m "选了 supabase · 省了自建鉴权"', out: '省得三个月后想不起当时为什么这么选' },
+  { cmd: 'tinker borrow "邮箱一次性登录"', out: '别人踩通的坑 · 你不用从零再查一遍' },
+  { cmd: 'tinker recent --limit 10', out: '上下文一条命令捞回来 · AI 不用每次重听背景' },
+];
+
+// 登录态命令参考页 hero 的演示终端 · 挑几条最常用的滚出来
+const CLI_REF_TERM = [
+  { cmd: 'tinker push -m "报课流程跑通了"', out: '✓ 记下了 · 用你的口吻' },
+  { cmd: 'tinker borrow "邮箱一次性登录"', out: '别人跑通的整段进你的 AI' },
+  { cmd: 'tinker ship -m "上线了"', out: '进陈列馆 · 真做出来了' },
+];
+
+// ============ 登船页 · 没登录的人一进站的第一屏 ============
+const LANDING_PILLARS = [
+  { k: '记一笔', t: '把"为什么这么选"留下来', d: '做东西一路的选择、卡点、放弃,代码里看不见,过几个月自己都忘,偏偏最值钱。用你的口吻记下,你回得去,你的 AI 也读得进。' },
+  { k: '方法库', t: '借得走,也被真用上', d: '别人跑通的手艺你借来直接用,你沉淀的方法别人照着做。不是点赞,是"我借了你的,跑通了"。有人因为你也成了事。' },
+  { k: '命令行', t: '跟着你写,顺手替你记', d: '一个蹲在你身边的命令行工具。你照常用 AI 做东西,该记的它顺手替你记成决策、沉淀成方法,用你的口吻。缺方法一句话它替你去借。' },
+];
+const LANDING_DONT = [
+  '不做推荐算法,不做热门,不做 trending。',
+  '不做点赞数、粉丝数、浏览量。',
+  '不做等级、认证、verified 这种标记。',
+  '不做"X 天月入多少"那种焦虑营销。',
+];
+
+function renderLanding() {
+  const esc = escapeHtml;
+
+  document.getElementById('landing-content').innerHTML = `
+  <style>
+    #screen-landing .ld { max-width: 100%; }
+    /* 整屏铺满 · 藏掉报头 · 撑破报纸版心 */
+    body[data-screen="landing"] .masthead { display: none; }
+    body[data-screen="landing"] main { max-width: 100% !important; padding: 0 !important; }
+    #screen-landing .ld-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 22px clamp(24px, 6vw, 72px); }
+    #screen-landing .ld-brand { font-family: Georgia, serif; font-size: 21px; color: #fff; font-weight: 600; letter-spacing: .5px; }
+    #screen-landing .ld-brand .cn { color: var(--vermilion); margin-left: 7px; }
+    #screen-landing .ld-topnav { display: flex; align-items: center; gap: 22px; }
+    #screen-landing .ld-topnav span { color: #d6d3d1; cursor: pointer; font-size: 14px; }
+    #screen-landing .ld-topnav span:hover { color: #fff; }
+    #screen-landing .ld-topnav button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; padding: 8px 18px; font-size: 14px; cursor: pointer; font-family: Georgia, serif; transition: background .12s, border-color .12s; }
+    #screen-landing .ld-topnav button:hover { background: var(--vermilion); border-color: var(--vermilion); }
+    #screen-landing .ld-rest { max-width: 1040px; margin: 0 auto; padding: 56px clamp(24px, 5vw, 40px) 76px; }
+    /* HERO · 占满整个视口 */
+    #screen-landing .ld-hero { background: var(--ink); color: var(--paper); padding: 96px 0 76px; margin: 0; position: relative; overflow: hidden; min-height: 100vh; display: flex; align-items: center; }
+    #screen-landing .ld-hero-inner { max-width: 1120px; width: 100%; margin: 0 auto; padding: 0 clamp(24px, 6vw, 72px); position: relative; z-index: 1; }
+    /* 一屏搞定 · 左文案 右终端 */
+    #screen-landing .ld-hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(28px, 5vw, 60px); align-items: center; }
+    #screen-landing .ld-hero-phil { margin-top: 16px; font-size: 14px; color: #8a817c; position: relative; z-index: 1; line-height: 1.7; }
+    #screen-landing .ld-hero-demo .ld-term { max-width: none; margin: 8px 0 0; }
+    #screen-landing .ld-demo-note { margin-top: 12px; font-size: 12.5px; color: #6b625f; }
+    @media (max-width: 900px) { #screen-landing .ld-hero-grid { grid-template-columns: 1fr; gap: 32px; } }
+    #screen-landing .ld-hero::after { content: ''; position: absolute; right: -80px; top: -70px; width: 300px; height: 300px; background: radial-gradient(circle, rgba(194,65,12,0.30), transparent 70%); pointer-events: none; }
+    #screen-landing .ld-hero::before { content: ''; position: absolute; left: -60px; bottom: -90px; width: 260px; height: 260px; background: radial-gradient(circle, rgba(30,58,138,0.22), transparent 70%); pointer-events: none; }
+    /* 光晕呼吸 */
+    @keyframes ldGlowA { 0%,100% { opacity: .8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.1); } }
+    @keyframes ldGlowB { 0%,100% { opacity: .7; transform: scale(1.05); } 50% { opacity: 1; transform: scale(1); } }
+    #screen-landing .ld-hero::after { animation: ldGlowA 8s ease-in-out infinite; }
+    #screen-landing .ld-hero::before { animation: ldGlowB 9s ease-in-out infinite; }
+    /* 左栏文案 · 逐级进场 */
+    @keyframes ldFadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+    #screen-landing .ld-hero-copy > * { animation: ldFadeUp .6s cubic-bezier(.2,.7,.2,1) both; }
+    #screen-landing .ld-hero-copy > *:nth-child(1) { animation-delay: 0s; }
+    #screen-landing .ld-hero-copy > *:nth-child(2) { animation-delay: .07s; }
+    #screen-landing .ld-hero-copy > *:nth-child(3) { animation-delay: .14s; }
+    #screen-landing .ld-hero-copy > *:nth-child(4) { animation-delay: .21s; }
+    #screen-landing .ld-hero-copy > *:nth-child(5) { animation-delay: .28s; }
+    #screen-landing .ld-hero-copy > *:nth-child(6) { animation-delay: .35s; }
+    #screen-landing .ld-hero-demo { animation: ldFadeUp .7s .3s cubic-bezier(.2,.7,.2,1) both; }
+    /* 按钮流光 */
+    #screen-landing .ld-cta button { position: relative; overflow: hidden; }
+    #screen-landing .ld-cta button::after { content: ''; position: absolute; top: 0; left: -120%; width: 55%; height: 100%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.28), transparent); transform: skewX(-18deg); transition: left .6s cubic-bezier(.2,.7,.2,1); pointer-events: none; }
+    #screen-landing .ld-cta button:hover::after { left: 140%; }
+    @media (prefers-reduced-motion: reduce) {
+      #screen-landing .ld-hero::after, #screen-landing .ld-hero::before { animation: none; }
+      #screen-landing .ld-hero-copy > *, #screen-landing .ld-hero-demo { animation: none; }
+    }
+    #screen-landing .ld-eyebrow { font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 4px; color: var(--vermilion); font-weight: 700; position: relative; z-index: 1; }
+    #screen-landing .ld-h1 { font-family: Georgia, 'Songti SC', serif; font-size: 50px; line-height: 1.08; margin: 16px 0 20px; color: #fff; letter-spacing: 1px; position: relative; z-index: 1; }
+    #screen-landing .ld-h1 .accent { color: var(--vermilion); }
+    #screen-landing .ld-sub { font-size: 17px; line-height: 1.85; color: #d6d3d1; max-width: 600px; position: relative; z-index: 1; }
+    #screen-landing .ld-cta { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin-top: 30px; position: relative; z-index: 1; }
+    #screen-landing .ld-cta button { background: var(--vermilion); color: #fff; border: none; border-radius: 9px; padding: 15px 30px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+    #screen-landing .ld-cta button:hover { background: #a53809; transform: translateY(-1px); }
+    #screen-landing .ld-cta .ghost { color: #d6d3d1; cursor: pointer; font-size: 15px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
+    #screen-landing .ld-cta .ghost:hover { color: #fff; }
+    #screen-landing .ld-hero-note { margin-top: 18px; font-size: 13px; color: #78716c; position: relative; z-index: 1; }
+    #screen-landing .ld-term { background: #0f0d0c; border: 1px solid #2a2624; border-radius: 10px; margin: 26px 0 6px; overflow: hidden; position: relative; z-index: 1; max-width: 640px; }
+    #screen-landing .ld-term-bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid #2a2624; }
+    #screen-landing .ld-term-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a3533; }
+    #screen-landing .ld-term-bar span:first-child { background: #c2410c; }
+    #screen-landing .ld-term-body { padding: 16px 18px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 2.05; min-height: 152px; }
+    #screen-landing .ld-term-body .p { color: #6ee7a8; }
+    #screen-landing .ld-term-body .cmd { color: #f5f1e8; }
+    #screen-landing .ld-term-body .out { color: #78716c; padding-left: 16px; }
+    #screen-landing .ld-term-cap { font-size: 12.5px; color: #8a817c; margin: 26px 0 8px; position: relative; z-index: 1; letter-spacing: .5px; }
+    #screen-landing .ld-term-cap + .ld-term { margin-top: 0; }
+    /* 往下看提示 */
+    #screen-landing .ld-scrollcue { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 2; color: #8a817c; font-size: 12.5px; letter-spacing: 1px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; animation: cuebob 1.8s ease-in-out infinite; }
+    #screen-landing .ld-scrollcue:hover { color: #d6d3d1; }
+    @keyframes cuebob { 0%,100%{transform:translate(-50%,0)} 50%{transform:translate(-50%,6px)} }
+    /* 为什么在这儿 · 第二屏 (B 的话 · 浅色说明段) */
+    #screen-landing .ld-why { background: var(--bg); padding: 82px clamp(24px,6vw,72px) 100px; }
+    #screen-landing .ld-why-inner { max-width: 780px; margin: 0 auto; }
+    #screen-landing .ld-why-eyebrow { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 3px; color: var(--vermilion); font-weight: 700; }
+    #screen-landing .ld-why h2 { font-family: Georgia, 'Songti SC', serif; font-size: 36px; color: var(--ink); line-height: 1.15; margin: 14px 0 18px; }
+    #screen-landing .ld-why h2 .accent { color: var(--vermilion); }
+    #screen-landing .ld-why p { font-size: 17px; line-height: 1.85; color: var(--ink-soft); }
+    #screen-landing .ld-why-note { margin-top: 14px; font-size: 14.5px; color: var(--sepia); }
+    #screen-landing .ld-why button { margin-top: 28px; background: var(--vermilion); color: #fff; border: none; border-radius: 9px; padding: 14px 30px; font-size: 15.5px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+    #screen-landing .ld-why button:hover { background: #a53809; transform: translateY(-1px); }
+    #screen-landing .ld-why-links { margin-top: 16px; display: flex; gap: 22px; }
+    #screen-landing .ld-why-links span { color: var(--vermilion); cursor: pointer; font-size: 14.5px; border-bottom: 1px dotted var(--vermilion); padding-bottom: 2px; }
+    /* PILLARS */
+    #screen-landing .ld-pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 44px; }
+    #screen-landing .ld-pillar { border: 1px solid var(--rule); border-radius: 12px; padding: 22px 20px; background: var(--paper); transition: border-color .12s, transform .12s; }
+    #screen-landing .ld-pillar:hover { border-color: var(--vermilion); transform: translateY(-2px); }
+    #screen-landing .ld-pillar-k { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 2px; color: var(--vermilion); font-weight: 700; border: 1px solid var(--vermilion); border-radius: 5px; padding: 2px 9px; }
+    #screen-landing .ld-pillar h3 { font-family: Georgia, 'Songti SC', serif; font-size: 20px; color: var(--ink); margin: 14px 0 8px; line-height: 1.3; }
+    #screen-landing .ld-pillar p { font-size: 13.5px; line-height: 1.72; color: var(--ink-soft); }
+    /* 不做什么 */
+    #screen-landing .ld-dont { margin-bottom: 44px; }
+    #screen-landing .ld-dont-label { font-family: Georgia, serif; font-size: 15px; color: var(--sepia); letter-spacing: 1px; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
+    #screen-landing .ld-dont ul { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 24px; }
+    #screen-landing .ld-dont li { font-size: 14.5px; color: var(--ink-soft); padding-left: 22px; position: relative; }
+    #screen-landing .ld-dont li::before { content: '×'; position: absolute; left: 0; color: var(--vermilion); font-weight: 700; }
+    #screen-landing .ld-dont-note { margin-top: 16px; font-size: 14px; color: var(--sepia); font-style: italic; }
+    /* 收尾 CTA */
+    #screen-landing .ld-foot { background: var(--ink); color: var(--paper); border-radius: 14px; padding: 40px 36px; text-align: center; }
+    #screen-landing .ld-foot h2 { font-family: Georgia, 'Songti SC', serif; font-size: 28px; color: #fff; margin-bottom: 10px; }
+    #screen-landing .ld-foot p { color: #a8a29e; font-size: 14.5px; margin-bottom: 22px; }
+    #screen-landing .ld-foot button { background: var(--vermilion); color: #fff; border: none; border-radius: 9px; padding: 15px 34px; font-size: 16px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+    #screen-landing .ld-foot button:hover { background: #a53809; transform: translateY(-1px); }
+    @media (max-width: 640px) {
+      #screen-landing .ld-hero { padding: 38px 24px 32px; }
+      #screen-landing .ld-h1 { font-size: 34px; }
+      #screen-landing .ld-pillars, #screen-landing .ld-dont ul { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <div class="ld">
+    <nav class="ld-topbar">
+      <div class="ld-brand" onclick="showScreen('feed')" style="cursor:pointer">Tinker<span class="cn">捣鼓</span></div>
+      <div class="ld-topnav">
+        <span onclick="showScreen('cli')">命令行</span>
+        <span onclick="showScreen('methods')">方法库</span>
+        <span onclick="showScreen('feed')">逛逛工坊</span>
+        <button onclick="cliStart()">登录 / 注册</button>
+      </div>
+    </nav>
+    <div class="ld-hero">
+      <div class="ld-hero-inner ld-hero-grid">
+        <div class="ld-hero-copy">
+          <div class="ld-eyebrow">捣鼓 · TINKER</div>
+          <h1 class="ld-h1">你只管写,<br>剩下的<span class="accent">交给它</span></h1>
+          <p class="ld-sub">一个蹲在你终端里、跟你一起写代码的 AI 队友。你照常做东西,它替你把代码之外最值钱的那层攒下来:为什么这么选、怎么做通的、跑通的手艺 — 你回得去,别人借得走,你的 AI 整段读得进。</p>
+          <p class="ld-hero-phil">不做推荐算法、不做点赞粉丝、不做热门排行。慢一点,真一点。</p>
+          <div class="ld-cta">
+            <button onclick="cliStart()">免费注册,开始用 →</button>
+            <span class="ghost" onclick="showScreen('cli')">看它全部本事 →</span>
+            <span class="ghost" onclick="showScreen('feed')">随便逛逛工坊</span>
+          </div>
+          <p class="ld-hero-note">登录走邮箱一次性链接,不用记密码。现在是早期 alpha。</p>
+        </div>
+        <div class="ld-hero-demo">
+          <div class="ld-term-cap">在你的终端里 · 它长这样</div>
+          <div class="ld-term">
+            <div class="ld-term-bar"><span></span><span></span><span></span></div>
+            <div class="ld-term-body" data-term="${esc(JSON.stringify(HERO_TERM))}"></div>
+          </div>
+          <div class="ld-demo-note">你写你的,它在旁边把该记的记了。</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  armFx(document.getElementById('landing-content'));
+}
+
+// ============ CLI 页 · 命令行能力集合 (登船后的落点) ============
+// 数据驱动 · 按用途分组 · 每条命令配大白话介绍
+const CLI_GROUPS = [
+  {
+    key: 'start', label: '三步就位', lead: '别在配置上耗神 · 一条命令把环境配齐,剩下它跟着你写。',
+    cmds: [
+      { c: 'tinker login', d: '配一次,一劳永逸。', demo: [{ cmd: 'tinker login', out: '✓ 连上了 · 这台机器认得你了' }] },
+      { c: 'tinker onboard', d: '项目一条命令配齐。', demo: [{ cmd: 'tinker onboard', out: '✓ 项目 / git hook / AI 协作说明 都配好了' }] },
+    ],
+  },
+  {
+    key: 'note', label: '记一笔 · 日常', lead: '选择、卡点、完工,当时不记过几个月全忘 · 顺手留一句,以后回得去。',
+    cmds: [
+      { c: 'tinker push -m "..."', d: '一句话钉下当时怎么想。', demo: [{ cmd: 'tinker push -m "选了 supabase · 省了自建鉴权"', out: '✓ 记下了 · 一条决策 · 用你的口吻' }] },
+      { c: 'tinker ship -m "..."', d: '完工归档,进陈列馆。', demo: [{ cmd: 'tinker ship -m "上线了 · 熬了三晚值了"', out: '📸 自动截图当封面 · 进陈列馆' }] },
+    ],
+  },
+  {
+    key: 'lib', label: '方法库 · 借与被借', lead: '别从零查、别重复造轮子 · 别人跑通的直接借,你的手艺也被真用上。',
+    cmds: [
+      { c: 'tinker borrow "关键词"', d: '别人跑通的直接借。', demo: [{ cmd: 'tinker borrow "邮箱一次性登录"', out: '找到 3 条跑通的方法 · 整段拉进你的 AI 对话' }] },
+      { c: 'tinker contribute', d: '做通的沉淀成方法。', demo: [{ cmd: 'tinker contribute', out: '✓ 这条升成方法了 · 别人能借了' }] },
+    ],
+  },
+  {
+    key: 'team', label: '团队 · 工作室 · 接力', lead: '交接不用长篇解释 · 把现场整包甩给队友,决策一起推演。',
+    cmds: [
+      { c: 'tinker handoff -m "..."', d: '现场打包甩给队友。', demo: [{ cmd: 'tinker handoff -m "登录做一半 · 你接 UI"', out: '📦 现场打包加密 · 发给队友了' }] },
+      { c: 'tinker feed @谁', d: '队友做到哪一眼看到。', demo: [{ cmd: 'tinker feed @daodao', out: 'ta 最近:改支付 · 卡在 webhook · 3 条进展' }] },
+    ],
+  },
+  {
+    key: 'trigger', label: '它自己会开口 · 触发器', lead: '懒得记、总忘记?装好它蹲在旁边,该记的替你记 · 只在真有事时才出声。',
+    cmds: [
+      { c: 'tinker hook install', d: '该记的它替你提。', demo: [{ cmd: 'tinker hook install', out: '✓ 装好了 · 之后 commit 自动提醒你记' }] },
+      { c: 'tinker mute today', d: '一键静音,不打扰。', demo: [{ cmd: 'tinker mute today', out: '今天静音了 · 明天自动恢复 · off 立即恢复' }] },
+    ],
+  },
+];
+
+function cliStart() {
+  // 登船 CTA:没登录 → 记下"登录后去安装页"再弹注册/登录;已登录 → 去入场仪式配环境
+  // 漏斗定论:登船 → cli介绍 → 注册 → 安装(setup) · 所以从 cli 介绍页注册进来落点是 setup 不是回 cli
+  if (!currentUser.handle) {
+    try { localStorage.setItem('tinker_pending', JSON.stringify({ kind: 'gotoSetup', returnTo: '#/setup' })); } catch (e) {}
+    openLogin('开始用 Tinker');
+    return;
+  }
+  showScreen('onboard');
+}
+function cliScrollToList() {
+  const el = document.getElementById('cli-groups');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 悬停命令卡 · 弹出小终端播那条命令自己的演示
+function cliDemoPlay(card) {
+  injectFxStyles();
+  const pop = card.querySelector('.cli-demo');
+  const body = card.querySelector('.cli-demo-body');
+  if (!pop || !body) return;
+  let lines = []; try { lines = JSON.parse(card.getAttribute('data-demo') || '[]'); } catch (e) {}
+  if (!lines.length) return;
+  pop.classList.add('show');
+  const g = ++_fxGen;   // 换代号 · 上一次没播完的自动停
+  typeInto(body, lines, g);
+}
+function cliDemoStop(card) {
+  const pop = card.querySelector('.cli-demo');
+  if (pop) pop.classList.remove('show');
+  _fxGen++;   // 停掉正在打的
+}
+
+// 命令卡点击即复制 · 命令行页最该有的
+function cliCopyFallback(txt, cb) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); cb && cb();
+  } catch (e) {}
+}
+function cliCopy(card) {
+  const code = card.querySelector('.cli-code');
+  const hint = card.querySelector('.cli-copy');
+  if (!code) return;
+  const txt = code.textContent.trim();
+  const done = () => {
+    if (!hint) return;
+    hint.textContent = '已复制 ✓'; hint.classList.add('done');
+    card.classList.add('copied');
+    setTimeout(() => { hint.textContent = '点击复制'; hint.classList.remove('done'); card.classList.remove('copied'); }, 1500);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done).catch(() => cliCopyFallback(txt, done));
+    } else { cliCopyFallback(txt, done); }
+  } catch (e) { cliCopyFallback(txt, done); }
+}
+
+// 顶部滚动进度条 (只在 cli 页生效 · 监听器只挂一次)
+let _cliProgressInit = false;
+function initCliProgress() {
+  if (_cliProgressInit) return;
+  _cliProgressInit = true;
+  const upd = () => {
+    const bar = document.getElementById('cli-progress-fill');
+    if (!bar || document.body.dataset.screen !== 'cli') return;
+    const st = window.scrollY || document.documentElement.scrollTop || 0;
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = (h > 0 ? Math.min(100, st / h * 100) : 0) + '%';
+  };
+  window.addEventListener('scroll', () => requestAnimationFrame(upd), { passive: true });
+  window.addEventListener('resize', () => requestAnimationFrame(upd), { passive: true });
+}
+
+function renderCli() {
+  const esc = escapeHtml;
+  const loggedIn = !!currentUser.handle;
+  const donts = LANDING_DONT.map(d => `<li>${esc(d)}</li>`).join('');
+  const groups = CLI_GROUPS.map(g => `
+    <div class="cli-group">
+      <div class="cli-group-head reveal">
+        <h3>${esc(g.label)}</h3>
+        <p>${esc(g.lead)}</p>
+      </div>
+      <div class="cli-cmd-list">
+        ${g.cmds.map((cmd, i) => `
+          <div class="cli-cmd reveal${loggedIn ? ' cli-cmd-copy' : ''}" style="transition-delay:${i * 95}ms" data-demo="${esc(JSON.stringify(cmd.demo || []))}" ${loggedIn ? 'onclick="cliCopy(this)"' : ''} onmouseenter="cliDemoPlay(this)" onmouseleave="cliDemoStop(this)">
+            <code class="cli-code">${esc(cmd.c)}</code>
+            ${loggedIn ? '<span class="cli-copy">点击复制</span>' : ''}
+            <p>${esc(cmd.d)}</p>
+            <div class="cli-demo"><div class="cli-demo-bar"><span></span><span></span><span></span></div><div class="cli-demo-body"></div></div>
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  document.getElementById('cli-content').innerHTML = `
+  <style>
+    #screen-cli .cli-page { max-width: 100%; }
+    #screen-cli .cli-code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; }
+    /* 登出态 = 营销漏斗页 · 藏报头走自己的极简顶栏;登录态 = 纯参考页 · 用应用报头(app-immersive) */
+    ${loggedIn ? '' : 'body[data-screen="cli"] .masthead { display: none; }'}
+    body[data-screen="cli"] main { max-width: 100% !important; padding: 0 !important; }
+    #screen-cli .cli-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 22px clamp(24px, 6vw, 72px); }
+    #screen-cli .cli-brand { font-family: Georgia, serif; font-size: 21px; color: #fff; font-weight: 600; letter-spacing: .5px; cursor: pointer; }
+    #screen-cli .cli-brand .cn { color: var(--vermilion); margin-left: 7px; }
+    #screen-cli .cli-topnav { display: flex; align-items: center; gap: 22px; }
+    #screen-cli .cli-topnav span { color: #d6d3d1; cursor: pointer; font-size: 14px; }
+    #screen-cli .cli-topnav span:hover { color: #fff; }
+    #screen-cli .cli-topnav span.active { color: var(--vermilion); }
+    #screen-cli .cli-topnav button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; padding: 8px 18px; font-size: 14px; cursor: pointer; font-family: Georgia, serif; transition: background .12s, border-color .12s; }
+    #screen-cli .cli-topnav button:hover { background: var(--vermilion); border-color: var(--vermilion); }
+    #screen-cli .cli-body { max-width: 1040px; margin: 0 auto; padding: 44px clamp(24px, 5vw, 40px) 76px; }
+    /* HERO · 深色终端 · 铺满 */
+    .cli-hero { background: var(--ink); color: var(--paper); padding: 96px 0 62px; margin: 0; position: relative; overflow: hidden; }
+    .cli-hero-inner { max-width: 1080px; width: 100%; margin: 0 auto; padding: 0 clamp(24px, 6vw, 72px); position: relative; z-index: 1; }
+    .cli-hero::after { content: ''; position: absolute; right: -60px; top: -60px; width: 260px; height: 260px; background: radial-gradient(circle, rgba(194,65,12,0.28), transparent 70%); pointer-events: none; }
+    .cli-hero-eyebrow { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 3px; color: var(--vermilion); font-weight: 700; }
+    .cli-hero-h1 { font-family: Georgia, 'Songti SC', serif; font-size: 40px; line-height: 1.1; margin: 12px 0 14px; color: #fff; letter-spacing: 1px; }
+    .cli-hero-sub { font-size: 15.5px; line-height: 1.85; color: #d6d3d1; max-width: 620px; }
+    .cli-term { background: #0f0d0c; border: 1px solid #2a2624; border-radius: 10px; margin: 24px 0 22px; overflow: hidden; }
+    .cli-term-bar { display: flex; gap: 7px; padding: 11px 14px; border-bottom: 1px solid #2a2624; }
+    .cli-term-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a3533; }
+    .cli-term-bar span:first-child { background: #c2410c; }
+    .cli-term-body { padding: 16px 18px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; line-height: 2.05; min-height: 152px; }
+    .cli-term-body .p { color: #6ee7a8; }
+    .cli-term-body .cmd { color: #f5f1e8; }
+    .cli-term-body .out { color: #78716c; padding-left: 16px; }
+    .cli-hero-cta { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-top: 4px; }
+    .cli-hero-cta button { background: var(--vermilion); color: #fff; border: none; border-radius: 8px; padding: 13px 26px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+    .cli-hero-cta button:hover { background: #a53809; transform: translateY(-1px); }
+    .cli-hero-cta .ghost { color: #d6d3d1; cursor: pointer; font-size: 14px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
+    .cli-hero-cta .ghost:hover { color: #fff; }
+    /* INSTALL band */
+    .cli-install-band { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 18px; margin-bottom: 34px; }
+    .cli-install-band .lab { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 2px; color: var(--vermilion); font-weight: 700; }
+    .cli-install-band .txt { font-size: 13.5px; color: var(--ink-soft); }
+    .cli-install-band .txt a { color: var(--vermilion); cursor: pointer; border-bottom: 1px solid var(--vermilion); }
+    /* SHADOW spotlight */
+    .cli-spot { border: 1.5px solid var(--ink); border-radius: 14px; padding: 30px 30px 26px; margin-bottom: 40px; background: linear-gradient(180deg, #fbf3ec 0%, var(--bg) 60%); }
+    .cli-spot-tag { display: inline-block; background: var(--vermilion); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 2px; padding: 3px 10px; border-radius: 5px; }
+    .cli-spot h2 { font-family: Georgia, 'Songti SC', serif; font-size: 27px; color: var(--ink); margin: 12px 0 8px; }
+    .cli-spot > p.lead { font-size: 15px; line-height: 1.8; color: var(--ink-soft); max-width: 640px; margin-bottom: 20px; }
+    .cli-spot-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .cli-spot-card { background: var(--bg); border: 1px solid var(--rule); border-radius: 9px; padding: 14px 15px; }
+    .cli-spot-card-tag { font-family: Georgia, serif; font-size: 13px; font-weight: 700; color: var(--vermilion); margin-bottom: 7px; }
+    .cli-spot-card .cli-code { display: block; background: var(--ink); color: #f5f1e8; padding: 7px 10px; border-radius: 6px; margin-bottom: 8px; overflow-x: auto; white-space: nowrap; }
+    .cli-spot-card p { font-size: 13px; line-height: 1.65; color: var(--ink-soft); }
+    /* GROUPS */
+    .cli-groups-title { font-family: Georgia, serif; font-size: 15px; color: var(--sepia); letter-spacing: 1px; margin: 0 0 20px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
+    .cli-group { margin-bottom: 34px; }
+    .cli-group-head h3 { font-family: Georgia, 'Songti SC', serif; font-size: 20px; color: var(--ink); margin-bottom: 4px; }
+    .cli-group-head p { font-size: 13.5px; color: var(--sepia); line-height: 1.65; margin-bottom: 14px; }
+    .cli-cmd-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .cli-cmd { position: relative; border: 1px solid var(--rule); border-radius: 9px; padding: 13px 15px 13px 17px; background: var(--paper); transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .cli-cmd::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--vermilion); transform: scaleY(0); transform-origin: top; transition: transform .2s cubic-bezier(.2,.7,.2,1); border-radius: 9px 0 0 9px; }
+    /* 悬停演示小终端 · 浮在卡片下方 · 不挤动布局 */
+    #screen-cli .cli-demo { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20; background: #0f0d0c; border: 1px solid #2a2624; border-radius: 10px; overflow: hidden; opacity: 0; transform: translateY(-6px) scale(.98); transform-origin: top; transition: opacity .18s, transform .18s; pointer-events: none; box-shadow: 0 18px 44px -14px rgba(0,0,0,.55); }
+    #screen-cli .cli-demo.show { opacity: 1; transform: none; }
+    #screen-cli .cli-demo-bar { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid #2a2624; }
+    #screen-cli .cli-demo-bar span { width: 9px; height: 9px; border-radius: 50%; background: #3a3533; }
+    #screen-cli .cli-demo-bar span:first-child { background: #c2410c; }
+    #screen-cli .cli-demo-body { padding: 12px 14px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.95; min-height: 66px; }
+    #screen-cli .cli-demo-body .p { color: #6ee7a8; }
+    #screen-cli .cli-demo-body .cmd { color: #f5f1e8; }
+    #screen-cli .cli-demo-body .out { color: #9a928f; padding-left: 12px; }
+    .cli-cmd:hover { border-color: var(--vermilion); transform: translateY(-2px); }
+    .cli-cmd:hover::before { transform: scaleY(1); }
+    .cli-cmd .cli-code { display: block; color: var(--vermilion); font-weight: 600; margin-bottom: 6px; overflow-x: auto; white-space: nowrap; }
+    .cli-cmd p { font-size: 13px; line-height: 1.65; color: var(--ink-soft); }
+    /* 登录态参考页 · 每条命令点一下复制 */
+    .cli-cmd-copy { cursor: pointer; }
+    .cli-cmd-copy .cli-copy { position: absolute; top: 11px; right: 13px; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; letter-spacing: .05em; color: var(--sepia); opacity: 0; transform: translateY(-2px); transition: opacity .15s, transform .15s, color .15s; pointer-events: none; }
+    .cli-cmd-copy:hover .cli-copy { opacity: 1; transform: none; }
+    .cli-cmd-copy.copied { border-color: var(--moss); }
+    .cli-cmd-copy.copied .cli-copy { opacity: 1; transform: none; color: var(--moss); }
+    .cli-cmd-copy.copied .cli-copy.done { color: var(--moss); }
+    .cli-cmd-copy.copied::before { background: var(--moss); transform: scaleY(1); }
+    /* 顶部滚动进度条 */
+    #screen-cli .cli-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; background: transparent; pointer-events: none; }
+    #screen-cli .cli-progress i { display: block; height: 100%; width: 0; background: var(--vermilion); box-shadow: 0 0 8px rgba(194,65,12,.6); transition: width .12s linear; }
+    /* hero 进场 · 逐级淡入上浮 */
+    @keyframes cliFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    #screen-cli .cli-hero-inner > * { animation: cliFadeUp .6s cubic-bezier(.2,.7,.2,1) both; }
+    #screen-cli .cli-hero-inner > *:nth-child(1) { animation-delay: 0s; }
+    #screen-cli .cli-hero-inner > *:nth-child(2) { animation-delay: .07s; }
+    #screen-cli .cli-hero-inner > *:nth-child(3) { animation-delay: .14s; }
+    #screen-cli .cli-hero-inner > *:nth-child(4) { animation-delay: .21s; }
+    #screen-cli .cli-hero-inner > *:nth-child(5) { animation-delay: .28s; }
+    @media (prefers-reduced-motion: reduce) { #screen-cli .cli-hero-inner > * { animation: none; } }
+    /* hero 光晕呼吸 */
+    @keyframes glowBreathe { 0%,100% { opacity: .75; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+    #screen-cli .cli-hero::after { animation: glowBreathe 7s ease-in-out infinite; }
+    /* 按钮流光 · 悬停高光斜扫 */
+    #screen-cli .cli-hero-cta button, #screen-cli .cli-cta-band button { position: relative; overflow: hidden; }
+    #screen-cli .cli-hero-cta button::after, #screen-cli .cli-cta-band button::after { content: ''; position: absolute; top: 0; left: -120%; width: 55%; height: 100%; background: linear-gradient(100deg, transparent, rgba(255,255,255,.28), transparent); transform: skewX(-18deg); transition: left .6s cubic-bezier(.2,.7,.2,1); pointer-events: none; }
+    #screen-cli .cli-hero-cta button:hover::after, #screen-cli .cli-cta-band button:hover::after { left: 140%; }
+    /* 组标题下划线 · 滚到时画出来 */
+    #screen-cli .cli-group-head h3 { position: relative; display: inline-block; padding-bottom: 7px; }
+    #screen-cli .cli-group-head h3::after { content: ''; position: absolute; left: 0; bottom: 0; height: 2px; width: 34px; background: var(--vermilion); transform: scaleX(0); transform-origin: left; transition: transform .55s .1s cubic-bezier(.2,.7,.2,1); }
+    #screen-cli .cli-group-head.in h3::after { transform: scaleX(1); }
+    /* 概览卡徽标 · 悬停填色 */
+    #screen-cli .cli-pillar .cli-pillar-k { transition: background .16s, color .16s; }
+    #screen-cli .cli-pillar:hover .cli-pillar-k { background: var(--vermilion); color: #fff; }
+    /* 使用说明文字动效 · 命令码左滑入 · 说明文字从左往右擦出 (base 态用 body.fx-on 门控 · JS 没跑照样可见) */
+    /* 卡片容器慢一点 · 更从容 */
+    body.fx-on #screen-cli .cli-cmd.reveal { transition-duration: .8s !important; }
+    /* 命令码 · 轻浮入 (先) */
+    body.fx-on #screen-cli .cli-cmd.reveal .cli-code { opacity: 0; transform: translateY(6px); transition: opacity .7s cubic-bezier(.22,.61,.36,1), transform .7s cubic-bezier(.22,.61,.36,1); }
+    #screen-cli .cli-cmd.in .cli-code { opacity: 1 !important; transform: none !important; }
+    /* 说明文字 · 从"虚"到"实"地浮现 (后 · 慢) */
+    body.fx-on #screen-cli .cli-cmd.reveal p { opacity: 0; filter: blur(7px); transform: translateY(8px); transition: opacity .9s cubic-bezier(.22,.61,.36,1) .2s, filter .9s cubic-bezier(.22,.61,.36,1) .2s, transform .9s cubic-bezier(.22,.61,.36,1) .2s; }
+    #screen-cli .cli-cmd.in p { opacity: 1 !important; filter: blur(0) !important; transform: none !important; }
+    body.fx-on #screen-cli .cli-group-head.reveal p,
+    body.fx-on #screen-cli .cli-pillar.reveal p { opacity: 0; filter: blur(8px); transform: translateY(9px); transition: opacity 1s cubic-bezier(.22,.61,.36,1) .22s, filter 1s cubic-bezier(.22,.61,.36,1) .22s, transform 1s cubic-bezier(.22,.61,.36,1) .22s; }
+    #screen-cli .cli-group-head.in p,
+    #screen-cli .cli-pillar.in p { opacity: 1 !important; filter: blur(0) !important; transform: none !important; }
+    @media (prefers-reduced-motion: reduce) {
+      #screen-cli .cli-hero::after { animation: none; }
+      body.fx-on #screen-cli .cli-cmd.reveal .cli-code,
+      body.fx-on #screen-cli .cli-cmd.reveal p,
+      body.fx-on #screen-cli .cli-group-head.reveal p,
+      body.fx-on #screen-cli .cli-pillar.reveal p { opacity: 1 !important; transform: none !important; filter: none !important; }
+    }
+    .cli-foot { text-align: center; color: var(--sepia); font-size: 13px; margin: 6px 0 10px; }
+    .cli-foot .cli-code { color: var(--ink); }
+    /* 功能概览 · 三件事 (从登船页搬过来) */
+    .cli-overview { margin-bottom: 42px; }
+    .cli-pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .cli-pillar { border: 1px solid var(--rule); border-radius: 12px; padding: 20px 18px; background: var(--paper); transition: border-color .15s, transform .15s, box-shadow .15s; }
+    .cli-pillar:hover { border-color: var(--vermilion); transform: translateY(-2px); }
+    .cli-pillar-k { display: inline-block; font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 2px; color: var(--vermilion); font-weight: 700; border: 1px solid var(--vermilion); border-radius: 5px; padding: 2px 9px; }
+    .cli-pillar h3 { font-family: Georgia, 'Songti SC', serif; font-size: 19px; color: var(--ink); margin: 13px 0 8px; line-height: 1.3; }
+    .cli-pillar p { font-size: 13px; line-height: 1.7; color: var(--ink-soft); }
+    /* 不做什么 */
+    .cli-dont { margin: 40px 0 6px; }
+    .cli-dont ul { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 24px; }
+    .cli-dont li { font-size: 14px; color: var(--ink-soft); padding-left: 22px; position: relative; }
+    .cli-dont li::before { content: '×'; position: absolute; left: 0; color: var(--vermilion); font-weight: 700; }
+    .cli-dont-note { margin-top: 16px; font-size: 14px; color: var(--sepia); font-style: italic; }
+    /* 收尾 CTA */
+    .cli-cta-band { background: var(--ink); color: var(--paper); border-radius: 14px; padding: 38px 32px; text-align: center; margin: 40px 0 8px; }
+    .cli-cta-band h2 { font-family: Georgia, 'Songti SC', serif; font-size: 26px; color: #fff; margin-bottom: 10px; }
+    .cli-cta-band p { color: #a8a29e; font-size: 14px; margin-bottom: 20px; }
+    .cli-cta-band button { background: var(--vermilion); color: #fff; border: none; border-radius: 9px; padding: 14px 32px; font-size: 15.5px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+    .cli-cta-band button:hover { background: #a53809; transform: translateY(-1px); }
+    @media (max-width: 640px) {
+      .cli-hero { padding: 78px 0 44px; }
+      .cli-hero-h1 { font-size: 31px; }
+      .cli-spot-grid, .cli-cmd-list, .cli-pillars, .cli-dont ul { grid-template-columns: 1fr; }
+    }
+  </style>
+  ${loggedIn ? `
+  <div class="app-hero-band">
+    ${appHero({ eyebrow: '命令行 · cli', title: '捣鼓的命令<span class="accent">都在这</span>', sub: '跑 tinker 的全部命令 · 以后加新命令这页会实时更新 · 每条都支持 --json 给你的 AI 读', termCap: '常用几条', termLines: CLI_REF_TERM })}
+  </div>
+  <div class="app-body cli-ref-body">
+    <div id="cli-groups">
+      <div class="cli-groups-title">命令 · 挑你要的用</div>
+      ${groups}
+    </div>
+    <p class="cli-foot">完整命令随时 <code class="cli-code">tinker --help</code> · 每条都支持 <code class="cli-code">--json</code> 给你的 AI 读 · 想重装钥匙看 <span class="cli-ref-link" onclick="showScreen('setup')">上手页 →</span></p>
+  </div>
+  ` : `
+  <div class="cli-page">
+    <div class="cli-progress"><i id="cli-progress-fill"></i></div>
+    <nav class="cli-topbar">
+      <div class="cli-brand" onclick="goHome()">Tinker<span class="cn">捣鼓</span></div>
+      <div class="cli-topnav">
+        <span onclick="goHome()">首页</span>
+        <span onclick="showScreen('methods')">方法库</span>
+        <span onclick="showScreen('feed')">逛逛工坊</span>
+        ${currentUser.handle ? `<button onclick="goHome()">回工坊 →</button>` : `<button onclick="cliStart()">登录 / 注册</button>`}
+      </div>
+    </nav>
+    <div class="app-hero-band cli-guest-hero">
+      ${appHero({ eyebrow: 'TINKER CLI · 命令行', title: '发动机<span class="accent">在命令行</span>', sub: '网页你能手动记、手动沉淀。但真正干活的,是一个跟你一起写代码的 AI 队友。你照常做东西,它替你把该记的记下、把长活干完、把方法借来借去。', termCap: '在你的终端里 · 它长这样', termLines: CLI_TERM, cta: '<button onclick="cliStart()">注册,开始用 →</button><span class="ghost" onclick="cliScrollToList()">先看它能干什么 ↓</span>' })}
+    </div>
+
+    <div class="cli-body">
+    <div class="cli-install-band reveal">
+      <span class="lab">怎么装</span>
+      <span class="txt">现在还是 alpha,装法糙一点,<a onclick="showScreen('workshop','daodao')">@daodao 的工坊</a>里有步骤。等发到 npm,就一行命令的事。</span>
+    </div>
+
+    <div id="cli-groups">
+      <div class="cli-groups-title">命令 · 挑你要的用</div>
+      ${groups}
+    </div>
+
+    <div class="cli-dont reveal">
+      <div class="cli-groups-title">这里不做什么</div>
+      <ul>${donts}</ul>
+      <p class="cli-dont-note">慢一点,真一点。宁可这里空,也不刷数据。</p>
+    </div>
+
+    <div class="cli-cta-band reveal">
+      <h2>来捣鼓点东西?</h2>
+      <p>邮箱一次性链接登录,五分钟内点开就进。不用记密码。</p>
+      <button onclick="cliStart()">免费注册 →</button>
+    </div>
+
+    <p class="cli-foot">注册装好后,这些命令就能直接跑 · 完整命令随时 <code class="cli-code">tinker --help</code>,每条都支持 <code class="cli-code">--json</code> 给你的 AI 读。</p>
+    </div>
+  </div>
+  `}`;
+  armFx(document.getElementById('cli-content'));
+  if (!loggedIn) initCliProgress();
+  appHeroReplay();
+}
+
+// ============ 真·CLI 安装 / 上手页 · 注册后的落点 (已登录) ============
+// 三步进度 · 存 localStorage · 刷新回来还在
+// 进度按账号存 · 换账号自动看到干净的三步(新账号得用自己的钥匙重登 CLI · 配置只认一个账号)
+// 装 CLI (npm link) 其实是这台机器级别的 · 但生成钥匙 / 登录是账号级别 · 整体按账号存最不会误导
+function setupDoneKey() { return 'tinker_setup_done:' + (currentUser.handle || '_anon'); }
+function setupGetDone() { try { return JSON.parse(localStorage.getItem(setupDoneKey()) || '[]'); } catch (e) { return []; } }
+function setupSaveDone(arr) { try { localStorage.setItem(setupDoneKey(), JSON.stringify(arr)); } catch (e) {} }
+function setupMark(n, on) {
+  let arr = setupGetDone();
+  if (on) { if (!arr.includes(n)) arr.push(n); } else { arr = arr.filter(x => x !== n); }
+  setupSaveDone(arr); setupApplyDone();
+}
+function setupToggle(n) { setupMark(n, !setupGetDone().includes(n)); }
+function setupApplyDone() {
+  const arr = setupGetDone();
+  [1, 2, 3].forEach(n => {
+    const el = document.getElementById('setup-step-' + n);
+    if (!el) return;
+    if (arr.includes(n)) { el.classList.add('done'); el.textContent = '✓'; }
+    else { el.classList.remove('done'); el.textContent = String(n); }
+  });
+  const done = [1, 2, 3].filter(n => arr.includes(n)).length;
+  const prog = document.getElementById('setup-progress');
+  if (prog) prog.textContent = done + ' / 3 完成';
+  const all = document.getElementById('setup-alldone');
+  if (all) all.style.display = done === 3 ? 'block' : 'none';
+}
+// 打勾进度存在这台浏览器的 localStorage · 不绑账号 · 换新机器 / 想重走一遍就清掉
+function setupResetProgress() {
+  setupSaveDone([]);
+  setupApplyDone();
+  showToast('这台机器的三步进度清空了 · 可以重走一遍');
+}
+async function setupGenKey(btn) {
+  if (!currentUser.handle) { openLogin('生成钥匙'); return; }
+  try {
+    const created = await apiCreateToken('CLI · 上手', 'light');
+    document.getElementById('setup-key-value').textContent = created.token;
+    document.getElementById('setup-key-out').classList.remove('hidden');
+    if (btn) btn.textContent = '再生成一把';
+    setupMark(1, true);
+    showToast('钥匙生成了 · 复制存好 · 关掉就看不见了');
+  } catch (e) { showToast(e.message || '生成失败'); }
+}
+function setupCopyKey() {
+  const v = (document.getElementById('setup-key-value') || {}).textContent || '';
+  if (v) safeCopy(v, '钥匙复制了 · 存好 · 关掉就看不见了', '复制失败 · 手动选中复制');
+}
+function setupCopyText(btn, step) {
+  const code = btn.parentElement.querySelector('code');
+  const t = code ? code.textContent.trim() : '';
+  if (t) safeCopy(t, '复制了', '复制失败 · 手动选中复制');
+  if (step) setupMark(step, true);
+}
+
+// "装好之后日常长这样" 演示 · 悬停重播
+const SETUP_DEMO = [
+  { cmd: 'git commit -m "登录页适配好了"', out: 'tinker › 像修好个卡了很久的 bug · 要记一笔吗?' },
+  { cmd: 'tinker push -m "登录页通了 · 是 cookie samesite 的坑"', out: '✓ 记下了 · 进了你的工坊 · 你的 AI 以后读得到' },
+];
+function setupPlayDemo() {
+  injectFxStyles();
+  const el = document.getElementById('setup-demo-body');
+  if (!el) return;
+  const g = ++_fxGen;   // 每次播放换代号 · 上一次没播完的自动停
+  typeInto(el, SETUP_DEMO, g);
+}
+
+function renderSetup() {
+  const serverUrl = window.location.origin;
+  const esc = escapeHtml;
+  const topCta = currentUser.handle
+    ? `<button onclick="showScreen('workshop', currentUser.handle)">我的工坊 →</button>`
+    : `<button onclick="cliStart()">登录 / 注册</button>`;
+  document.getElementById('setup-content').innerHTML = `
+  <style>
+    @keyframes cliFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    @keyframes glowBreathe { 0%,100% { opacity: .75; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+    /* 跟登船/说明页一套 · 藏报头 · 铺满 */
+    body[data-screen="setup"] .masthead { display: none; }
+    body[data-screen="setup"] main { max-width: 100% !important; padding: 0 !important; }
+    #screen-setup .setup-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: 22px clamp(24px, 6vw, 72px); }
+    #screen-setup .setup-brand { font-family: Georgia, serif; font-size: 21px; color: #fff; font-weight: 600; letter-spacing: .5px; cursor: pointer; }
+    #screen-setup .setup-brand .cn { color: var(--vermilion); margin-left: 7px; }
+    #screen-setup .setup-topnav { display: flex; align-items: center; gap: 22px; }
+    #screen-setup .setup-topnav span { color: #d6d3d1; cursor: pointer; font-size: 14px; }
+    #screen-setup .setup-topnav span:hover { color: #fff; }
+    #screen-setup .setup-topnav button { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; padding: 8px 18px; font-size: 14px; cursor: pointer; font-family: Georgia, serif; transition: background .12s, border-color .12s; }
+    #screen-setup .setup-topnav button:hover { background: var(--vermilion); border-color: var(--vermilion); }
+    /* HERO · 深色 · 左标题 右演示 */
+    #screen-setup .setup-hero { background: var(--ink); color: var(--paper); padding: 104px 0 62px; position: relative; overflow: hidden; }
+    #screen-setup .setup-hero::after { content: ''; position: absolute; right: -70px; top: -60px; width: 280px; height: 280px; background: radial-gradient(circle, rgba(194,65,12,.28), transparent 70%); pointer-events: none; animation: glowBreathe 7s ease-in-out infinite; }
+    #screen-setup .setup-hero-inner { max-width: 1080px; width: 100%; margin: 0 auto; padding: 0 clamp(24px, 6vw, 72px); position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 56px); align-items: center; }
+    #screen-setup .setup-eyebrow { font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 3px; color: var(--vermilion); font-weight: 700; }
+    #screen-setup .setup-progress { font-family: ui-monospace, Menlo, monospace; font-size: 11px; letter-spacing: 1px; color: #d6d3d1; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 2px 10px; margin-left: 8px; }
+    #screen-setup .setup-hero h1 { font-family: Georgia, 'Songti SC', serif; font-size: 40px; line-height: 1.1; color: #fff; margin: 14px 0 16px; letter-spacing: 1px; }
+    #screen-setup .setup-hero h1 .accent { color: var(--vermilion); }
+    #screen-setup .setup-hero-copy > p { font-size: 15.5px; line-height: 1.85; color: #d6d3d1; }
+    #screen-setup .setup-hero-cue { display: inline-block; margin-top: 22px; color: #d6d3d1; cursor: pointer; font-size: 14px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
+    #screen-setup .setup-hero-cue:hover { color: #fff; }
+    #screen-setup .setup-hero-copy > * { animation: cliFadeUp .6s cubic-bezier(.2,.7,.2,1) both; }
+    #screen-setup .setup-hero-copy > *:nth-child(2) { animation-delay: .07s; }
+    #screen-setup .setup-hero-copy > *:nth-child(3) { animation-delay: .14s; }
+    #screen-setup .setup-hero-copy > *:nth-child(4) { animation-delay: .21s; }
+    #screen-setup .setup-hero-demo { animation: cliFadeUp .7s .28s cubic-bezier(.2,.7,.2,1) both; }
+    #screen-setup .setup-demo-cap { font-size: 12.5px; color: #a8a29e; margin-bottom: 8px; }
+    #screen-setup .setup-demo-hint { color: #78716c; }
+    #screen-setup .setup-term { background: #0f0d0c; border: 1px solid #2a2624; border-radius: 10px; overflow: hidden; }
+    #screen-setup .setup-term-bar { display: flex; gap: 7px; padding: 10px 13px; border-bottom: 1px solid #2a2624; }
+    #screen-setup .setup-term-bar span { width: 10px; height: 10px; border-radius: 50%; background: #3a3533; }
+    #screen-setup .setup-term-bar span:first-child { background: #c2410c; }
+    #screen-setup .setup-term-body { padding: 14px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 2; min-height: 128px; }
+    #screen-setup .setup-term-body .p { color: #6ee7a8; }
+    #screen-setup .setup-term-body .cmd { color: #f5f1e8; }
+    #screen-setup .setup-term-body .out { color: #9a928f; padding-left: 14px; }
+    /* BODY · 浅色 · 三步卡 */
+    #screen-setup .setup-main { max-width: 820px; margin: 0 auto; padding: 44px clamp(24px, 5vw, 40px) 80px; }
+    #screen-setup .setup-step { display: grid; grid-template-columns: 40px 1fr; gap: 18px; background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 22px 24px; margin-bottom: 14px; transition: border-color .15s, box-shadow .15s; }
+    #screen-setup .setup-step:hover { border-color: var(--sepia-light); box-shadow: 0 8px 26px -16px rgba(28,25,23,.3); }
+    #screen-setup .setup-num { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: #fff; font-family: Georgia, serif; font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background .18s, transform .12s; }
+    #screen-setup .setup-num:hover { transform: scale(1.08); }
+    #screen-setup .setup-num.done { background: var(--moss); }
+    #screen-setup .setup-body h2 { font-family: Georgia, 'Songti SC', serif; font-size: 20px; color: var(--ink); margin-bottom: 8px; }
+    #screen-setup .setup-body > p { font-size: 14px; line-height: 1.7; color: var(--ink-soft); margin-bottom: 12px; }
+    #screen-setup .setup-note { font-size: 12.5px; color: var(--sepia); margin-top: 8px; line-height: 1.6; }
+    #screen-setup .setup-what { font-size: 13.5px; color: var(--ink); font-weight: 600; margin: 4px 0 10px; padding-left: 12px; border-left: 3px solid var(--vermilion); line-height: 1.55; }
+    #screen-setup .setup-key button, #screen-setup .setup-foot button { background: var(--vermilion); color: #fff; border: none; border-radius: 8px; padding: 11px 22px; font-size: 14.5px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: background .12s, transform .12s; }
+    #screen-setup .setup-key button:hover, #screen-setup .setup-foot button:hover { background: #a53809; transform: translateY(-1px); }
+    #screen-setup .setup-key-out { margin-top: 14px; background: var(--ink); border-radius: 9px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+    #screen-setup .setup-key-out code { flex: 1; color: #6ee7a8; font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all; user-select: all; }
+    #screen-setup .setup-copy { flex: none; color: #d6d3d1; cursor: pointer; font-size: 12.5px; border: 1px solid #3a3533; border-radius: 6px; padding: 5px 10px; white-space: nowrap; transition: background .12s, color .12s; }
+    #screen-setup .setup-copy:hover { background: var(--vermilion); border-color: var(--vermilion); color: #fff; }
+    #screen-setup .setup-cmd { position: relative; background: var(--ink); border-radius: 9px; padding: 12px 14px; margin: 8px 0; display: flex; align-items: flex-start; gap: 12px; }
+    #screen-setup .setup-cmd code { flex: 1; color: #f5f1e8; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
+    #screen-setup .setup-daily { margin-top: 30px; padding-top: 28px; border-top: 1px solid var(--rule); }
+    #screen-setup .setup-daily-title { font-family: Georgia, 'Songti SC', serif; font-size: 19px; color: var(--ink); margin-bottom: 4px; }
+    #screen-setup .setup-daily-sub { font-size: 13.5px; color: var(--sepia); margin-bottom: 16px; }
+    #screen-setup .setup-daily-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    #screen-setup .setup-daily-card { border: 1px solid var(--rule); border-radius: 9px; padding: 13px 15px; background: var(--paper); transition: border-color .12s, transform .12s; }
+    #screen-setup .setup-daily-card:hover { border-color: var(--vermilion); transform: translateY(-2px); }
+    #screen-setup .setup-daily-card code { display: block; color: var(--vermilion); font-weight: 600; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; margin-bottom: 5px; }
+    #screen-setup .setup-daily-card p { font-size: 12.5px; line-height: 1.6; color: var(--ink-soft); }
+    #screen-setup .setup-daily-more { display: inline-block; margin-top: 16px; color: var(--vermilion); cursor: pointer; font-size: 14px; border-bottom: 1px dotted var(--vermilion); padding-bottom: 2px; }
+    #screen-setup .setup-foot { text-align: center; margin-top: 34px; padding-top: 28px; border-top: 1px solid var(--rule); }
+    #screen-setup .setup-foot p { font-family: Georgia, 'Songti SC', serif; font-size: 18px; color: var(--ink); margin-bottom: 14px; }
+    #screen-setup .setup-foot .ghost { display: block; margin-top: 14px; color: var(--vermilion); cursor: pointer; font-size: 14px; }
+    #screen-setup .setup-reset { margin-top: 22px; }
+    #screen-setup .setup-reset span { color: var(--sepia); cursor: pointer; font-size: 12px; border-bottom: 1px dotted var(--sepia-light); padding-bottom: 1px; }
+    #screen-setup .setup-reset span:hover { color: var(--ink-soft); }
+    #screen-setup .setup-alldone { font-family: Georgia, 'Songti SC', serif; font-size: 15px; color: var(--moss); margin-bottom: 14px; }
+    #screen-setup .hidden { display: none; }
+    @media (max-width: 760px) {
+      #screen-setup .setup-hero-inner { grid-template-columns: 1fr; }
+      #screen-setup .setup-hero h1 { font-size: 31px; }
+      #screen-setup .setup-daily-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <div class="setup">
+    <nav class="setup-topbar">
+      <div class="setup-brand" onclick="goHome()">Tinker<span class="cn">捣鼓</span></div>
+      <div class="setup-topnav">
+        <span onclick="showScreen('cli')">命令行</span>
+        <span onclick="showScreen('methods')">方法库</span>
+        ${topCta}
+      </div>
+    </nav>
+
+    <div class="setup-hero">
+      <div class="setup-hero-inner">
+        <div class="setup-hero-copy">
+          <div class="setup-eyebrow">开始上手 <span id="setup-progress" class="setup-progress">0 / 3 完成</span></div>
+          <h1>装上 Tinker,<br>三步<span class="accent">开跑</span></h1>
+          <p>你已经注册好了${currentUser.handle ? ' · 欢迎 @' + esc(currentUser.handle) : ''}。跟下面三步把 tinker 装进终端 —— 之后你写代码,它就在旁边帮你记。</p>
+          <span class="setup-hero-cue" onclick="document.querySelector('#screen-setup .setup-main').scrollIntoView({behavior:'smooth'})">三步开始 ↓</span>
+        </div>
+        <div class="setup-hero-demo" onmouseenter="setupPlayDemo()">
+          <div class="setup-demo-cap">装好之后,日常长这样 <span class="setup-demo-hint">· 悬停重播</span></div>
+          <div class="setup-term">
+            <div class="setup-term-bar"><span></span><span></span><span></span></div>
+            <div class="setup-term-body" id="setup-demo-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="setup-main">
+      <div class="setup-step">
+        <div class="setup-num" id="setup-step-1" onclick="setupToggle(1)" title="点这里标记这步完成">1</div>
+        <div class="setup-body">
+          <h2>拿到你的钥匙</h2>
+          <div class="setup-what">作用:让终端里的 tinker 认得你 · 相当于这台机器的通行证</div>
+          <p>生成一次、复制存好 —— 关掉页面就看不见了,丢了再生成一把即可。</p>
+          <div class="setup-key">
+            <button onclick="setupGenKey(this)">生成钥匙</button>
+            <div id="setup-key-out" class="setup-key-out hidden">
+              <code id="setup-key-value"></code>
+              <span class="setup-copy" onclick="setupCopyKey()">复制</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="setup-step">
+        <div class="setup-num" id="setup-step-2" onclick="setupToggle(2)" title="点这里标记这步完成">2</div>
+        <div class="setup-body">
+          <h2>装上 tinker</h2>
+          <div class="setup-what">作用:装好后,你终端里就多了 tinker 这个命令</div>
+          <p>现在是 alpha,还没上 npm,先手动装一次(以后发到 npm 就是一行命令的事)。在终端里跑:</p>
+          <div class="setup-cmd">
+            <code>git clone https://github.com/Hldao/tinker.git ~/tinker-src
+cd ~/tinker-src/cli && npm install && npm link</code>
+            <span class="setup-copy" onclick="setupCopyText(this, 2)">复制</span>
+          </div>
+          <p class="setup-note">macOS / Linux 上 npm link 可能要 sudo,看你环境。装好后终端里敲 tinker 有反应就成了。</p>
+        </div>
+      </div>
+
+      <div class="setup-step">
+        <div class="setup-num" id="setup-step-3" onclick="setupToggle(3)" title="点这里标记这步完成">3</div>
+        <div class="setup-body">
+          <h2>登录 + 配好</h2>
+          <div class="setup-what">把钥匙配进这台机器 · 让它连上你的工坊(像手机第一次登账号)</div>
+          <div class="setup-cmd">
+            <code>tinker login</code>
+            <span class="setup-copy" onclick="setupCopyText(this)">复制</span>
+          </div>
+          <p class="setup-note">按提示填服务器地址 ${esc(serverUrl)},钥匙粘第 1 步生成的那把。配一次,以后不用再登。</p>
+          <div class="setup-what">在你当前项目里配好 · 提交代码时自动提醒你记一笔,AI 协作说明写进项目</div>
+          <div class="setup-cmd">
+            <code>tinker onboard</code>
+            <span class="setup-copy" onclick="setupCopyText(this, 3)">复制</span>
+          </div>
+          <p class="setup-note">配完这步,你正常写代码,它就在旁边帮你记了。不想手敲?把上面「复制」的命令整段发给你的 AI(Claude Code / Cursor),让 ta 照着装。</p>
+        </div>
+      </div>
+
+      <div class="setup-daily">
+        <div class="setup-daily-title">配好之后 · 你平时就用这几条</div>
+        <div class="setup-daily-sub">不用背命令 · 记住这四条,80% 的日常就够了。</div>
+        <div class="setup-daily-grid">
+          <div class="setup-daily-card"><code>tinker push -m "..."</code><p>随手把一条进展、或"为什么这么选"钉下来 · 过几个月还回得去。</p></div>
+          <div class="setup-daily-card"><code>tinker borrow "关键词"</code><p>缺方法时 · 搜别人跑通的整段拉进你的 AI,别从零查。</p></div>
+          <div class="setup-daily-card"><code>tinker ship -m "..."</code><p>完工上线 · 自动截图当封面,进陈列馆。</p></div>
+          <div class="setup-daily-card"><code>tinker recent --limit 10</code><p>三个月后 · 把当时怎么想的整段找回来,喂回你的 AI。</p></div>
+        </div>
+        <span class="setup-daily-more" onclick="showScreen('cli')">全部命令 · 看命令行页 →</span>
+      </div>
+
+      <div class="setup-foot">
+        <div id="setup-alldone" class="setup-alldone" style="display:none;">三步都齐了 · 去工坊开跑 🎉</div>
+        <p>装好了?</p>
+        <button onclick="showScreen('workshop', currentUser.handle || '')">去我的工坊 →</button>
+        <span class="ghost" onclick="showScreen('cli')">再看看命令能干什么 →</span>
+        <div class="setup-reset"><span onclick="setupResetProgress()">换了机器 / 想重走一遍?清掉这台的打勾进度</span></div>
+      </div>
+    </div>
+  </div>`;
+  injectFxStyles();
+  setupApplyDone();
+  setupPlayDemo();   // 进页自动播一次 · 之后悬停重播
 }
 
 function renderOnboard() {
@@ -9326,6 +10388,40 @@ function toggleDiscipline(d) {
   methodsLibraryState.query = (methodsLibraryState.query === '#' + d) ? '' : '#' + d;
   renderMethodsLibrary();
 }
+// 通用顶部终端 · 每页顶上放一个 · 演该页功能。cmds: [{c:'命令', flag:'--x', o:'输出HTML'}]
+function pageTermHero(title, cmds) {
+  const body = cmds.map(c =>
+    `<div class="pt-run"><span class="pt-p">$</span> ${escapeHtml(c.c)}${c.flag ? ' <span class="pt-flag">' + escapeHtml(c.flag) + '</span>' : ''}</div>` +
+    (c.o ? `<div class="pt-out">${c.o}</div>` : '')
+  ).join('') + `<div class="pt-run"><span class="pt-p">$</span> <span class="pt-cur"></span></div>`;
+  return `<div class="page-term"><div class="pt-bar"><span></span><span></span><span></span><em class="pt-title">${escapeHtml(title)}</em></div><div class="pt-body">${body}</div></div>`;
+}
+
+// setup 那套两栏 hero · 左标题右会打字终端 · 全站复用。opts:{eyebrow, title(HTML), sub(HTML), termCap, termLines:[{cmd,out}]}
+function appHero(opts) {
+  const data = escapeHtml(JSON.stringify(opts.termLines || []));
+  return `
+    <div class="app-hero-inner">
+      <div class="app-hero-copy">
+        <div class="app-eyebrow">${escapeHtml(opts.eyebrow || '')}</div>
+        <h1 class="app-htitle">${opts.title || ''}</h1>
+        ${opts.sub ? `<p class="app-hsub">${opts.sub}</p>` : ''}
+        ${opts.cta ? `<div class="app-hero-cta">${opts.cta}</div>` : ''}
+      </div>
+      <div class="app-hero-demo">
+        <div class="aht-cap">${escapeHtml(opts.termCap || '')}</div>
+        <div class="aht"><div class="aht-bar"><span></span><span></span><span></span></div><div class="aht-body" id="app-hero-term" data-term="${data}"></div></div>
+      </div>
+    </div>`;
+}
+function appHeroReplay() {
+  injectFxStyles();
+  const el = document.querySelector('.screen.active .aht-body[data-term]') || document.getElementById('app-hero-term');
+  if (!el) return;
+  let lines = []; try { lines = JSON.parse(el.getAttribute('data-term') || '[]'); } catch (e) {}
+  if (lines.length) typeInto(el, lines, ++_fxGen);
+}
+
 async function renderMethodsLibrary(initialQuery, listOnly) {
   if (initialQuery !== undefined) methodsLibraryState.query = initialQuery;
   const root = document.getElementById('methods-library-content');
@@ -9524,13 +10620,25 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
     `<span class="methods-mode-tab ${methodsLibraryState.mode === key ? 'active' : ''}" onclick="methodsLibraryState.mode='${key}'; renderMethodsLibrary();">${label}</span>`;
 
   root.innerHTML = `
+    <div class="app-hero-band">
+    ${appHero({
+      eyebrow: '方法库 · methods',
+      title: '别人跑通的<span class="accent">直接借</span>',
+      sub: 'vibe coder 沉淀下来的手艺 · 关键词一搜 · 整段喂给你的 AI。',
+      termCap: '搜别人跑通的方法',
+      termLines: [
+        { cmd: 'tinker borrow "邮箱一次性登录"', out: '找到 3 条方法 · 整段进你的 AI' },
+        { cmd: 'tinker contribute', out: '把做通的沉淀成方法 · 别人能借' },
+      ],
+    })}
+    </div>
+    <div class="app-body">
     <div class="mb-8">
       <div class="methods-mode-bar">
         ${modeTab('methods', '沉淀的方法')}
         ${modeTab('seeking', '有人在找')}
       </div>
-      <p class="feed-sub mb-2">vibe coder 沉淀下来的手艺 · 关键词搜 · 复制 markdown 直接喂给你的 AI</p>
-      <p class="feed-sub-guide mb-6">想沉淀自己的?做通一件事后跟你的 AI 说 <b>「把这个沉淀成方法」</b>,它会用 tinker contribute 存进这页。</p>
+      <p class="feed-sub-guide mb-6" style="margin-top: 4px;">想沉淀自己的?做通一件事后跟你的 AI 说 <b>「把这个沉淀成方法」</b>,它会用 tinker contribute 存进这页。</p>
       <div class="methods-lib-toolbar">
         <input type="text" id="methods-lib-q" class="methods-lib-search" placeholder="搜方法 · supabase / 邮箱登录 / 部署…" value="${escapeHtml(methodsLibraryState.query)}"
           oninput="methodsLibraryState.query = this.value; clearTimeout(window._methodsLibT); window._methodsLibT = setTimeout(() => renderMethodsLibrary(undefined, true), 200);">
@@ -9547,7 +10655,9 @@ async function renderMethodsLibrary(initialQuery, listOnly) {
       </div>
     </div>
     <div class="methods-lib-list" id="methods-lib-list">${groupedHtml}</div>
+    </div>
   `;
+  appHeroReplay();
 
   // 全量渲染后 (页面入站/切分组/点领域)·带着关键词时把焦点放回搜索框末尾
   // 搜索打字走 listOnly 分支不重建输入框 · 不会到这 · 所以不丢焦点
@@ -9806,6 +10916,20 @@ async function loadSeekReplies(seekId) {
 }
 
 function renderShowcase(focusId) {
+  const scHeroSlot = document.getElementById('showcase-hero-slot');
+  if (scHeroSlot && !scHeroSlot.firstChild) {
+    scHeroSlot.innerHTML = appHero({
+      eyebrow: '陈列馆 · gallery',
+      title: '真的<span class="accent">做出来了</span>',
+      sub: '能点开试、能扫码、能下到的作品 — 不是截图加 AI 文案。',
+      termCap: '上线的作品',
+      termLines: [
+        { cmd: 'tinker ship -m "上线了 · 熬了三晚值了"', out: '📸 自动截图当封面 · 进陈列馆' },
+        { cmd: 'tinker gallery', out: '都能真的体验 · 不投票不排行' },
+      ],
+    });
+    appHeroReplay();
+  }
   // v0.59 根本路: 入馆资格 = 非归档 + 有 update + 没被作者隐藏
   // 仪式 (ship/prototype/design) 不再是门票 · 只决定 badge kind 和 reflection 优先级
   // representativeUpdate 选取顺序: 作者 pin > kind 仪式 update > 最新 update
@@ -9986,6 +11110,20 @@ let notifTypeFilter = 'all';
 function setNotifTypeFilter(t) { notifTypeFilter = t; renderNotifications(); }
 
 function renderNotifications() {
+  const nfHeroSlot = document.getElementById('notif-hero-slot');
+  if (nfHeroSlot && !nfHeroSlot.firstChild) {
+    nfHeroSlot.innerHTML = appHero({
+      eyebrow: '通知 · inbox',
+      title: '谁因你<span class="accent">动了手</span>',
+      sub: '谁借了你的方法、谁想试试、谁留了便签 — 只有真回响,没有点赞。',
+      termCap: '你的回响',
+      termLines: [
+        { cmd: 'tinker inbox', out: '@daodao 借了你的"邮箱登录" · 跑通了' },
+        { cmd: 'tinker feed @我', out: '2 人想试你的报课小程序' },
+      ],
+    });
+    appHeroReplay();
+  }
   const root = document.getElementById('notif-list');
   const me = currentUser.handle;
   // 未登录 · 没"我"的概念,引导而不是显示空 list
@@ -11246,7 +12384,7 @@ async function refreshApiTokensList() {
       tokens.map(t => `
         <div class="api-token-row">
           <div>
-            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}${t.tier === 'heavy' ? ' <span class="mono" style="font-size: 10px; color: var(--vermilion); border: 1px solid var(--vermilion); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">重度</span>' : ' <span class="mono" style="font-size: 10px; color: var(--sepia); border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">轻度</span>'}</div>
             <div class="api-token-meta">
               <span class="mono">${escapeHtml(t.prefix)}…</span> ·
               建于 ${shortAgo(t.created_at)}
@@ -12357,6 +13495,10 @@ document.addEventListener('click', (e) => {
 })();
 
 function refreshMastheadHandle() {
+  // 报头导航按登录态显隐:游客只看浏览项 + 登录/注册 · 我的工坊/通知/记一笔藏到登录后
+  const authed = !!currentUser.handle;
+  document.querySelectorAll('.masthead .nav-authed').forEach(n => { n.style.display = authed ? '' : 'none'; });
+  document.querySelectorAll('.masthead .nav-guest').forEach(n => { n.style.display = authed ? 'none' : ''; });
   const el = document.getElementById('masthead-handle-area');
   if (!el) return;
   if (currentUser.handle) {
@@ -12417,6 +13559,7 @@ function dispatchPending(p) {
   else if (p.kind === 'openEditProject') { openEditProject(p.projectId); }
   else if (p.kind === 'openPickProject') { openPickProject(); }
   else if (p.kind === 'navMyWorkshop') { showScreen('workshop', currentUser.handle); }
+  else if (p.kind === 'gotoSetup') { showScreen('setup'); }
 }
 
 // 初始化 — 拉 /api/auth/me + /api/state · spec §5.3 匿名浏览全部
@@ -12648,8 +13791,8 @@ async function submitWelcome() {
       }
       setTimeout(() => dispatchPending(p), 200);
     } else {
-      // 新用户主动注册 (没有 pending 动作) · 送进入场仪式做个小东西 · 别直接丢回 feed
-      showScreen('onboard');
+      // 新用户主动注册 (没有 pending 动作) · 送到真·CLI 安装页 · 拿钥匙 → 装 → 配好 → 开始用
+      showScreen('setup');
     }
     showToast('开张了 · 你好 @' + handle);
   } catch (e) {
@@ -12778,13 +13921,16 @@ async function renderAccount() {
   }
   const studios = u.studios || [];
   const email = currentUser.email || '(读不到)';
+  const acctTermLines = [
+    { cmd: 'tinker whoami', out: '@' + currentUser.handle + (u.tagline ? ' · ' + u.tagline.replace(/\s+/g, ' ').slice(0, 20) : '') },
+    { cmd: 'tinker token new "我的 MacBook"', out: '✓ 新钥匙已生成 · 只显示这一次' },
+  ];
   root.innerHTML = `
+    <div class="app-hero-band">
+      ${appHero({ eyebrow: '账号 · account', title: '这间工坊<span class="accent">背后的人</span>', sub: '@' + escapeHtml(currentUser.handle) + ' · 资料、CLI 钥匙、工作室、通知偏好都在这', termCap: '你是谁 · 你的钥匙', termLines: acctTermLines })}
+    </div>
+    <div class="app-body">
     <div class="account-page">
-      <div class="account-head">
-        <div class="mono text-xs" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">你的账号</div>
-        <h1 class="account-title">@${escapeHtml(currentUser.handle)}</h1>
-        <p class="account-sub">这间工坊背后的人 · <span class="account-section-action" onclick="showScreen('workshop','${escapeHtml(currentUser.handle)}')">回工坊 →</span></p>
-      </div>
 
       <div class="account-section">
         <div class="account-section-head">
@@ -12858,7 +14004,9 @@ async function renderAccount() {
         <button class="btn-act" onclick="confirmDeleteAccount()" style="margin-top: 12px; color: var(--vermilion);">想删账号</button>
       </div>
     </div>
+    </div>
   `;
+  appHeroReplay();
   refreshAccountTokensList();
   loadAndRenderPrefs();
 }
@@ -12876,7 +14024,7 @@ async function refreshAccountTokensList() {
       tokens.map(t => `
         <div class="api-token-row">
           <div>
-            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}</div>
+            <div class="api-token-label">${escapeHtml(t.label || '(没起名)')}${t.tier === 'heavy' ? ' <span class="mono" style="font-size: 10px; color: var(--vermilion); border: 1px solid var(--vermilion); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">重度</span>' : ' <span class="mono" style="font-size: 10px; color: var(--sepia); border: 1px solid var(--rule); border-radius: 3px; padding: 0 4px; vertical-align: 1px;">轻度</span>'}</div>
             <div class="api-token-meta">
               <span class="mono">${escapeHtml(t.prefix)}…</span> ·
               建于 ${shortAgo(t.created_at)}
