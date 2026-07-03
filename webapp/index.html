@@ -403,6 +403,12 @@
   .app-hero-band .app-htitle .accent { color: var(--vermilion); }
   .app-hero-band .app-hsub { font-size: 15px; line-height: 1.8; color: #d6d3d1; max-width: 460px; }
   .app-hero-band .app-hero-copy .workshop-tagline { color: #d6d3d1; }
+  .app-hero-band .app-hero-cta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-top: 22px; }
+  .app-hero-band .app-hero-cta button { background: var(--vermilion); color: #fff; border: none; border-radius: 8px; padding: 12px 24px; font-size: 14.5px; font-weight: 600; cursor: pointer; font-family: Georgia, serif; transition: transform .12s, background .12s; }
+  .app-hero-band .app-hero-cta button:hover { background: #a53809; transform: translateY(-1px); }
+  .app-hero-band .app-hero-cta .ghost { color: #d6d3d1; cursor: pointer; font-size: 13.5px; border-bottom: 1px dotted #78716c; padding-bottom: 2px; }
+  .app-hero-band .app-hero-cta .ghost:hover { color: #fff; }
+  #screen-cli .cli-guest-hero .app-hero-inner { padding-top: 96px; }
   .app-hero-band .app-status { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 4px 18px; }
   .app-hero-band .app-status .workshop-bench, .app-hero-band .app-status .workshop-tools-line { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: #a8a29e; margin: 0; }
   .app-hero-band .app-status .num { color: var(--vermilion); }
@@ -10013,20 +10019,8 @@ function renderCli() {
         ${currentUser.handle ? `<button onclick="goHome()">回工坊 →</button>` : `<button onclick="cliStart()">登录 / 注册</button>`}
       </div>
     </nav>
-    <div class="cli-hero">
-      <div class="cli-hero-inner">
-      <div class="cli-hero-eyebrow">TINKER CLI · 命令行</div>
-      <h1 class="cli-hero-h1">发动机在命令行</h1>
-      <p class="cli-hero-sub">网页你能手动记、手动沉淀。但真正干活的,是一个跟你一起写代码的 AI 队友。你照常做东西,它替你把该记的记下、把长活干完、把方法借来借去。</p>
-      <div class="cli-term">
-        <div class="cli-term-bar"><span></span><span></span><span></span></div>
-        <div class="cli-term-body" data-term="${esc(JSON.stringify(CLI_TERM))}"></div>
-      </div>
-      <div class="cli-hero-cta">
-        <button onclick="cliStart()">注册,开始用 →</button>
-        <span class="ghost" onclick="cliScrollToList()">先看它能干什么 ↓</span>
-      </div>
-      </div>
+    <div class="app-hero-band cli-guest-hero">
+      ${appHero({ eyebrow: 'TINKER CLI · 命令行', title: '发动机<span class="accent">在命令行</span>', sub: '网页你能手动记、手动沉淀。但真正干活的,是一个跟你一起写代码的 AI 队友。你照常做东西,它替你把该记的记下、把长活干完、把方法借来借去。', termCap: '在你的终端里 · 它长这样', termLines: CLI_TERM, cta: '<button onclick="cliStart()">注册,开始用 →</button><span class="ghost" onclick="cliScrollToList()">先看它能干什么 ↓</span>' })}
     </div>
 
     <div class="cli-body">
@@ -10058,7 +10052,7 @@ function renderCli() {
   `}`;
   armFx(document.getElementById('cli-content'));
   if (!loggedIn) initCliProgress();
-  if (loggedIn) appHeroReplay();
+  appHeroReplay();
 }
 
 // ============ 真·CLI 安装 / 上手页 · 注册后的落点 (已登录) ============
@@ -10411,6 +10405,7 @@ function appHero(opts) {
         <div class="app-eyebrow">${escapeHtml(opts.eyebrow || '')}</div>
         <h1 class="app-htitle">${opts.title || ''}</h1>
         ${opts.sub ? `<p class="app-hsub">${opts.sub}</p>` : ''}
+        ${opts.cta ? `<div class="app-hero-cta">${opts.cta}</div>` : ''}
       </div>
       <div class="app-hero-demo">
         <div class="aht-cap">${escapeHtml(opts.termCap || '')}</div>
