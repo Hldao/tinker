@@ -30,6 +30,7 @@ const blobs = require('./blobs');
 const studios = require('./studios');
 const auth = require('./auth');
 const prefs = require('./prefs');
+const { startBridgeJanitor } = require('./maintenance');   // 传输层清道夫 · 定时清过期 bridge 消息/blob
 
 // ============================================
 // 配置
@@ -714,6 +715,8 @@ const server = app.listen(PORT, () => {
     corsOrigins: CORS_ORIGINS.length ? CORS_ORIGINS : 'open',
     rateLimit: { action: RATE_LIMIT_ACTION, state: RATE_LIMIT_STATE },
   }, 'Tinker server up');
+  // 传输层清道夫 · 启动跑一次 + 每天一次 · 清过期 bridge 消息和 handoff blob
+  startBridgeJanitor(logger);
 });
 
 function shutdown(signal) {
