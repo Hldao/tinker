@@ -4,6 +4,7 @@
 
 const db = require('./db');
 const { userIdFromHandle } = require('./state');
+const llm = require('./llm');   // 服务端唯一 LLM 出口 · 只给调研投喂压缩用
 
 // ============================================
 // 辅助
@@ -761,6 +762,65 @@ function createMethod({ text, scenario, projectId, sourceUpdateId, sourceDocPath
     });
   }
   return { ok: true, methodId };
+}
+
+// submitResearchDigest · 调研资料投喂 (v1.x)
+// 豆包 app 用户没有 CLI · 发一段调研原文进来 · 服务端 DeepSeek 压成结论+要点存顶部 · 原文折叠存底部。
+// async: 要 await 一次 DeepSeek · /api/action 分发处已改成 await action(...)。
+async function submitResearchDigest({ fullText, source, studioId }, { currentUserId }) {
+  const studios = require('./studios');   // 懒 require · 避免跟 studios/state 的加载顺序打架
+  if (!studioId) throw new Error('要投给哪个团队 · studioId 必填');
+  if (!studios.isMember(studioId, currentUserId)) throw new Error('你不在这个团队里 · 不能往这投');
+  if (!fullText || !fullText.trim()) throw new Error('调研原文不能空');
+  const text = fullText.trim();
+  if (text.length < 40) throw new Error('原文太短 · 至少写几句 (太短不值当压缩)');
+  // 压缩每条要烧 DeepSeek token · 封顶挡住超大粘贴的成本失控
+  if (text.length > 60000) throw new Error('原文太长 (超过 6 万字) · 分几段投');
+  const sourceVal = source && source.trim() ? source.trim().slice(0, 60) : null;
+
+  // 先压缩 (可能失败) · 再入库 · DeepSeek 挂了也把全文留住 · 不丢投喂 · summary 置空事后可重压
+  let summary = null;
+  if (llm.enabled()) {
+    try {
+      summary = await llm.summarizeResearch(text);
+    } catch (e) {
+      // 吞掉压缩失败 · 全文照存 · 前端据 summarized 提示"摘要暂缺"
+      summary = null;
+    }
+  }
+
+  const digestId = 'rd-' + Date.now() + Math.random().toString(36).slice(2, 6);
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO research_digests (id, studio_id, summary, full_text, source, submitter_id, at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(digestId, studioId, summary, text, sourceVal, currentUserId || null, now, now);
+
+  return { ok: true, digestId, summarized: !!summary, summary };
+}
+
+// listResearchDigests · 读某团队最近投喂 · 不走 action 路径 · 由 GET /api/research/recent 直接调
+// 成员校验在路由层做 (那里有 currentUserId) · 这里只按 studioId 过滤
+function listResearchDigests({ studioId, limit } = {}) {
+  if (!studioId) throw new Error('studioId 必填');
+  const lim = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+  const rows = db.prepare(`
+    SELECT d.id, d.summary, d.full_text, d.source, d.at, u.handle AS submitter_handle
+    FROM research_digests d
+    LEFT JOIN users u ON u.id = d.submitter_id
+    WHERE d.studio_id = ?
+    ORDER BY d.at DESC
+    LIMIT ?
+  `).all(studioId, lim);
+  return rows.map(r => ({
+    id: r.id,
+    summary: r.summary,
+    fullText: r.full_text,
+    source: r.source,
+    at: r.at,
+    submitterHandle: r.submitter_handle,
+    summarized: !!r.summary,
+  }));
 }
 
 function editMethod({ methodId, text, scenario, projectId, title, tags }, { currentUserId }) {
@@ -1609,9 +1669,56 @@ function markNotifRead({ notifId }, { currentUserId }) {
   return { ok: true };
 }
 
+// ============================================
+// 团队待办 (v1.x) · 工作室维度简单 todolist
+// 工作日志复用 updates (记一笔) · 这里只管待办
+// ============================================
+function isStudioMember(studioId, userId) {
+  return !!db.prepare('SELECT 1 FROM studio_members WHERE studio_id = ? AND user_id = ?').get(studioId, userId);
+}
+
+function addTodo({ studioId, text, due, ownerHandle }, { currentUserId }) {
+  if (!studioId) throw new Error('缺少工作室');
+  if (!text || !text.trim()) throw new Error('待办是空的');
+  if (!isStudioMember(studioId, currentUserId)) throw new Error('你不在这个团队里');
+  let ownerId = currentUserId;
+  if (ownerHandle) {
+    const uid = userIdFromHandle(ownerHandle);
+    if (uid && isStudioMember(studioId, uid)) ownerId = uid;
+  }
+  const id = db.uuidv7();
+  const dueVal = (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) ? due : null;
+  db.prepare(`
+    INSERT INTO todos (id, studio_id, owner_id, creator_id, text, due, done, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+  `).run(id, studioId, ownerId, currentUserId, text.trim(), dueVal, Date.now());
+  return { ok: true, id };
+}
+
+function toggleTodo({ todoId, done }, { currentUserId }) {
+  const t = db.prepare('SELECT studio_id, done FROM todos WHERE id = ?').get(todoId);
+  if (!t) throw new Error('找不到这条待办');
+  if (!isStudioMember(t.studio_id, currentUserId)) throw new Error('你不在这个团队里');
+  const next = (typeof done === 'boolean') ? (done ? 1 : 0) : (t.done ? 0 : 1);
+  db.prepare('UPDATE todos SET done = ?, done_at = ? WHERE id = ?')
+    .run(next, next ? Date.now() : null, todoId);
+  return { ok: true, done: !!next };
+}
+
+function deleteTodo({ todoId }, { currentUserId }) {
+  const t = db.prepare('SELECT studio_id FROM todos WHERE id = ?').get(todoId);
+  if (!t) throw new Error('找不到这条待办');
+  if (!isStudioMember(t.studio_id, currentUserId)) throw new Error('你不在这个团队里');
+  db.prepare('DELETE FROM todos WHERE id = ?').run(todoId);
+  return { ok: true };
+}
+
 module.exports = {
   searchMethods, getBorrowsForOwner, listSeeking, listSeekingReplies, // 不走 action 路径 · 直接 GET 暴露
   listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI 用)
+  listResearchDigests, // 不走 action 路径 · GET /api/research/recent 用
+  // 调研资料投喂 (v1.x) · 豆包 app 用户单向知识投喂口 · 服务端 DeepSeek 压缩
+  submitResearchDigest,
   // users
   editTagline, renameHandle,
   // projects
@@ -1633,6 +1740,8 @@ module.exports = {
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes
   addNote, deleteNote, resolveNote,
+  // 团队待办 (v1.x)
+  addTodo, toggleTodo, deleteTodo,
   // stashes · 个人现场暂存
   stashPush, stashList, stashGet, stashDrop,
   // notifications

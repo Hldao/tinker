@@ -507,7 +507,9 @@ app.post('/api/action', actionLimiter, auth.requireSession, async (req, res) => 
   const action = actions[type];
   if (!action) return res.status(400).json({ error: 'Unknown action: ' + type });
   try {
-    const result = action(payload || {}, { currentUserId: req.user.id });
+    // 大多数 action 是同步的 · await 非 promise 即原值 · 向后兼容
+    // (submitResearchDigest 是 async · 要 await 服务端 DeepSeek 压缩)
+    const result = await action(payload || {}, { currentUserId: req.user.id });
     // v1.0 写放大优化: 客户端带 x-tinker-no-state 就不回全量 state (CLI 不渲染 · 白发 179KB)
     // webapp 不带这个头 · 照常回 state 重渲染
     if (req.get('x-tinker-no-state') === '1') {
@@ -517,6 +519,21 @@ app.post('/api/action', actionLimiter, auth.requireSession, async (req, res) => 
     res.json({ ok: true, result, state: newState });
   } catch (e) {
     req.log.warn({ action: type, err: e.message }, 'action rejected');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 调研资料投喂 · 读最近投喂列表 (v1.x)
+// 投喂走 /api/action (type: submitResearchDigest) · 读单开这条 GET · 不捎带 buildState
+app.get('/api/research/recent', stateLimiter, auth.requireSession, (req, res) => {
+  try {
+    const studioId = req.query.studioId;
+    if (!studioId) return res.status(400).json({ error: 'studioId required' });
+    if (!studios.isMember(studioId, req.user.id)) return res.status(403).json({ error: '你不在这个团队里' });
+    const items = actions.listResearchDigests({ studioId, limit: req.query.limit });
+    res.json({ ok: true, items });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'research recent failed');
     res.status(400).json({ error: e.message });
   }
 });

@@ -6892,6 +6892,7 @@
         <button onclick="goHome()">工坊</button>
         <button onclick="showScreen('methods')">方法库</button>
         <button onclick="navMyWorkshop()">我的工坊</button>
+        <button onclick="showScreen('workbench')">工作台</button>
         <button onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
       </nav>
@@ -6953,6 +6954,26 @@
   <section class="screen" id="screen-project"><div id="project-content"></div></section>
   <section class="screen" id="screen-method"><div id="method-content"></div></section>
   <section class="screen" id="screen-update"><div id="update-content"></div></section>
+  <section class="screen" id="screen-workbench"><style>
+    #screen-workbench .wb-sec{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:34px 0 14px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+    #screen-workbench .wb-sec h2{font-family:'Newsreader',Georgia,serif;font-size:20px;margin:0;color:var(--ink)}
+    #screen-workbench .wb-src{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;letter-spacing:.03em;color:var(--sepia);border:1px solid var(--rule);border-radius:2px;padding:2px 6px;background:var(--paper);white-space:nowrap}
+    #screen-workbench .wb-summary{background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:20px 22px}
+    #screen-workbench .wb-big{font-family:'Fraunces','Songti SC',serif;font-size:28px;line-height:1.15;color:var(--ink)}
+    #screen-workbench .wb-big b{color:var(--vermilion);font-weight:600}
+    #screen-workbench .wb-line{font-family:'Newsreader',Georgia,serif;font-size:15px;color:var(--ink-soft);margin-top:10px}
+    #screen-workbench .wb-mem{display:inline-block;font-size:12px;color:var(--ink-soft);background:var(--bg);border:1px solid var(--rule);border-radius:12px;padding:2px 10px;margin:2px 4px 2px 0;font-family:'JetBrains Mono',monospace}
+    #screen-workbench .wb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+    #screen-workbench .wb-card{background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+    #screen-workbench .wb-card h3{margin:0;font-family:'Newsreader',Georgia,serif;font-size:16px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;color:var(--ink)}
+    #screen-workbench .wb-card p{margin:0;font-size:13px;color:var(--sepia);line-height:1.5}
+    #screen-workbench .wb-soon{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--vermilion);border:1px solid var(--vermilion);border-radius:2px;padding:1px 5px;white-space:nowrap}
+    #screen-workbench .wb-ask{display:flex;gap:8px;margin-top:16px}
+    #screen-workbench .wb-ask input{flex:1;border:1px solid var(--rule);border-radius:2px;padding:9px 12px;font-family:'Inter',sans-serif;font-size:14px;background:var(--bg);color:var(--ink)}
+    #screen-workbench .wb-ask input:focus{outline:none;border-color:var(--vermilion)}
+    #screen-workbench .wb-empty{text-align:center;padding:60px 20px;color:var(--sepia)}
+    #screen-workbench .wb-empty .t{font-family:'Fraunces','Songti SC',serif;font-size:24px;color:var(--ink);margin-bottom:8px}
+  </style><div id="workbench-content"></div></section>
 
   <!-- v0.83 方法库子页 · 跨用户跨项目 · 跟 feed / 陈列馆 同级板块 -->
   <section class="screen" id="screen-methods">
@@ -7937,6 +7958,7 @@ function renderScreen(name, ...args) {
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (name === 'feed') renderFeed();
   else if (name === 'workshop') renderWorkshop(args[0] || currentUser.handle);
+  else if (name === 'workbench') renderWorkbench();
   else if (name === 'studio') renderStudio(args[0]);
   else if (name === 'project') renderProject(args[0], args[1]);
   else if (name === 'onboard') renderOnboard();
@@ -7972,6 +7994,7 @@ function buildHash(name, args) {
   if (name === 'workshop') return '#/w/' + encodeURIComponent(args[0] || '');
   if (name === 'studio') return '#/s/' + encodeURIComponent(args[0] || '');
   if (name === 'project') return '#/p/' + encodeURIComponent(args[0] || '') + '/' + encodeURIComponent(args[1] || '');
+  if (name === 'workbench') return '#/workbench';
   if (name === 'notifications') return '#/notifications';
   if (name === 'about') return '#/about';
   if (name === 'onboard') return '#/onboard';
@@ -8000,6 +8023,7 @@ function navigateFromHash() {
   if (parts[0] === 's' && parts[1]) return renderScreen('studio', parts[1]);
   if (parts[0] === 'join') { renderHome(); openAcceptInvite(parts[1] || ''); return; }
   if (parts[0] === 'p' && parts[1] && parts[2]) return renderScreen('project', parts[1], parts[2]);
+  if (parts[0] === 'workbench') return renderScreen('workbench');
   if (parts[0] === 'notifications') return renderScreen('notifications');
   if (parts[0] === 'about') return renderScreen('about');
   if (parts[0] === 'onboard') return renderScreen('onboard');
@@ -8314,6 +8338,105 @@ function getFeedEvents() {
   });
   events.sort((a,b) => a.agoOrder - b.agoOrder);
   return events;
+}
+
+// ---- 团队工作台 · 工作室维度 · 复用 feed / state · 待办日程文件待接 vikunja / nas ----
+function wbEmpty(title, sub) {
+  return `<div class="mb-8"><h1 class="feed-title mb-3">工作台</h1></div>
+    <div class="wb-empty"><div class="t">${escapeHtml(title)}</div><div class="serif">${escapeHtml(sub)}</div></div>`;
+}
+
+async function renderWorkbench() {
+  const host = document.getElementById('workbench-content');
+  if (!host) return;
+  if (!currentUser.handle) {
+    host.innerHTML = wbEmpty('工作台是给工作室做的', '先登录 · 再进你的工作室看');
+    return;
+  }
+  const meRow = state.users && state.users[currentUser.handle];
+  const myStudios = (meRow && meRow.studios) || [];
+  if (!myStudios.length) {
+    host.innerHTML = wbEmpty('你还没有工作室', '工作台把一个工作室里所有人的动静汇成一页 · 先建一个或加入一个');
+    return;
+  }
+  const active = myStudios[0];
+  const studioObj = (state.studios || []).find(s => s.slug === active.slug);
+  const studioId = studioObj && studioObj.id;
+  const header = `<div class="mb-8"><h1 class="feed-title mb-3">工作台</h1>
+    <p class="feed-sub mb-2">${escapeHtml(active.name)} · 一页看齐大家在做什么、卡在哪、今天动了什么</p></div>`;
+  host.innerHTML = header + `<div class="serif" style="color:var(--sepia);text-align:center;padding:36px 0">在汇总 ·</div>`;
+
+  let members = [];
+  try {
+    const r = await fetchJSON('/api/studios/' + encodeURIComponent(active.slug));
+    members = (r && r.members) || [];
+  } catch (e) { /* 拉不到成员就降级 · 不报错 */ }
+  if (document.body.dataset.screen !== 'workbench') return;  // await 期间用户切走了别硬塞
+
+  const events = getFeedEvents().filter(e => {
+    if (!studioId) return true;
+    const p = projectById(e.projectId);
+    return p && p.studioId === studioId;
+  });
+  const todayKey = makeDateKey(new Date());
+  const todayEvents = events.filter(e => makeDateKey(new Date(e.at)) === todayKey);
+  const bubbled = new Set(todayEvents.map(e => e.owner));
+  const authors = bubbled.size;
+  const projCount = new Set(todayEvents.map(e => e.projectId)).size;
+  const stuck = state.projects.filter(p => p.status === 'stuck' && (!studioId || p.studioId === studioId));
+  const quiet = members.filter(m => m.handle && m.handle !== currentUser.handle && !bubbled.has(m.handle));
+
+  let big;
+  if (todayEvents.length) {
+    big = `今天 <b>${todayEvents.length}</b> 条动静`;
+    if (authors >= 2) big += ` · <b>${authors}</b> 人冒泡`;
+    if (projCount >= 2) big += ` · 跨 <b>${projCount}</b> 个项目`;
+  } else {
+    big = '今天还没动静';
+  }
+  const stuckHtml = stuck.length
+    ? `<div class="wb-line">卡住的:${stuck.map(p => `<a onclick="showScreen('project','${escapeHtml(p.owner)}','${escapeHtml(p.slug)}')" style="color:var(--vermilion);cursor:pointer">${escapeHtml(p.name)}</a>`).join('、')}</div>`
+    : '';
+  let bottomLine = '';
+  if (todayEvents.length) {
+    bottomLine = quiet.length
+      ? `<div class="wb-line" style="color:var(--sepia)">今天还没冒泡:${quiet.map(m => `<span class="wb-mem">@${escapeHtml(m.handle)}</span>`).join('')}</div>`
+      : `<div class="wb-line" style="color:var(--moss)">今天大家都冒泡了</div>`;
+  }
+
+  const summary = `
+    <div class="wb-sec"><h2>今日小结</h2><span class="wb-src">现在:动静汇总 · 之后:nas 上的 agent 缝成一段话</span></div>
+    <div class="wb-summary"><div class="wb-big">${big}</div>${stuckHtml}${bottomLine}</div>`;
+
+  const feedSec = `<div class="wb-sec"><h2>团队动态</h2><span class="wb-src">Tinker feed</span></div><div id="wb-feed"></div>`;
+
+  const cards = `
+    <div class="wb-sec"><h2>待接进来的</h2><span class="wb-src">vikunja / nas</span></div>
+    <div class="wb-grid">
+      <div class="wb-card"><h3>待办 <span class="wb-soon">待接 vikunja</span></h3><p>谁负责、截止哪天、勾掉一个就是一条进展信号。接 vikunja 后这里直接读写。</p></div>
+      <div class="wb-card"><h3>日程 <span class="wb-soon">待接 caldav</span></h3><p>本周谁在忙什么、什么时候交。走 caldav 还能同步到手机自带日历。</p></div>
+      <div class="wb-card"><h3>共享文件 <span class="wb-soon">待接 nas</span></h3><p>薄壳套在 nas 共享目录上 · 列文件加拖拽上传 · 存储备份交给 nas 本体。</p></div>
+    </div>
+    <form class="wb-ask" onsubmit="event.preventDefault(); showToast('接入 nas 上的 agent 后启用 · 它会读 vikunja、动态和文件来回答'); this.reset();">
+      <input type="text" placeholder="问一句 · 谁到哪了 / 市场今天做了啥" aria-label="问团队 agent">
+      <button type="submit" class="btn-act-primary">问</button>
+    </form>
+    <p style="font-size:12px;color:var(--sepia);margin-top:8px">这一问一答等 nas 上的 agent 接进来 · 现在先占个位。</p>`;
+
+  host.innerHTML = header + summary + feedSec + cards;
+
+  const feedHost = document.getElementById('wb-feed');
+  if (feedHost) {
+    if (!events.length) {
+      feedHost.innerHTML = `<div class="serif" style="color:var(--sepia);padding:20px 0">这个工作室还没有动静</div>`;
+    } else {
+      const groups = groupEventsByDay(events.slice(0, 40));
+      groups.forEach(({ day, items, dateKey }, gi) => {
+        if (!(gi === 0 && dateKey === todayKey)) feedHost.appendChild(makeDayLabelEl(day, items.length));
+        items.forEach(e => feedHost.appendChild(makeEntryEl(e)));
+      });
+    }
+  }
 }
 
 // v0.84 方法 tag chip row · 点击跳方法库子页 + 用 #tag 当 query
@@ -8838,6 +8961,47 @@ async function renderStudio(slug) {
         </div>
       `).join('');
 
+  // 调研投喂 · 团队知识池 (仅成员可见/可投) · v1.x
+  // 给"主要在豆包 app 里做调研"的队友一个单向知识投喂口 · 服务端 DeepSeek 压成结论+要点
+  let digestSection = '';
+  if (isMember) {
+    let digests = [];
+    try {
+      const dj = await fetchJSON('/api/research/recent?studioId=' + encodeURIComponent(s.id) + '&limit=20');
+      digests = (dj && dj.items) || [];
+    } catch (e) { /* 读失败不挡投喂 */ }
+
+    const digestList = digests.length === 0
+      ? '<p class="serif" style="color: var(--sepia);">还没有调研投喂 · 在豆包里做完调研 · 贴一段进来</p>'
+      : digests.map(d => {
+          const from = [d.source, d.submitterHandle ? '@' + d.submitterHandle : null].filter(Boolean).join(' · ');
+          const summaryBlock = d.summarized
+            ? `<div class="serif" style="white-space: pre-wrap; font-size: 16px;">${escapeHtml(d.summary)}</div>`
+            : `<div class="serif" style="color: var(--sepia);">（摘要暂缺 · 见下方全文）</div>`;
+          return `
+            <div class="pcard" style="cursor: default;">
+              ${summaryBlock}
+              <div class="pcard-meta" style="margin-top: 6px;">${from ? escapeHtml(from) + ' · ' : ''}${new Date(d.at).toISOString().slice(0, 10)}</div>
+              <details style="margin-top: 8px;">
+                <summary style="cursor: pointer; color: var(--sepia); font-size: 13px;">看完整原文</summary>
+                <div class="serif" style="white-space: pre-wrap; margin-top: 8px;">${escapeHtml(d.fullText)}</div>
+              </details>
+            </div>`;
+        }).join('');
+
+    digestSection = `
+      <div class="mb-12">
+        <div class="section-label"><span>调研投喂 (${digests.length})</span></div>
+        <p class="serif" style="color: var(--sepia); margin-bottom: 10px;">在豆包里做完调研 · 把结果贴进来 · 自动压成结论和要点 · 原文折在下面</p>
+        <textarea id="digest-text" class="input-bare" rows="5" placeholder="把整段调研 汇总 资料贴进来" style="font-size: 16px; resize: vertical;"></textarea>
+        <input id="digest-source" class="input-bare" placeholder="来源 (可选 · 比如 豆包·你的名字)" style="font-size: 14px; margin-top: 8px;" />
+        <div style="margin-top: 10px;">
+          <button class="btn-act-primary" onclick="guardSubmit(this, () => submitStudioDigest('${escapeHtml(s.id)}','${escapeHtml(s.slug)}'))">压一下 · 投给团队</button>
+        </div>
+        <div style="margin-top: 18px;">${digestList}</div>
+      </div>`;
+  }
+
   root.innerHTML = `
     <div class="mb-10 pb-8 border-b-2" style="border-color: var(--ink);">
       <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMember ? '你的工作室' : '一间工作室'}</div>
@@ -8857,7 +9021,23 @@ async function renderStudio(slug) {
       <div class="section-label"><span>项目 (${s.projects.length})</span></div>
       ${projectsHtml}
     </div>
+    ${digestSection}
   `;
+}
+
+// 调研投喂提交 · 团队知识池 (v1.x) · 照 submitNote 范式 · studioId/slug 内联传进来
+async function submitStudioDigest(studioId, slug) {
+  const ta = document.getElementById('digest-text');
+  const src = document.getElementById('digest-source');
+  const fullText = ((ta && ta.value) || '').trim();
+  const source = ((src && src.value) || '').trim();
+  if (fullText.length < 40) { showToast('原文太短 · 至少写几句 (太短不值当压缩)'); return; }
+  try {
+    showToast('正在压缩 · 稍等');
+    const r = await apiAction('submitResearchDigest', { fullText, source, studioId });
+    showToast(r && r.summarized ? '投好了 · 已压成要点' : '投好了 · 全文已存 · 这次没压出摘要');
+    await renderStudio(slug);   // 重渲染 · 新投喂冒到列表顶
+  } catch (e) { showToast(e.message); }
 }
 
 /* ============ PROJECT ============ */
