@@ -21,3 +21,6 @@ Dockerfile
 docker-compose.yml
 deploy/
 cli/
+
+# NAS 私有实例数据卷
+data-nas/

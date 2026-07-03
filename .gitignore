@@ -16,7 +16,11 @@ server/data/tinker.db-*
 .env
 .env.local
 .env.*.local
+.env.nas
 *.local
+
+# NAS 私有实例的数据卷 (docker-compose.nas.yml)
+data-nas/
 
 # OS
 .DS_Store
