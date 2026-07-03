@@ -8928,6 +8928,7 @@ async function renderWorkshop(handle) {
   })();
   // body 卡片滚动淡入 (跟 hero 打字互不干扰)
   armReveals(root);
+  if (isMe) mountMyTodos();  // 我的待办(私人 + 派给我的团队任务)· 私密层
   // v0.38 异步拉 preview 数据 · 渲染厚卡板块到"最近在动"之前
   // 不再用 bulk dump 的 user.studios 当开关 (那个现在只含本人) · 直接按 handle 拉 · 空了内部不渲染
   loadAndRenderWorkshopStudios(handle, isMe);
@@ -9009,12 +9010,113 @@ async function renderStudio(slug) {
       </div>
       <div class="studio-members-grid">${memberHtml}</div>
     </div>
+    ${isMember ? '<div id="studio-todos" class="mb-12"></div>' : ''}
     ${shadowHtml}
     <div class="mb-12">
       <div class="section-label"><span>项目 (${s.projects.length})</span></div>
       ${projectsHtml}
     </div>
   `;
+  if (isMember) mountTeamTodos(s);  // 团队任务(工作室成员互见)· 私密层
+}
+
+/* ============ 待办 · 私密协作层(v1.x)· 前端 ============
+   我的待办(工坊 · 私人 + 派给我的)· 团队任务(工作室 · 成员互见)
+   决策见"待办私密层 / 进展保持公开" · 不进公开 feed */
+let _teamStudio = null;
+
+function ensureTodoStyles() {
+  if (document.getElementById('todo-fx')) return;
+  const st = document.createElement('style'); st.id = 'todo-fx';
+  st.textContent =
+    '.todo-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}' +
+    '.todo-add .input-bare{flex:1 1 220px;min-width:0}' +
+    '.todo-add .todo-due,.todo-add .todo-sel{border:1px solid var(--rule);border-radius:2px;padding:6px 8px;font-size:13px;color:var(--ink-soft);background:var(--paper);font-family:inherit}' +
+    '.todo-card.is-done .todo-text{color:var(--sepia);text-decoration:line-through}' +
+    '.todo-donehdr{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.05em;color:var(--sepia);text-transform:uppercase;margin:14px 0 6px}' +
+    '.todo-empty{color:var(--sepia);font-size:13px;padding:6px 0}';
+  document.head.appendChild(st);
+}
+
+function todoRow(t, ctx) {
+  const me = currentUser.handle;
+  const scopeTag = t.scope === 'team'
+    ? ' · <span style="color:var(--vermilion)">团队</span>' + (t.assignee ? ' · @' + escapeHtml(t.assignee) : (ctx === 'team' ? ' · 待认领' : ''))
+    : ' · 私人';
+  const dueTag = t.due ? ' · 到期 ' + escapeHtml(t.due) : '';
+  const acts = ['<span class="react-action" onclick="todoToggle(\'' + t.id + '\',' + (!t.done) + ')">' + (t.done ? '撤销' : '完成') + '</span>'];
+  if (ctx === 'team') acts.push('<span class="react-action" onclick="todoClaim(\'' + t.id + '\')">认领</span>');
+  if (ctx === 'mine' && t.scope === 'personal') acts.push('<span class="react-action" onclick="todoPromote(\'' + t.id + '\')">同步到团队</span>');
+  if (t.owner === me) acts.push('<span class="react-action" onclick="todoDelete(\'' + t.id + '\')">删</span>');
+  return '<div class="pcard todo-card' + (t.done ? ' is-done' : '') + '" style="cursor:default">' +
+    '<div class="pcard-name todo-text">' + escapeHtml(t.text) + '</div>' +
+    '<div class="pcard-meta"><span class="' + (t.done ? 'done' : '') + '">— ' + (t.done ? '完成' : '未完成') + '</span>' +
+    scopeTag + dueTag + ' &nbsp;·&nbsp; ' + acts.join(' ') + '</div></div>';
+}
+
+function mountMyTodos() {
+  ensureTodoStyles();
+  const body = document.querySelector('#workshop-content .app-body') || document.getElementById('workshop-content');
+  if (!body) return;
+  let host = document.getElementById('ws-todos');
+  if (!host) { body.insertAdjacentHTML('afterbegin', '<div id="ws-todos" class="mb-12"></div>'); host = document.getElementById('ws-todos'); }
+  const me = currentUser.handle;
+  const mine = (state.todos || []).filter(t => (t.scope === 'personal' && t.owner === me) || (t.scope === 'team' && t.assignee === me));
+  const open = mine.filter(t => !t.done), done = mine.filter(t => t.done);
+  host.innerHTML =
+    '<div class="section-label flex items-center justify-between"><span>待办 (' + open.length + ')</span></div>' +
+    '<form class="todo-add" onsubmit="todoAddPersonal(event)">' +
+      '<input class="input-bare" name="t" placeholder="加一条待办 · 只有你自己看得到" required autocomplete="off">' +
+      '<input class="todo-due" name="due" type="date" aria-label="截止日">' +
+      '<button class="btn-act-primary" type="submit">加</button></form>' +
+    (open.length ? open.map(t => todoRow(t, 'mine')).join('') : '<p class="todo-empty">没有待办 · 清爽</p>') +
+    (done.length ? '<div class="todo-donehdr">已完成 ' + done.length + '</div>' + done.slice(0, 15).map(t => todoRow(t, 'mine')).join('') : '');
+}
+
+function mountTeamTodos(s) {
+  ensureTodoStyles();
+  _teamStudio = s;
+  const host = document.getElementById('studio-todos');
+  if (!host) return;
+  const team = (state.todos || []).filter(t => t.scope === 'team' && t.studioId === s.id);
+  const open = team.filter(t => !t.done), done = team.filter(t => t.done);
+  const opts = s.members.map(m => '<option value="' + escapeHtml(m.handle) + '">@' + escapeHtml(m.handle) + '</option>').join('');
+  host.innerHTML =
+    '<div class="section-label flex items-center justify-between"><span>团队任务 (' + open.length + ')</span></div>' +
+    '<form class="todo-add" onsubmit="todoAddTeam(event,\'' + escapeHtml(s.id) + '\')">' +
+      '<input class="input-bare" name="t" placeholder="加一条团队任务 · 工作室成员都看得到" required autocomplete="off">' +
+      '<select class="todo-sel" name="asg" aria-label="派给谁"><option value="">待认领</option>' + opts + '</select>' +
+      '<input class="todo-due" name="due" type="date" aria-label="截止日">' +
+      '<button class="btn-act-primary" type="submit">加</button></form>' +
+    (open.length ? open.map(t => todoRow(t, 'team')).join('') : '<p class="todo-empty">还没有团队任务</p>') +
+    (done.length ? '<div class="todo-donehdr">已完成 ' + done.length + '</div>' + done.slice(0, 15).map(t => todoRow(t, 'team')).join('') : '');
+}
+
+function refreshTodos() {
+  if (document.getElementById('ws-todos')) mountMyTodos();
+  if (document.getElementById('studio-todos') && _teamStudio) mountTeamTodos(_teamStudio);
+}
+
+async function todoAddPersonal(ev) {
+  ev.preventDefault(); const f = ev.target; const text = (f.t.value || '').trim(); if (!text) return;
+  try { await apiAction('addTodo', { scope: 'personal', text: text, due: f.due.value || undefined }); f.reset(); mountMyTodos(); }
+  catch (e) { showToast(e.message); }
+}
+async function todoAddTeam(ev, sid) {
+  ev.preventDefault(); const f = ev.target; const text = (f.t.value || '').trim(); if (!text) return;
+  try { await apiAction('addTodo', { scope: 'team', studioId: sid, text: text, assigneeHandle: f.asg.value || undefined, due: f.due.value || undefined }); f.reset(); if (_teamStudio) mountTeamTodos(_teamStudio); }
+  catch (e) { showToast(e.message); }
+}
+async function todoToggle(id, done) { try { await apiAction('toggleTodo', { todoId: id, done: done }); refreshTodos(); } catch (e) { showToast(e.message); } }
+async function todoDelete(id) { try { await apiAction('deleteTodo', { todoId: id }); refreshTodos(); } catch (e) { showToast(e.message); } }
+async function todoClaim(id) { try { await apiAction('assignTodo', { todoId: id, assigneeHandle: currentUser.handle }); refreshTodos(); } catch (e) { showToast(e.message); } }
+async function todoPromote(id) {
+  const mine = (state.users[currentUser.handle] && state.users[currentUser.handle].studios) || [];
+  if (!mine.length) { showToast('你还没有工作室 · 没法同步'); return; }
+  const st = (state.studios || []).find(x => x.slug === mine[0].slug);
+  if (!st) { showToast('找不到工作室'); return; }
+  try { await apiAction('promoteTodo', { todoId: id, studioId: st.id }); showToast('已同步到「' + mine[0].name + '」· 成员现在看得到'); refreshTodos(); }
+  catch (e) { showToast(e.message); }
 }
 
 /* ============ PROJECT ============ */

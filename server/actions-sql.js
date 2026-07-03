@@ -1609,6 +1609,89 @@ function markNotifRead({ notifId }, { currentUserId }) {
   return { ok: true };
 }
 
+// ============================================
+// 待办 · 私密协作层(v1.x)· 不进公开 feed
+// personal 只 owner 看 · team 工作室成员之间看得见 · 决策见"待办私密层 / 进展保持公开"
+// ============================================
+function todoIsMember(studioId, userId) {
+  return !!db.prepare('SELECT 1 FROM studio_members WHERE studio_id = ? AND user_id = ?').get(studioId, userId);
+}
+function todoAccess(t, userId) {
+  if (!t) return false;
+  if (t.scope === 'team') return todoIsMember(t.studio_id, userId);
+  return t.owner_id === userId;
+}
+
+function addTodo({ scope, text, due, studioId, assigneeHandle }, { currentUserId }) {
+  if (!text || !text.trim()) throw new Error('待办是空的');
+  const dueVal = (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) ? due : null;
+  const id = db.uuidv7();
+  const now = Date.now();
+  if (scope === 'team') {
+    if (!studioId) throw new Error('团队待办要选一个工作室');
+    if (!todoIsMember(studioId, currentUserId)) throw new Error('你不在这个工作室里');
+    let assigneeId = null;
+    if (assigneeHandle) {
+      const uid = userIdFromHandle(assigneeHandle);
+      if (uid && todoIsMember(studioId, uid)) assigneeId = uid;
+    }
+    db.prepare(`INSERT INTO todos (id, scope, owner_id, assignee_id, studio_id, text, due, done, created_at)
+                VALUES (?, 'team', ?, ?, ?, ?, ?, 0, ?)`).run(id, currentUserId, assigneeId, studioId, text.trim(), dueVal, now);
+  } else {
+    db.prepare(`INSERT INTO todos (id, scope, owner_id, assignee_id, studio_id, text, due, done, created_at)
+                VALUES (?, 'personal', ?, NULL, NULL, ?, ?, 0, ?)`).run(id, currentUserId, text.trim(), dueVal, now);
+  }
+  return { ok: true, id };
+}
+
+function toggleTodo({ todoId, done }, { currentUserId }) {
+  const t = db.prepare('SELECT id, scope, owner_id, studio_id, done FROM todos WHERE id = ?').get(todoId);
+  if (!todoAccess(t, currentUserId)) throw new Error('这条待办你动不了');
+  const next = (typeof done === 'boolean') ? (done ? 1 : 0) : (t.done ? 0 : 1);
+  db.prepare('UPDATE todos SET done = ?, done_at = ? WHERE id = ?').run(next, next ? Date.now() : null, todoId);
+  return { ok: true, done: !!next };
+}
+
+function deleteTodo({ todoId }, { currentUserId }) {
+  const t = db.prepare('SELECT owner_id FROM todos WHERE id = ?').get(todoId);
+  if (!t) throw new Error('找不到这条待办');
+  if (t.owner_id !== currentUserId) throw new Error('只能删自己建的待办');  // 团队任务也只创建者能删 · 免得误删别人的
+  db.prepare('DELETE FROM todos WHERE id = ?').run(todoId);
+  return { ok: true };
+}
+
+// 派活 / 改派 / 认领 · assigneeHandle 传自己=认领 · 传空=取消指派 · 团队任务 · 任意成员可操作
+function assignTodo({ todoId, assigneeHandle }, { currentUserId }) {
+  const t = db.prepare('SELECT scope, studio_id FROM todos WHERE id = ?').get(todoId);
+  if (!t) throw new Error('找不到这条待办');
+  if (t.scope !== 'team') throw new Error('只有团队任务能派活');
+  if (!todoIsMember(t.studio_id, currentUserId)) throw new Error('你不在这个工作室里');
+  let assigneeId = null;
+  if (assigneeHandle) {
+    const uid = userIdFromHandle(assigneeHandle);
+    if (!uid || !todoIsMember(t.studio_id, uid)) throw new Error('这个人不在工作室里');
+    assigneeId = uid;
+  }
+  db.prepare('UPDATE todos SET assignee_id = ? WHERE id = ?').run(assigneeId, todoId);
+  return { ok: true };
+}
+
+// 个人待办同步成团队(端上公共台面)· 只 owner 能同步自己的
+function promoteTodo({ todoId, studioId, assigneeHandle }, { currentUserId }) {
+  const t = db.prepare('SELECT scope, owner_id FROM todos WHERE id = ?').get(todoId);
+  if (!t) throw new Error('找不到这条待办');
+  if (t.owner_id !== currentUserId) throw new Error('只能同步自己的待办');
+  if (t.scope === 'team') throw new Error('这条已经是团队任务了');
+  if (!studioId || !todoIsMember(studioId, currentUserId)) throw new Error('要选一个你在的工作室');
+  let assigneeId = null;
+  if (assigneeHandle) {
+    const uid = userIdFromHandle(assigneeHandle);
+    if (uid && todoIsMember(studioId, uid)) assigneeId = uid;
+  }
+  db.prepare("UPDATE todos SET scope = 'team', studio_id = ?, assignee_id = ? WHERE id = ?").run(studioId, assigneeId, todoId);
+  return { ok: true };
+}
+
 module.exports = {
   searchMethods, getBorrowsForOwner, listSeeking, listSeekingReplies, // 不走 action 路径 · 直接 GET 暴露
   listMyUpdates, // 不走 action 路径 · 直接 GET 暴露 (CLI 用)
@@ -1633,6 +1716,8 @@ module.exports = {
   reactToProject, submitTinkered, deleteTinkered, markMethodUsed,
   // notes
   addNote, deleteNote, resolveNote,
+  // 待办 · 私密协作层(v1.x)
+  addTodo, toggleTodo, deleteTodo, assignTodo, promoteTodo,
   // stashes · 个人现场暂存
   stashPush, stashList, stashGet, stashDrop,
   // notifications

@@ -266,12 +266,29 @@ function buildState({ targetUserId } = {}) {
     SELECT id, slug, name, tagline FROM studios ORDER BY created_at ASC
   `).all();
 
+  // 待办 · 私密协作层(v1.x)· 只给请求者本人 · 不进匿名 dump · 不进公开 feed
+  //   personal:只 owner 看  ·  team:请求者所在工作室的团队任务(成员之间可见 · 对外不公开)
+  let todosOut = [];
+  if (targetUserId) {
+    todosOut = db.prepare(`
+      SELECT t.id, t.scope, ow.handle AS owner, asg.handle AS assignee, t.studio_id AS studioId,
+             t.text, t.due, t.done, t.created_at AS createdAt, t.done_at AS doneAt
+      FROM todos t
+      JOIN users ow ON ow.id = t.owner_id
+      LEFT JOIN users asg ON asg.id = t.assignee_id
+      WHERE (t.scope = 'personal' AND t.owner_id = ?)
+         OR (t.scope = 'team' AND t.studio_id IN (SELECT studio_id FROM studio_members WHERE user_id = ?))
+      ORDER BY t.created_at DESC
+    `).all(targetUserId, targetUserId).map(r => ({ ...r, done: !!r.done }));
+  }
+
   return {
     users: usersOut,
     projects: projectsOut,
     methods: methodsOut,
     notifications: notificationsOut,
     studios: studiosOut,
+    todos: todosOut,
     starters,
     availableTools,
   };
