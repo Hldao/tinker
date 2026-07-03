@@ -15,33 +15,40 @@ jobs:
   deploy:
     name: 部署到生产服务器
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # 兜底 · 部署卡死 15 分钟必失败 · 不再默认挂 6 小时
+    timeout-minutes: 30  # 兜底 · 冷构建在小 ECS 上要装 apk + 编 better-sqlite3 · 留够余量 (原 15 分不够 · 换源后正常也就几分钟)
     steps:
       - name: 检出代码 (仅用于看改了什么)
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: 判断是否只改了 webapp (决定要不要重新打包)
+      - name: 判断要不要重建镜像 (只有动了进镜像的代码才重建)
         id: check
         run: |
           CHANGED=$(git diff --name-only HEAD^ HEAD)
           echo "改动的文件:"
           echo "$CHANGED"
+          # 镜像里只 COPY 了 server/ 和 webapp/ (见 Dockerfile) · 别的目录改了不影响容器
+          # cli/ 是给用户 npm 装的客户端 · skills/ .github/ .tinker/ docs/ 都不进镜像
+          # webapp/ 走 volume 挂载 · 改了只需重启不用重建
           NEEDS_REBUILD=false
           for f in $CHANGED; do
             case "$f" in
               webapp/*) ;;
+              cli/*) ;;
+              skills/*) ;;
               docs/*) ;;
+              .github/*) ;;
+              .tinker/*) ;;
               README.md|*.md) ;;
               *) NEEDS_REBUILD=true ;;
             esac
           done
           echo "needs_rebuild=$NEEDS_REBUILD" >> $GITHUB_OUTPUT
           if [ "$NEEDS_REBUILD" = "true" ]; then
-            echo "::notice::改动涉及服务器代码 · 需要重新打包 (1-3 分钟)"
+            echo "::notice::改动涉及服务器代码 · 需要重新打包"
           else
-            echo "::notice::只改了网页/文档 · 只重启容器 (10-30 秒)"
+            echo "::notice::没动进镜像的代码 · 只重启容器 (10-30 秒)"
           fi
 
       - name: 配置 SSH 钥匙
