@@ -13,6 +13,7 @@
 | `tinker-voice` | 帮用户写任何要发出去的中文文字时的文风约束 |
 | `tinker-borrow` | 搜方法库 / 沉淀方法 / 求方法 |
 | `tinker-collab` | 工作室接力 / 决策征求 / 邀请入室 |
+| `tinker-todo` | 记待办 / 勾完成 / 派活 / 个人待办同步成团队任务（私密协作层，跟公开进展分开）|
 | `tinker-triggers` | 理解和处理触发器 reminder（hook / pending / maybe-check）|
 
 ## 装进 AI

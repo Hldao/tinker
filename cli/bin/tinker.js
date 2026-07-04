@@ -8538,6 +8538,9 @@ function parseArgs(args) {
     else if (a === '--inspired-by') opts.inspiredBy = args[++i];
     else if (a.startsWith('--inspired-by=')) opts.inspiredBy = a.slice('--inspired-by='.length);
     else if (a === '--undo') opts.undo = true;
+    else if (a === '--due') opts.due = args[++i];
+    else if (a.startsWith('--due=')) opts.due = a.slice('--due='.length);
+    else if (a === '--team') opts.team = true;
     else if (a === '--watch') opts.watch = true;
     else if (a === '--enable') opts.enable = true;
     else if (a === '--disable') opts.disable = true;
@@ -9090,6 +9093,124 @@ const {
   cmdWitnessReply, cmdWitnessClose, cmdWitnessSelf, cmdTeamKnowledgePublish,
 } = __team;
 
+// ============ 待办 (v1.x · 私密协作层) ============
+// personal 只自己见 · team 工作室成员互见 · 都不进公开 feed
+// 服务端 action:addTodo / toggleTodo / deleteTodo / assignTodo / promoteTodo · 列表读 state.todos
+function todoResolveStudioId(state, cfg, slug) {
+  const all = state.studios || [];
+  if (slug) {
+    const s = all.find(x => x.slug === slug);
+    if (!s) { err('没找到工作室 ' + slug + ' · tinker studio list 看有哪些'); process.exit(1); }
+    return s.id;
+  }
+  const mine = (state.users && state.users[cfg.handle] && state.users[cfg.handle].studios) || [];
+  if (mine.length === 1) { const m = all.find(x => x.slug === mine[0].slug); if (m) return m.id; }
+  if (mine.length === 0) { err('你还不在任何工作室 · 团队待办得先进一个'); process.exit(1); }
+  err('你在多个工作室 · 用 --studio <slug> 指定放哪个'); process.exit(1);
+}
+function todoFind(state, partial) {
+  if (!partial) { err('要指定待办 id(tinker todo list 看)'); process.exit(1); }
+  const ts = state.todos || [];
+  const exact = ts.find(t => t.id === partial);
+  if (exact) return exact;
+  // 待办 id 是 UUIDv7(时间戳打头)· 区分度在尾部 · 按后缀匹配(list 显示的就是后 6 位)
+  const hit = ts.filter(t => t.id.endsWith(partial));
+  if (hit.length === 1) return hit[0];
+  if (hit.length > 1) { err('id ' + partial + ' 匹配到多条 · 写全一点'); process.exit(1); }
+  err('没找到待办 ' + partial + ' · tinker todo list 看'); process.exit(1);
+}
+function todoShortId(id) { return id.slice(-6); }
+
+async function cmdTodo(args, opts) {
+  const cfg = mustHaveConfig();
+  const sub = args[1] || 'list';
+  if (sub === 'list' || sub === 'ls') return todoList(cfg, opts);
+  if (sub === 'add' || sub === 'a') return todoAdd(cfg, args, opts);
+  if (sub === 'done' || sub === 'x') return todoToggle(cfg, args[2], opts, !opts.undo);
+  if (sub === 'reopen') return todoToggle(cfg, args[2], opts, false);
+  if (sub === 'rm' || sub === 'del') return todoRm(cfg, args[2], opts);
+  if (sub === 'assign') return todoAssign(cfg, args[2], opts);
+  if (sub === 'promote') return todoPromote(cfg, args[2], opts);
+  err('未知子命令: ' + sub + ' · 用 list / add / done / reopen / rm / assign / promote'); process.exit(1);
+}
+
+async function todoList(cfg, opts) {
+  const state = await apiState(cfg);
+  const ts = state.todos || [];
+  if (opts.json) return outputJson({ ok: true, todos: ts });
+  if (ts.length === 0) { log(sepia('  还没有待办 · tinker todo add "买菜" 记一条')); return; }
+  for (const [label, list] of [['个人', ts.filter(t => t.scope === 'personal')], ['团队', ts.filter(t => t.scope === 'team')]]) {
+    if (!list.length) continue;
+    log(''); log(bold(label + ' (' + list.filter(t => !t.done).length + ' 待办)'));
+    const open = list.filter(t => !t.done), done = list.filter(t => t.done);
+    for (const t of [...open, ...done]) {
+      const box = t.done ? moss('[✓]') : '[ ]';
+      const who = t.scope === 'team' ? sepia(' @' + (t.assignee || '待认领')) : '';
+      const due = t.due ? sepia(' · 截 ' + t.due) : '';
+      log('  ' + box + ' ' + sepia(todoShortId(t.id)) + '  ' + (t.done ? sepia(t.text) : t.text) + who + due);
+    }
+  }
+  log('');
+}
+
+async function todoAdd(cfg, args, opts) {
+  let text = opts.text;
+  if (!text) { const pos = []; for (let i = 2; i < args.length; i++) { if (args[i].startsWith('-')) break; pos.push(args[i]); } text = pos.join(' '); }
+  text = (text || '').trim();
+  if (!text) { err('待办内容不能空 · tinker todo add "买菜" 或 -m "买菜"'); process.exit(1); }
+  const team = !!opts.team || !!opts.studio;
+  const payload = { scope: team ? 'team' : 'personal', text, due: opts.due || null };
+  if (team) {
+    const state = await apiState(cfg);
+    payload.studioId = todoResolveStudioId(state, cfg, opts.studio);
+    if (opts.toHandle) payload.assigneeHandle = opts.toHandle;
+  }
+  try {
+    const r = await apiAction(cfg, 'addTodo', payload);
+    if (opts.json) return outputJson({ ok: true, todoId: r.result?.id });
+    log(moss('  记下了 · ') + sepia(team ? '团队 ' : '个人 ') + text + (payload.assigneeHandle ? sepia(' → @' + payload.assigneeHandle) : '') + (opts.due ? sepia(' · 截 ' + opts.due) : ''));
+  } catch (e) { if (opts.json) return errJson(e.message, 'TODO_ADD_FAILED'); err(e.message); process.exit(1); }
+}
+
+async function todoToggle(cfg, partial, opts, done) {
+  const t = todoFind(await apiState(cfg), partial);
+  try {
+    await apiAction(cfg, 'toggleTodo', { todoId: t.id, done });
+    if (opts.json) return outputJson({ ok: true });
+    log(moss(done ? '  勾掉了 · ' : '  重开 · ') + t.text);
+  } catch (e) { if (opts.json) return errJson(e.message, 'TODO_TOGGLE_FAILED'); err(e.message); process.exit(1); }
+}
+
+async function todoRm(cfg, partial, opts) {
+  const t = todoFind(await apiState(cfg), partial);
+  try {
+    await apiAction(cfg, 'deleteTodo', { todoId: t.id });
+    if (opts.json) return outputJson({ ok: true });
+    log(sepia('  删了 · ') + t.text);
+  } catch (e) { if (opts.json) return errJson(e.message, 'TODO_RM_FAILED'); err(e.message); process.exit(1); }
+}
+
+async function todoAssign(cfg, partial, opts) {
+  if (!opts.toHandle) { err('派给谁?用 -t @handle'); process.exit(1); }
+  const t = todoFind(await apiState(cfg), partial);
+  try {
+    await apiAction(cfg, 'assignTodo', { todoId: t.id, assigneeHandle: opts.toHandle });
+    if (opts.json) return outputJson({ ok: true });
+    log(moss('  派给 @' + opts.toHandle + ' · ') + t.text);
+  } catch (e) { if (opts.json) return errJson(e.message, 'TODO_ASSIGN_FAILED'); err(e.message); process.exit(1); }
+}
+
+async function todoPromote(cfg, partial, opts) {
+  const state = await apiState(cfg);
+  const t = todoFind(state, partial);
+  const studioId = todoResolveStudioId(state, cfg, opts.studio);
+  try {
+    await apiAction(cfg, 'promoteTodo', { todoId: t.id, studioId, assigneeHandle: opts.toHandle || undefined });
+    if (opts.json) return outputJson({ ok: true });
+    log(moss('  同步成团队任务 · ') + t.text);
+  } catch (e) { if (opts.json) return errJson(e.message, 'TODO_PROMOTE_FAILED'); err(e.message); process.exit(1); }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
@@ -9158,6 +9279,7 @@ async function main() {
         break;
       }
       case 'seek': await cmdSeek(opts); break;
+      case 'todo': case 'todos': await cmdTodo(args, opts); break;
       case 'contribute': await cmdContribute(args[1], opts); break;
       case 'recent': await cmdRecent(opts); break;
       case 'feed': await cmdFeed(args[1], opts); break;

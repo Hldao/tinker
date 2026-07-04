@@ -18,6 +18,8 @@ description: Tinker / 捣鼓 CLI 协作总纲。任何时候你在一台装了 t
 | 做工具 / 方案决策 | 建议 `tinker push -m "..."` 记决策 | `tinker-record` |
 | 说"砍了 / 不做了"（有理由的取舍）| 建议 `tinker push -m "..."` 说为什么砍 | `tinker-record` |
 | 说"完工 / 上线 / deploy 了"（真发布）| 建议 `tinker ship -m "一句话感想"` 进陈列馆 | `tinker-record` |
+| 说"记个待办 / 回头做 / 这事别忘 / 派给某某"（要做的事，私密）| `tinker todo add "..."`（派活加 `-t @handle`） | `tinker-todo` |
+| 问"我有哪些待办 / 还有啥没做" | `tinker todo list` | `tinker-todo` |
 | 说"沉淀成方法 / 求个方法" | `tinker contribute` 或 `tinker seek` | `tinker-borrow` |
 | 说"接力 / 交接给 X / 征求意见 / 邀请 X" | 走 handoff / witness / studio | `tinker-collab` |
 | 问"今天我都做了啥" | `tinker goodnight --json` | — |
@@ -60,4 +62,5 @@ description: Tinker / 捣鼓 CLI 协作总纲。任何时候你在一台装了 t
 - `tinker-voice` 帮用户写任何要发出去的文字时的中文文风约束
 - `tinker-borrow` 搜方法库 / 沉淀方法 / 求方法
 - `tinker-collab` 工作室接力、决策征求、邀请入室
+- `tinker-todo` 待办：个人私密 / 团队任务，跟公开进展分开
 - `tinker-triggers` 理解和处理触发器 reminder（hook / pending / maybe-check）
