@@ -6994,6 +6994,7 @@
         <button onclick="showScreen('cli')">命令行</button>
         <button class="nav-authed" onclick="navMyWorkshop()">我的工坊</button>
         <button class="nav-authed" onclick="showScreen('notifications')">通知<span id="nav-unread-mark" class="hidden">●</span></button>
+        <button class="nav-authed" onclick="showScreen('account')">账号</button>
         <button onclick="showScreen('about')" class="nav-about">关于</button>
       </nav>
       <button class="masthead-cta serif nav-authed" onclick="navAddUpdate()">+ 记一笔</button>
@@ -8368,15 +8369,22 @@ function renderFeed() {
   // 顶部 hero (跟 setup 一套) · 只填一次
   const feedHeroSlot = document.getElementById('feed-hero-slot');
   if (feedHeroSlot && !feedHeroSlot.firstChild) {
+    const _feAbbr = t => { t = (t || '').replace(/\s+/g, ' ').replace(/["`]/g, '').trim(); return t.length > 20 ? t.slice(0, 20) + '…' : t; };
+    const _feEvts = getFeedEvents().slice(0, 2);
+    const feedHeroLines = _feEvts.length
+      ? _feEvts.map((e, i) => i === 0
+          ? { cmd: 'tinker feed', out: '@' + e.owner + ' · ' + _feAbbr(e.text) }
+          : { cmd: 'tinker feed @' + e.owner, out: 'ta 最近 · ' + _feAbbr(e.text) })
+      : [
+          { cmd: 'tinker feed', out: '谁在捣鼓什么 · 一眼看过去' },
+          { cmd: 'tinker feed @某人', out: 'ta 最近做通了什么 · 卡在哪' },
+        ];
     feedHeroSlot.innerHTML = appHero({
       eyebrow: '工坊 · feed',
       title: '今天有<span class="accent">动静</span>',
       sub: '大家在做的、做出来的 — 路过看一眼别人在捣鼓什么。',
       termCap: '全站最新动静',
-      termLines: [
-        { cmd: 'tinker feed', out: '@daodao 改支付 · @maomao 报课通了' },
-        { cmd: 'tinker feed @daodao', out: 'ta 最近:卡在 webhook · 3 条进展' },
-      ],
+      termLines: feedHeroLines,
     });
     appHeroReplay();
   }
@@ -8653,8 +8661,13 @@ async function renderWorkshop(handle) {
   const heroUpdates = projects.flatMap(p => (p.updates || []).map(u => ({ text: u.text || '', at: u.at || 0 })))
     .sort((a, b) => b.at - a.at).slice(0, 4);
   const wsToolsTxt = topTools.length ? topTools.join(', ') : '—';
+  const heroOuts = ['✓ 记下了', '✓ 留了一笔', '✓ 进了工坊'];
   const heroTermLines = heroUpdates.length
-    ? heroUpdates.slice(0, 3).map(u => ({ cmd: 'tinker push -m "' + u.text.replace(/\s+/g, ' ').replace(/["`]/g, '').slice(0, 24) + '"', out: '✓ 记下了 · ' + shortAgo(u.at) }))
+    ? heroUpdates.slice(0, 3).map((u, i) => {
+        const t = u.text.replace(/\s+/g, ' ').replace(/["`]/g, '').trim();
+        const shown = t.length > 30 ? t.slice(0, 30) + '…' : t;
+        return { cmd: 'tinker push -m "' + shown + '"', out: heroOuts[i % 3] + ' · ' + shortAgo(u.at) };
+      })
     : [{ cmd: 'tinker push -m "今天做了点什么"', out: '✓ 记下了 · 用你的口吻' }, { cmd: 'tinker borrow "关键词"', out: '别人跑通的整段进你的 AI' }];
   const heroTermData = escapeHtml(JSON.stringify(heroTermLines));
 
