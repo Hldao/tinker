@@ -8920,16 +8920,33 @@ async function renderStudio(slug) {
         </div>
       `).join('');
 
-  const shadowHtml = '';
+  // hero 终端 · 把工作室的动静当 tinker 命令跑出来(跟工坊/账号一套)
+  const heroTermLines = [
+    { cmd: 'tinker studio info ' + s.slug, out: s.name + ' · ' + s.members.length + ' 人 · ' + s.projects.length + ' 个项目' },
+    { cmd: 'tinker studio members', out: (s.members.map(m => '@' + m.handle).join(' · ')) || '还没人' },
+  ];
+  const heroTermData = escapeHtml(JSON.stringify(heroTermLines));
 
   root.innerHTML = `
-    <div class="mb-10 pb-8 border-b" style="border-color: var(--rule);">
-      <div class="mono text-xs mb-3" style="color: var(--sepia); letter-spacing: 0.18em; text-transform: uppercase;">${isMember ? '你的工作室' : '一间工作室'}</div>
-      <h1 class="workshop-name mb-3">${escapeHtml(s.name)}</h1>
-      ${s.tagline ? `<p class="workshop-tagline">「${escapeHtml(s.tagline)}」</p>` : ''}
-      <div class="mono text-xs mt-3" style="color: var(--sepia);">/s/${escapeHtml(s.slug)} · ${s.members.length} 个人</div>
-      ${isMember ? `<div class="mt-3"><span class="small-action" style="color: var(--sepia); cursor: pointer;" onclick="leaveStudio('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">离开工作室</span></div>` : ''}
+    <div class="app-hero-band">
+    <div class="app-hero-inner">
+      <div class="app-hero-copy">
+        ${isMember ? `<a class="workshop-account-link" onclick="leaveStudio('${escapeHtml(s.id)}','${escapeHtml(s.name)}')">离开 →</a>` : ''}
+        <div class="app-eyebrow">${isMember ? '你的工作室 · studio' : '一间工作室 · studio'}</div>
+        <h1 class="app-htitle">${escapeHtml(s.name)}</h1>
+        ${s.tagline ? `<p class="workshop-tagline">「${escapeHtml(s.tagline)}」</p>` : ''}
+        <div class="app-status"><span class="mono">/s/${escapeHtml(s.slug)}</span> · ${s.members.length} 个人</div>
+      </div>
+      <div class="app-hero-demo">
+        <div class="aht-cap">这间工作室的动静</div>
+        <div class="aht">
+          <div class="aht-bar"><span></span><span></span><span></span></div>
+          <div class="aht-body" id="studio-hero-term" data-term="${heroTermData}"></div>
+        </div>
+      </div>
     </div>
+    </div>
+    <div class="app-body">
     <div class="mb-12">
       <div class="section-label flex items-center justify-between">
         <span>成员 (${s.members.length})</span>
@@ -8938,12 +8955,13 @@ async function renderStudio(slug) {
       <div class="studio-members-grid">${memberHtml}</div>
     </div>
     ${isMember ? '<div id="studio-todos" class="mb-12"></div>' : ''}
-    ${shadowHtml}
     <div class="mb-12">
       <div class="section-label"><span>项目 (${s.projects.length})</span></div>
       ${projectsHtml}
     </div>
+    </div>
   `;
+  appHeroReplay();
   if (isMember) mountTeamTodos(s);  // 团队任务(工作室成员互见)· 私密层
 }
 
