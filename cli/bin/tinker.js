@@ -1738,6 +1738,21 @@ async function shadowDo(opts) {
   const depthHint = prof.depth === 'thorough' ? '尽量周全' : '先做出能交付的版本';
   let basePrompt = task + '\n\n把产出写成文件保存在当前目录(报告/文档就写成 .md · 数据就写成对应文件)。只用当前目录,别改别处。' + depthHint + '。';
 
+  // --repo:把真实代码放进工作区的 .repo/(dot 开头 · 不算产出)· 让影子读真代码别猜名字(治「函数名靠想象」)
+  if (opts.repo) {
+    const dest = path.join(ws, '.repo');
+    const ref = ((opts.ref || 'HEAD').trim()) || 'HEAD';
+    fs.mkdirSync(dest, { recursive: true });
+    try {
+      execSync('git -C "' + opts.repo + '" archive ' + ref + ' | tar -x -C "' + dest + '"',
+        { stdio: 'ignore', timeout: 180000 });
+      log(sepia('  已把真实代码放进 ./.repo(影子读它 · 别猜名字)· 来源: ') + opts.repo + ' @ ' + ref);
+      basePrompt += '\n\n【参考:真实代码在 ./.repo/ 里,动手前先读真实代码、用真实的函数名和调用方式,别凭空猜。你的产出写在当前目录,别改 .repo。】';
+    } catch (e) {
+      log(sepia('  ⚠ 放代码进工作区失败(git archive)· 影子将没有真实代码可读: ') + (e.message || '').slice(0, 80));
+    }
+  }
+
   // 验收官 · 传了 --verify <标准文件> 或 --auto-verify 才走「语义验收 + 打回重跑」· 不传就跟以前一模一样(零回归)
   let verifyFile = (opts.verify || '').trim();
   const autoVerify = !!opts.autoVerify;
@@ -11715,6 +11730,8 @@ function parseArgs(args) {
     else if (a === '--verify') opts.verify = args[++i];
     else if (a === '--auto-verify') opts.autoVerify = true;
     else if (a === '--gate') opts.gate = true;
+    else if (a === '--repo') opts.repo = args[++i];
+    else if (a === '--ref') opts.ref = args[++i];
     else if (a === '--max') opts.max = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
