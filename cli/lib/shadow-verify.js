@@ -82,17 +82,6 @@ function callDeepseek(prompt, valid) {
   return null;
 }
 
-// 语义裁判分派 · 默认 deepseek(独立)· 不通退回 haiku(claude)· VERIFY_ENGINE 可强制
-function judgeSemantic(prompt, valid, claudePath) {
-  const engine = process.env.VERIFY_ENGINE || 'deepseek';
-  if (engine !== 'haiku') {
-    const d = callDeepseek(prompt, valid);
-    if (d) return { out: d, by: 'deepseek(独立)' };
-  }
-  const c = callClaude(prompt, VERIFY_MODEL, claudePath, valid);
-  return { out: c, by: c ? 'haiku' : null };
-}
-
 // 标准文件语法(# 开头是注释):
 //   禁止包含: X          出现就 FAIL
 //   必须包含: A|B|C      都没出现才 FAIL(任一命中即过 · 治死抠字面)
@@ -153,7 +142,7 @@ function verify(criteriaFile, deliverDir, options) {
   let semFail = 0;
   let semFeedback = '';
   if (semLines.length) {
-    lines.push('', '===== 语义判(独立裁判 · 只判没法用尺子量的)=====');
+    lines.push('', '===== 语义判(独立裁判 + 交叉验 · 只判没法用尺子量的)=====');
     const prompt =
       '你是严格的验收官。下面「产出」已经给全了 · 现在就判 · 不要回「准备好了」「等待输入」这类话 · 也不要等我再给内容。\n' +
       '字数 / 禁用词 / 跑命令这类硬指标已由程序另判,你不要再数数或跑东西。\n' +
@@ -163,18 +152,42 @@ function verify(criteriaFile, deliverDir, options) {
       '直接给结论,别展示思考,只输出一次这个格式(第一行必须是 VERDICT:):\n' +
       'VERDICT: PASS 或 FAIL\n- [PASS/FAIL] <要求>: 一句话理由\n' +
       'FEEDBACK: 若 FAIL 写给影子照着改的指令 · PASS 写「无」';
-    const j = judgeSemantic(prompt, o => /^VERDICT:/im.test(o), claudePath);
-    const out = j.out;
-    if (out === null) {
-      lines.push('  [验收官够不着 · 基础设施故障 · 保守判 FAIL]');
-      semFail = 1;
+    // 修2:合格的裁判回复必须带 FEEDBACK · 治「光秃秃一句 VERDICT: FAIL 没理由」→ 打回变瞎
+    const valid = o => /^VERDICT:/im.test(o) && /FEEDBACK:/im.test(o);
+    const verdictOf = o => {
+      const v = o.split('\n').filter(l => l.trim().toUpperCase().startsWith('VERDICT:'));
+      return (v.length && v[v.length - 1].toUpperCase().includes('PASS')) ? 'PASS' : 'FAIL';
+    };
+    const feedbackOf = o => {
+      const fb = o.split('\n').filter(l => l.trim().toUpperCase().startsWith('FEEDBACK:'));
+      return (fb.length && fb[fb.length - 1].indexOf('无') === -1) ? fb[fb.length - 1] : '';
+    };
+    // 主裁判 · 默认 deepseek(独立)· VERIFY_ENGINE=haiku 可强制
+    const forceHaiku = (process.env.VERIFY_ENGINE || 'deepseek') === 'haiku';
+    let primary = forceHaiku ? null : callDeepseek(prompt, valid);
+    let primaryBy = 'deepseek(独立)';
+    if (primary === null) { primary = callClaude(prompt, model, claudePath, valid); primaryBy = 'haiku'; }
+
+    if (primary === null) {
+      lines.push('  [验收官够不着 · 保守判 FAIL]'); semFail = 1;
     } else {
-      lines.push('  [裁判引擎:' + j.by + ']');
-      lines.push(out.trim());
-      const verdicts = out.split('\n').filter(l => l.trim().toUpperCase().startsWith('VERDICT:'));
-      if (!verdicts.length || !verdicts[verdicts.length - 1].toUpperCase().includes('PASS')) semFail = 1;
-      const fb = out.split('\n').filter(l => l.trim().toUpperCase().startsWith('FEEDBACK:'));
-      if (fb.length && fb[fb.length - 1].indexOf('无') === -1) semFeedback = fb[fb.length - 1];
+      lines.push('  [主裁判:' + primaryBy + ']');
+      lines.push(primary.trim());
+      if (verdictOf(primary) === 'FAIL') {
+        // 修3:主裁判判挂 → 换另一个裁判交叉验 · 治「误杀好活」· 两票都挂才算真挂
+        const isDeep = primaryBy.indexOf('deepseek') === 0;
+        const second = isDeep ? callClaude(prompt, model, claudePath, valid) : callDeepseek(prompt, valid);
+        const secondBy = isDeep ? 'haiku' : 'deepseek(独立)';
+        if (second === null) {
+          lines.push('  [交叉裁判够不着 · 依主裁判判挂]'); semFail = 1; semFeedback = feedbackOf(primary);
+        } else if (verdictOf(second) === 'FAIL') {
+          lines.push('  [交叉裁判:' + secondBy + '] 也判挂 · 两票都挂 · 确实没过');
+          semFail = 1; semFeedback = feedbackOf(primary) || feedbackOf(second);
+        } else {
+          lines.push('  [交叉裁判:' + secondBy + '] 判过 · ⚖️ 两裁判分歧 → 放过(治误杀)· 建议经理舱人复核');
+          semFail = 0;
+        }
+      }
     }
   }
 
