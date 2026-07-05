@@ -5,6 +5,7 @@
 // 返回 { pass, failCount, feedback, report }
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync, execFileSync } = require('child_process');
 
 // 用绝对路径别靠 PATH 撞运气(偶发 claude not found 会误判 FAIL → 冤枉打回)
@@ -53,6 +54,43 @@ function callClaude(prompt, model, claudePath, valid) {
     } catch {}
   }
   return null;
+}
+
+// 独立裁判 · deepseek(跟写手 claude 不同家 · 更可信 · 更便宜)· 钥匙从 tinker 配置读 · 不硬编码不打印
+function deepseekKey() {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.tinker', 'config.json'), 'utf-8'));
+    if (cfg.llm && cfg.llm.provider === 'deepseek' && cfg.llm.apiKey) return cfg.llm.apiKey;
+  } catch {}
+  return '';
+}
+
+function callDeepseek(prompt, valid) {
+  const key = deepseekKey();
+  if (!key) return null;
+  const body = JSON.stringify({ model: 'deepseek-chat', temperature: 0, messages: [{ role: 'user', content: prompt }] });
+  for (let i = 0; i < 2; i++) {
+    try {
+      const out = execFileSync('curl', ['-s', 'https://api.deepseek.com/chat/completions',
+        '-H', 'Authorization: Bearer ' + key, '-H', 'Content-Type: application/json', '-d', body],
+        { encoding: 'utf-8', timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
+      const j = JSON.parse(out);
+      const txt = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if (txt && txt.trim() && (!valid || valid(txt))) return txt;
+    } catch {}
+  }
+  return null;
+}
+
+// 语义裁判分派 · 默认 deepseek(独立)· 不通退回 haiku(claude)· VERIFY_ENGINE 可强制
+function judgeSemantic(prompt, valid, claudePath) {
+  const engine = process.env.VERIFY_ENGINE || 'deepseek';
+  if (engine !== 'haiku') {
+    const d = callDeepseek(prompt, valid);
+    if (d) return { out: d, by: 'deepseek(独立)' };
+  }
+  const c = callClaude(prompt, VERIFY_MODEL, claudePath, valid);
+  return { out: c, by: c ? 'haiku' : null };
 }
 
 // 标准文件语法(# 开头是注释):
@@ -115,7 +153,7 @@ function verify(criteriaFile, deliverDir, options) {
   let semFail = 0;
   let semFeedback = '';
   if (semLines.length) {
-    lines.push('', '===== 语义判(交给便宜模型 · 只判没法用尺子量的)=====');
+    lines.push('', '===== 语义判(独立裁判 · 只判没法用尺子量的)=====');
     const prompt =
       '你是严格的验收官。下面「产出」已经给全了 · 现在就判 · 不要回「准备好了」「等待输入」这类话 · 也不要等我再给内容。\n' +
       '字数 / 禁用词 / 跑命令这类硬指标已由程序另判,你不要再数数或跑东西。\n' +
@@ -125,11 +163,13 @@ function verify(criteriaFile, deliverDir, options) {
       '直接给结论,别展示思考,只输出一次这个格式(第一行必须是 VERDICT:):\n' +
       'VERDICT: PASS 或 FAIL\n- [PASS/FAIL] <要求>: 一句话理由\n' +
       'FEEDBACK: 若 FAIL 写给影子照着改的指令 · PASS 写「无」';
-    const out = callClaude(prompt, model, claudePath, o => /^VERDICT:/im.test(o));
+    const j = judgeSemantic(prompt, o => /^VERDICT:/im.test(o), claudePath);
+    const out = j.out;
     if (out === null) {
       lines.push('  [验收官够不着 · 基础设施故障 · 保守判 FAIL]');
       semFail = 1;
     } else {
+      lines.push('  [裁判引擎:' + j.by + ']');
       lines.push(out.trim());
       const verdicts = out.split('\n').filter(l => l.trim().toUpperCase().startsWith('VERDICT:'));
       if (!verdicts.length || !verdicts[verdicts.length - 1].toUpperCase().includes('PASS')) semFail = 1;
