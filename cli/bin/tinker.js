@@ -1704,7 +1704,7 @@ async function shadowDo(opts) {
   let boardTask = null;
   let task = (opts.task || '').trim();
   if (!task) { boardTask = pullNextTask(); if (boardTask) { task = boardTask.desc; log(sepia('  从任务板领了: ') + task); } }
-  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--check "验收命令"] [--verify 标准文件] [--max N]') + sepia(' · 或先 tinker task add')); process.exit(1); }
+  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--check "命令"] [--verify 标准文件 | --auto-verify] [--max N]') + sepia(' · 或先 tinker task add')); process.exit(1); }
   const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
   if (!agentCmd) { err('先配 agent: ' + vermilion('tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\'')); process.exit(1); }
   const checkCmd = (opts.check || (boardTask && boardTask.test) || '').trim();
@@ -1722,16 +1722,39 @@ async function shadowDo(opts) {
   log(sepia('  进度/存档: ') + vermilion('tail -f ' + logFile));
 
   const depthHint = prof.depth === 'thorough' ? '尽量周全' : '先做出能交付的版本';
-  const basePrompt = task + '\n\n把产出写成文件保存在当前目录(报告/文档就写成 .md · 数据就写成对应文件)。只用当前目录,别改别处。' + depthHint + '。';
+  let basePrompt = task + '\n\n把产出写成文件保存在当前目录(报告/文档就写成 .md · 数据就写成对应文件)。只用当前目录,别改别处。' + depthHint + '。';
 
-  // 验收官 · 只在传了 --verify <标准文件> 时才走「语义验收 + 打回重跑」· 不传就跟以前一模一样(零回归)
-  const verifyFile = (opts.verify || '').trim();
-  const maxTries = verifyFile ? Math.max(1, parseInt(opts.max, 10) || 3) : 1;
+  // 验收官 · 传了 --verify <标准文件> 或 --auto-verify 才走「语义验收 + 打回重跑」· 不传就跟以前一模一样(零回归)
+  let verifyFile = (opts.verify || '').trim();
+  const autoVerify = !!opts.autoVerify;
   let shadowVerify = null;
-  if (verifyFile) {
-    if (!fs.existsSync(verifyFile)) { err('找不到验收标准文件: ' + verifyFile); process.exit(1); }
-    shadowVerify = require('../lib/shadow-verify');
+  if (verifyFile || autoVerify) shadowVerify = require('../lib/shadow-verify');
+  if (verifyFile && !fs.existsSync(verifyFile)) { err('找不到验收标准文件: ' + verifyFile); process.exit(1); }
+
+  // 自动拆一刀 · 没给 --verify 但要 --auto-verify → 让模型现生成验收标准
+  if (autoVerify && !verifyFile) {
+    log(sepia('  拆一刀 · 自动生成验收标准 ...'));
+    const crit = shadowVerify.genCriteria(task);
+    if (crit && crit.trim()) {
+      verifyFile = path.join(ws, '.verify-criteria.txt');
+      fs.writeFileSync(verifyFile, crit);
+      log(sepia('  验收标准(自动拆的):'));
+      for (const l of crit.trim().split('\n')) log(sepia('    ' + l));
+    } else {
+      log(sepia('  拆一刀没吐出标准 · 这趟退回不验收'));
+    }
   }
+
+  // 验收标准同时喂给影子(运动员和裁判看同一张考卷 · 治「拿影子没见过的尺子冤枉它」)
+  if (verifyFile) {
+    try {
+      const critForShadow = fs.readFileSync(verifyFile, 'utf-8').split('\n')
+        .filter(l => l.trim() && !l.trim().startsWith('#')).join('\n');
+      if (critForShadow) basePrompt += '\n\n【这份产出会被逐条验收 · 下面每条都要满足】\n' + critForShadow;
+    } catch {}
+  }
+
+  const maxTries = verifyFile ? Math.max(1, parseInt(opts.max, 10) || 3) : 1;
 
   let agentErr = null, deliverables = [], verifyRes = null, feedback = '';
   for (let attempt = 1; attempt <= maxTries; attempt++) {
@@ -11389,7 +11412,7 @@ function help() {
   log('  ' + vermilion('tinker draft --since 30m') + sepia('           自定义时间窗'));
   log('');
   log(sepia('  ') + bold('影子做长任务(不止写代码 · 调研/文档/整理都行)'));
-  log('  ' + vermilion('tinker shadow do --task "..." [--check "命令"] [--verify 标准文件] [--max N]') + sepia('  隔离干活→产出→验收(命令或语义)→不过打回→丢复核夹'));
+  log('  ' + vermilion('tinker shadow do --task "..." [--verify 标准文件 | --auto-verify] [--max N]') + sepia('  隔离干活→产出→验收(命令/语义/自动拆标准)→不过打回→丢复核夹'));
   log('  ' + vermilion('tinker shadow out') + sepia('                  看影子做完的交付物(待你看)'));
   log('');
   log(sepia('  ') + bold('重度影子 · 自己起草'));
@@ -11666,6 +11689,7 @@ function parseArgs(args) {
     else if (a === '--repo') opts.repo = args[++i];
     else if (a === '--check') opts.check = args[++i];
     else if (a === '--verify') opts.verify = args[++i];
+    else if (a === '--auto-verify') opts.autoVerify = true;
     else if (a === '--max') opts.max = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;

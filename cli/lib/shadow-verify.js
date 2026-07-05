@@ -34,17 +34,21 @@ function gather(dir) {
       }
     } catch {}
   }
-  return { raw: raws.join('\n\n'), labeled: labels.join('\n\n') };
+  const raw = raws.join('\n\n');
+  // 单文件不加「# ==== 文件名 ====」表头 · 免得语义判把表头当成产出的多余内容 → 冤枉打回
+  const labeled = raws.length <= 1 ? raw : labels.join('\n\n');
+  return { raw, labeled };
 }
 
 // 调便宜模型判语义 · 最多 3 次 · valid 谓词不满足(如没吐 VERDICT)也算没通 · 继续重试
 // 彻底拿不到合格输出返 null(上层别当质量 FAIL 兜底 · 免得冤枉打回烧钱)
 function callClaude(prompt, model, claudePath, valid) {
+  const args = ['-p'];
+  if (model) args.push('--model', model); // model 传 null 就走 claude 默认模型(拆一刀这种要好点的脑子)
+  args.push(prompt);
   for (let i = 0; i < 3; i++) {
     try {
-      const out = execFileSync(claudePath, ['-p', '--model', model, prompt], {
-        encoding: 'utf-8', timeout: 180000,
-      });
+      const out = execFileSync(claudePath, args, { encoding: 'utf-8', timeout: 180000 });
       if (out && out.trim() && (!valid || valid(out))) return out;
     } catch {}
   }
@@ -144,4 +148,26 @@ function verify(criteriaFile, deliverDir, options) {
   return { pass: failCount === 0, failCount, feedback, report: lines.join('\n') };
 }
 
-module.exports = { verify };
+// 拆一刀 · 给一个要交给影子的任务 · 让模型现生成验收标准(默认走好点的模型 · 拆得准更重要)
+// 返回标准文本(可直接写成标准文件)· 拆不出返 ''
+function genCriteria(task, options) {
+  options = options || {};
+  const model = options.model || null; // null = claude 默认模型
+  const claudePath = options.claudePath || resolveClaude();
+  const prompt =
+    '你是验收标准拟定官。下面是要交给影子完成的任务 · 请定出这份产出该满足的验收标准。\n' +
+    '只输出标准行 · 每行一条 · 用这些前缀:\n' +
+    '必须包含: 只写产出正文里该出现的专有名词 / 术语 / 具体数值(可写 A|B 表示同义任一)。\n' +
+    '  注意:别把「写入文件X」「文件名叫X」「用markdown」这类操作/格式要求写成必须包含 —— 那不是正文内容 · 会永远判不过。文件的事不用你管。\n' +
+    '语义: 用于概念 / 覆盖 / 质量类要求(如 每块要有取舍不是罗列 · 要有明确结论 · 该覆盖哪几方面)\n' +
+    '至少 3 条 · 概念性要求优先用语义 · 拿不准就用语义别用必须包含 · 别输出任务原文或别的话。\n\n' +
+    '任务:\n' + task;
+  const out = callClaude(prompt, model, claudePath,
+    o => /(必须包含:|语义:|最多字数:|最少字数:|禁止包含:|文件存在:)/.test(o));
+  if (!out) return '';
+  const lines = out.split('\n').map(l => l.trim()).filter(
+    l => /^(必须包含:|语义:|最多字数:|最少字数:|禁止包含:|文件存在:)/.test(l));
+  return lines.length ? ('# 自动拆出的验收标准\n' + lines.join('\n') + '\n') : '';
+}
+
+module.exports = { verify, genCriteria };
