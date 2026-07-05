@@ -94,6 +94,26 @@ function saveConfig(cfg) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
 }
+
+// 待办本地缓存 · ~/.tinker/todos-cache.json
+// 目的:todo list 离线可看 / 秒开 · 也给"到期提醒"每条 prompt 的探测提供零网络数据源
+// 尽力而为:读写失败都不抛 · 缓存坏了就当没缓存 · 绝不拖垮主命令
+const TODOS_CACHE_FILE = path.join(CONFIG_DIR, 'todos-cache.json');
+function saveTodosCache(todos) {
+  try {
+    if (!Array.isArray(todos)) return;
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(TODOS_CACHE_FILE, JSON.stringify({ at: Date.now(), todos }, null, 2));
+  } catch (e) { /* 缓存写失败不影响主流程 */ }
+}
+function loadTodosCache() {
+  try {
+    if (!fs.existsSync(TODOS_CACHE_FILE)) return null;
+    const c = JSON.parse(fs.readFileSync(TODOS_CACHE_FILE, 'utf-8'));
+    if (!c || !Array.isArray(c.todos)) return null;
+    return c; // { at, todos }
+  } catch (e) { return null; }
+}
 // 默认 / 兜底 server URL (alpha 期生产 IP) · 旧 config 的 ngrok 地址会失效 · 这是 fallback
 const DEFAULT_SERVER_URL = 'http://120.26.46.217:8788';
 
@@ -170,7 +190,10 @@ async function safeFetchJson(cfg, path, init) {
 
 async function apiState(cfg) {
   const res = await safeFetch(cfg, '/api/state', { headers: authHeaders(cfg) });
-  return res.json();
+  const state = await res.json();
+  // 顺手刷待办本地缓存 · 任何拉 state 的命令都让缓存保鲜 · 供离线读 + 到期提醒探测
+  if (state && Array.isArray(state.todos)) saveTodosCache(state.todos);
+  return state;
 }
 async function apiMe(cfg) {
   const res = await safeFetch(cfg, '/api/auth/me', { headers: authHeaders(cfg) });
@@ -9135,9 +9158,18 @@ async function cmdTodo(args, opts) {
 }
 
 async function todoList(cfg, opts) {
-  const state = await apiState(cfg);
-  const ts = state.todos || [];
-  if (opts.json) return outputJson({ ok: true, todos: ts });
+  // 联网优先 · 连不上就回退本地缓存(离线也能看待办)
+  let ts, offline = false, cachedAt = null;
+  try {
+    const state = await apiState(cfg);
+    ts = state.todos || [];
+  } catch (e) {
+    const cache = loadTodosCache();
+    if (!cache) { if (opts.json) return errJson(e.message, 'TODO_LIST_FAILED'); err(e.message); process.exit(1); }
+    ts = cache.todos; offline = true; cachedAt = cache.at;
+  }
+  if (opts.json) return outputJson({ ok: true, todos: ts, offline, cachedAt: cachedAt || undefined });
+  if (offline) log(sepia('  · 离线 · 显示 ' + agoZh(cachedAt) + '的缓存 · 连上后自动更新'));
   if (ts.length === 0) { log(sepia('  还没有待办 · tinker todo add "买菜" 记一条')); return; }
   for (const [label, list] of [['个人', ts.filter(t => t.scope === 'personal')], ['团队', ts.filter(t => t.scope === 'team')]]) {
     if (!list.length) continue;
@@ -9392,6 +9424,8 @@ async function main() {
 module.exports = {
   // 配置
   loadConfig, mustHaveConfig, CONFIG_DIR, CONFIG_FILE,
+  // 待办本地缓存 (离线读 + 到期提醒探测复用)
+  TODOS_CACHE_FILE, saveTodosCache, loadTodosCache,
   // API
   apiState, apiMe, apiAction, safeFetch,
   // 状态持久化
