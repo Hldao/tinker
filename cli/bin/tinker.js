@@ -1704,7 +1704,7 @@ async function shadowDo(opts) {
   let boardTask = null;
   let task = (opts.task || '').trim();
   if (!task) { boardTask = pullNextTask(); if (boardTask) { task = boardTask.desc; log(sepia('  从任务板领了: ') + task); } }
-  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--check "验收命令"]') + sepia(' · 或先 tinker task add')); process.exit(1); }
+  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--check "验收命令"] [--verify 标准文件] [--max N]') + sepia(' · 或先 tinker task add')); process.exit(1); }
   const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
   if (!agentCmd) { err('先配 agent: ' + vermilion('tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\'')); process.exit(1); }
   const checkCmd = (opts.check || (boardTask && boardTask.test) || '').trim();
@@ -1722,25 +1722,66 @@ async function shadowDo(opts) {
   log(sepia('  进度/存档: ') + vermilion('tail -f ' + logFile));
 
   const depthHint = prof.depth === 'thorough' ? '尽量周全' : '先做出能交付的版本';
-  const prompt = task + '\n\n把产出写成文件保存在当前目录(报告/文档就写成 .md · 数据就写成对应文件)。只用当前目录,别改别处。' + depthHint + '。';
-  let agentErr = null;
-  const logFd = fs.openSync(logFile, 'a');
-  try {
-    execSync(agentCmd, { cwd: ws, env: { ...process.env, TINKER_TASK: prompt, TINKER_DEPTH: prof.depth }, stdio: ['ignore', logFd, logFd], timeout: minutes * 60 * 1000 });
-  } catch (e) { agentErr = /timed out|timeout/i.test(e.message || '') ? '超时(' + minutes + '分钟)· 产出可能不完整,工作区留着' : (e.message || 'agent 出错'); }
-  finally { try { fs.closeSync(logFd); } catch {} }
+  const basePrompt = task + '\n\n把产出写成文件保存在当前目录(报告/文档就写成 .md · 数据就写成对应文件)。只用当前目录,别改别处。' + depthHint + '。';
 
-  const deliverables = fs.readdirSync(ws).filter(f => !f.startsWith('.'));
+  // 验收官 · 只在传了 --verify <标准文件> 时才走「语义验收 + 打回重跑」· 不传就跟以前一模一样(零回归)
+  const verifyFile = (opts.verify || '').trim();
+  const maxTries = verifyFile ? Math.max(1, parseInt(opts.max, 10) || 3) : 1;
+  let shadowVerify = null;
+  if (verifyFile) {
+    if (!fs.existsSync(verifyFile)) { err('找不到验收标准文件: ' + verifyFile); process.exit(1); }
+    shadowVerify = require('../lib/shadow-verify');
+  }
+
+  let agentErr = null, deliverables = [], verifyRes = null, feedback = '';
+  for (let attempt = 1; attempt <= maxTries; attempt++) {
+    if (attempt > 1) {
+      // 打回重跑 · 先清掉上一趟的产出 · 只验这一趟写的
+      for (const f of fs.readdirSync(ws).filter(x => !x.startsWith('.'))) {
+        try { fs.rmSync(path.join(ws, f), { recursive: true, force: true }); } catch {}
+      }
+      log('');
+      log(sepia('  打回重跑 · 第 ' + attempt + '/' + maxTries + ' 趟(带上一趟验收意见)'));
+    }
+    const attemptPrompt = feedback
+      ? basePrompt + '\n\n【上一版没过验收 · 照下面逐条改 · 否则还会被打回】\n' + feedback
+      : basePrompt;
+    agentErr = null;
+    const logFd = fs.openSync(logFile, 'a');
+    try {
+      execSync(agentCmd, { cwd: ws, env: { ...process.env, TINKER_TASK: attemptPrompt, TINKER_DEPTH: prof.depth }, stdio: ['ignore', logFd, logFd], timeout: minutes * 60 * 1000 });
+    } catch (e) { agentErr = /timed out|timeout/i.test(e.message || '') ? '超时(' + minutes + '分钟)· 产出可能不完整,工作区留着' : (e.message || 'agent 出错'); }
+    finally { try { fs.closeSync(logFd); } catch {} }
+
+    deliverables = fs.readdirSync(ws).filter(f => !f.startsWith('.'));
+    if (!verifyFile) break; // 老路 · 不验 · 一趟就完
+
+    if (agentErr || !deliverables.length) {
+      feedback = agentErr ? '这趟没跑完(超时或出错)· 请重写完整' : '这趟没写出任何文件 · 必须把产出写成文件';
+      verifyRes = { pass: false, failCount: 999, feedback };
+      continue;
+    }
+    log('');
+    verifyRes = shadowVerify.verify(verifyFile, ws);
+    log(verifyRes.report);
+    if (verifyRes.pass) { log(sepia('  验收通过 · 差 0 条')); break; }
+    feedback = verifyRes.feedback;
+  }
+
+  // --check 命令式验收 · 只在没走 --verify 时保留(老行为完全不变)
   let checkPass = null, checkOut = '';
-  if (checkCmd && !agentErr && deliverables.length) {
+  if (!verifyFile && checkCmd && !agentErr && deliverables.length) {
     log(sepia('  验收: ') + checkCmd);
     try { checkOut = execSync(checkCmd, { cwd: ws, encoding: 'utf-8', timeout: 5 * 60 * 1000 }); checkPass = true; }
     catch (e) { checkPass = false; checkOut = ((e.stdout || '') + (e.stderr || '')).toString(); }
   }
-  const green = !agentErr && deliverables.length > 0 && (checkCmd ? checkPass === true : true);
+
+  const green = verifyFile
+    ? !!(verifyRes && verifyRes.pass === true)
+    : (!agentErr && deliverables.length > 0 && (checkCmd ? checkPass === true : true));
   recordShadowEvent(green
     ? { type: 'do-done', id, task: task.slice(0, 80), files: deliverables.length, depth: prof.depth }
-    : { type: 'do-fail', id, task: task.slice(0, 80), reason: agentErr ? 'agent-error' : (!deliverables.length ? 'no-output' : 'check-fail') });
+    : { type: 'do-fail', id, task: task.slice(0, 80), reason: agentErr ? 'agent-error' : (!deliverables.length ? 'no-output' : (verifyFile ? 'verify-fail' : 'check-fail')) });
 
   log('');
   if (green) {
@@ -1748,13 +1789,13 @@ async function shadowDo(opts) {
     const out = path.join(SHADOW_OUT_DIR, id);
     fs.renameSync(ws, out);
     if (boardTask) updateTaskStatus(boardTask.id, 'review', { out });
-    ok('影子做完了 · 产出 ' + bold(deliverables.length + '') + ' 个文件' + (checkCmd ? ' · 验收通过 ✓' : '') + ' · 在复核夹等你看');
+    ok('影子做完了 · 产出 ' + bold(deliverables.length + '') + ' 个文件' + ((checkCmd || verifyFile) ? ' · 验收通过 ✓' : '') + ' · 在复核夹等你看');
     log(sepia('  文件: ') + deliverables.join('、'));
     log(sepia('  打开看: ') + vermilion('open "' + out + '"') + sepia('   ·   列全部待审: ') + vermilion('tinker shadow out'));
     try { fireDesktop({ title: '影子做完了', body: task.slice(0, 40) + ' · 产出在复核夹待你看' }); } catch {}
   } else {
     if (boardTask) updateTaskStatus(boardTask.id, 'failed');
-    const why = agentErr || (!deliverables.length ? '没产出文件' : '产出没过验收');
+    const why = agentErr || (!deliverables.length ? '没产出文件' : (verifyFile ? ('打回 ' + maxTries + ' 次仍没过验收') : '产出没过验收'));
     err('影子这趟没成 · ' + why + ' · 工作区留着看: ' + ws);
     if (checkOut) log(sepia('  验收输出尾部:') + '\n  ' + checkOut.split('\n').slice(-6).join('\n  '));
   }
@@ -5338,11 +5379,19 @@ function cmdMaybe(kind) {
   ps.lastMaybeAtByKind = ps.lastMaybeAtByKind || {};
   const last = ps.lastMaybeAtByKind[kind];
   const now = Date.now();
+  // 信噪比:全局冷却 · 任何 maybe 刚弹过就先闭嘴 · 治"一屏弹一堆 + 每条消息都弹"
+  // 可用 TINKER_MAYBE_GLOBAL_COOLDOWN_MIN 调 · 默认 20 分钟
+  const globalMin = parseInt(process.env.TINKER_MAYBE_GLOBAL_COOLDOWN_MIN || '20', 10);
+  if (ps.lastMaybeAt && (now - ps.lastMaybeAt) < globalMin * 60 * 1000) {
+    logTriggerEvent(kind, 'global_cooldown', { remaining_ms: globalMin * 60 * 1000 - (now - ps.lastMaybeAt) });
+    return;
+  }
   if (last && (now - last) < cfg.cooldownMin * 60 * 1000) {
     logTriggerEvent(kind, 'cooled_down', { remaining_ms: cfg.cooldownMin * 60 * 1000 - (now - last) });
     return;
   }
   ps.lastMaybeAtByKind[kind] = now;
+  ps.lastMaybeAt = now;
   savePromptState(ps);
   logTriggerEvent(kind, 'fired', { cooldown_min: cfg.cooldownMin });
   process.stdout.write(cfg.reminder + '\n');
@@ -11340,7 +11389,7 @@ function help() {
   log('  ' + vermilion('tinker draft --since 30m') + sepia('           自定义时间窗'));
   log('');
   log(sepia('  ') + bold('影子做长任务(不止写代码 · 调研/文档/整理都行)'));
-  log('  ' + vermilion('tinker shadow do --task "..." [--check "验收命令"]') + sepia('  隔离干活→产出文件→丢复核夹待审'));
+  log('  ' + vermilion('tinker shadow do --task "..." [--check "命令"] [--verify 标准文件] [--max N]') + sepia('  隔离干活→产出→验收(命令或语义)→不过打回→丢复核夹'));
   log('  ' + vermilion('tinker shadow out') + sepia('                  看影子做完的交付物(待你看)'));
   log('');
   log(sepia('  ') + bold('重度影子 · 自己起草'));
@@ -11616,6 +11665,8 @@ function parseArgs(args) {
     else if (a === '--hours') opts.hours = args[++i];
     else if (a === '--repo') opts.repo = args[++i];
     else if (a === '--check') opts.check = args[++i];
+    else if (a === '--verify') opts.verify = args[++i];
+    else if (a === '--max') opts.max = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
     else if (a === '--situation') opts.situation = args[++i];
