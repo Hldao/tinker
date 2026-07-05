@@ -5592,6 +5592,7 @@ const VOICE_PROFILE_REGISTRY = {
   'maybe-check':    'internal',
   scenario:         'internal',
   stash:            'internal',   // -m 是给自己的现场标签 · 不公开 · 不查
+  feishu:           'internal',   // feishu notify 多是机器生成的投喂播报 · 不走 voice 守门
 };
 
 function warnIfVoiceProfileMissing(cmd, opts) {
@@ -9354,7 +9355,47 @@ async function cmdFeishu(args, opts) {
     return;
   }
   if (sub === 'login') return cmdFeishuLogin(opts);
-  err('用法: tinker feishu status | login · 同步待办用 tinker todo sync'); process.exit(1);
+  if (sub === 'chats') return cmdFeishuChats(opts);
+  if (sub === 'set-chat') {
+    const id = args[2];
+    if (!id) { err('用法: tinker feishu set-chat <chat_id>(用 tinker feishu chats 看)'); process.exit(1); }
+    feishuSaveToken({ ...(feishuLoadToken() || {}), notify_chat_id: id });
+    ok('默认通知群设为 ' + id); return;
+  }
+  if (sub === 'notify') return cmdFeishuNotify(opts);
+  err('用法: tinker feishu status | login | chats | set-chat <id> | notify -m "..." · 同步待办 tinker todo sync'); process.exit(1);
+}
+
+// 应用(机器人)令牌 · 发群消息用它(以机器人身份)· 跟 user token 分开
+async function feishuTenantToken() {
+  const t = feishuLoadToken();
+  if (!t || !t.app_id || !t.app_secret) throw new Error('缺飞书应用凭证 · 跑 ' + vermilion('tinker feishu login'));
+  const r = await fetch(FEISHU_BASE + '/open-apis/auth/v3/tenant_access_token/internal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_id: t.app_id, app_secret: t.app_secret }) }).then(x => x.json());
+  if (!r.tenant_access_token) throw new Error('拿飞书应用令牌失败 · ' + (r.msg || ''));
+  return r.tenant_access_token;
+}
+
+// 列机器人所在的群 · 拿 chat_id
+async function cmdFeishuChats(opts) {
+  const tok = await feishuTenantToken();
+  const l = await feishuApi(tok, 'GET', '/open-apis/im/v1/chats?page_size=50');
+  const items = (l.data && l.data.items) || [];
+  if (opts.json) return outputJson({ ok: true, chats: items.map(c => ({ chat_id: c.chat_id, name: c.name })) });
+  if (!items.length) { log(sepia('  机器人不在任何群 · 先把机器人加进群')); return; }
+  const saved = (feishuLoadToken() || {}).notify_chat_id;
+  for (const c of items) log('  ' + (c.chat_id === saved ? moss('▸ ') : '  ') + (c.name || '(无名群)') + sepia(' · ' + c.chat_id));
+}
+
+// 往默认群发一条消息(机器人身份)· 供投喂脚本等外部调用
+async function cmdFeishuNotify(opts) {
+  const chatId = (feishuLoadToken() || {}).notify_chat_id;
+  if (!chatId) { err('还没设通知群 · tinker feishu chats 看群 · tinker feishu set-chat <chat_id> 设一个'); process.exit(1); }
+  if (!opts.text) { err('要发什么?tinker feishu notify -m "..."'); process.exit(1); }
+  const tok = await feishuTenantToken();
+  const r = await feishuApi(tok, 'POST', '/open-apis/im/v1/messages?receive_id_type=chat_id', { receive_id: chatId, msg_type: 'text', content: JSON.stringify({ text: opts.text }) });
+  if (r.code !== 0) { if (opts.json) return errJson(r.msg, 'FEISHU_NOTIFY_FAILED'); err('发群消息失败: ' + r.msg); process.exit(1); }
+  if (opts.json) return outputJson({ ok: true });
+  ok('已发到群 · ' + opts.text);
 }
 
 // OAuth 登录 · 起本地回调 · 换 user token(带 refresh)存本地
