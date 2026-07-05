@@ -9188,14 +9188,16 @@ async function cmdTodo(args, opts) {
   const cfg = mustHaveConfig();
   const sub = args[1] || 'list';
   if (sub === 'list' || sub === 'ls') return todoList(cfg, opts);
-  if (sub === 'add' || sub === 'a') return todoAdd(cfg, args, opts);
-  if (sub === 'done' || sub === 'x') return todoToggle(cfg, args[2], opts, !opts.undo);
-  if (sub === 'reopen') return todoToggle(cfg, args[2], opts, false);
-  if (sub === 'rm' || sub === 'del') return todoRm(cfg, args[2], opts);
-  if (sub === 'assign') return todoAssign(cfg, args[2], opts);
-  if (sub === 'promote') return todoPromote(cfg, args[2], opts);
   if (sub === 'sync') return cmdTodoSync(cfg, opts);
-  err('未知子命令: ' + sub + ' · 用 list / add / done / reopen / rm / assign / promote / sync'); process.exit(1);
+  // 改动类子命令 · 跑完后台自动同步飞书(没连飞书则跳过)
+  if (sub === 'add' || sub === 'a') await todoAdd(cfg, args, opts);
+  else if (sub === 'done' || sub === 'x') await todoToggle(cfg, args[2], opts, !opts.undo);
+  else if (sub === 'reopen') await todoToggle(cfg, args[2], opts, false);
+  else if (sub === 'rm' || sub === 'del') await todoRm(cfg, args[2], opts);
+  else if (sub === 'assign') await todoAssign(cfg, args[2], opts);
+  else if (sub === 'promote') await todoPromote(cfg, args[2], opts);
+  else { err('未知子命令: ' + sub + ' · 用 list / add / done / reopen / rm / assign / promote / sync'); process.exit(1); }
+  feishuMaybeSyncAsync();
 }
 
 async function todoList(cfg, opts) {
@@ -9300,6 +9302,16 @@ function feishuSaveToken(t) { fs.writeFileSync(FEISHU_TOKEN_FILE, JSON.stringify
 function feishuLoadSync() { try { return JSON.parse(fs.readFileSync(FEISHU_SYNC_FILE, 'utf-8')); } catch (e) { return { map: {} }; } }
 function feishuSaveSync(s) { fs.writeFileSync(FEISHU_SYNC_FILE, JSON.stringify(s, null, 2)); }
 function feishuDueTs(dueStr) { return new Date(dueStr + 'T09:00:00+08:00').getTime(); } // 截止日 → 北京 9 点
+const FEISHU_SYNC_LOCK = path.join(CONFIG_DIR, 'feishu-sync.lock');
+
+// 待办改动后 · 后台甩一个同步 · detached 不阻塞命令 · 没连飞书直接跳过
+function feishuMaybeSyncAsync() {
+  if (!fs.existsSync(FEISHU_TOKEN_FILE)) return; // 没连飞书 · 不同步
+  try {
+    const child = spawn(process.execPath, [__filename, 'todo', 'sync', '--quiet'], { detached: true, stdio: 'ignore' });
+    child.unref();
+  } catch (e) { /* 后台同步失败不影响主命令 */ }
+}
 
 // 拿有效 access token · 快过期(5 分钟内)就 refresh 续 · 续不动让用户重新 login
 async function feishuAccessToken() {
@@ -9376,6 +9388,19 @@ async function cmdFeishuLogin(opts) {
 
 // tinker todo sync · 把"我的"待办双向同步到飞书任务
 async function cmdTodoSync(cfg, opts) {
+  // 取锁 · 防并发同步重复建(后台自动同步 + 手动同步可能撞)· 60s 内活锁就跳过
+  try {
+    if (fs.existsSync(FEISHU_SYNC_LOCK)) {
+      const st = JSON.parse(fs.readFileSync(FEISHU_SYNC_LOCK, 'utf-8'));
+      if (Date.now() - (st.at || 0) < 60000) {
+        if (opts.json) return outputJson({ ok: true, skipped: 'another-sync-running' });
+        if (!opts.quiet) log(sepia('  另一个同步在跑 · 跳过'));
+        return;
+      }
+    }
+    fs.writeFileSync(FEISHU_SYNC_LOCK, JSON.stringify({ at: Date.now(), pid: process.pid }));
+  } catch (e) { /* 锁是尽力而为 */ }
+  try {
   const token = await feishuAccessToken();
   const who = await feishuApi(token, 'GET', '/open-apis/authen/v1/user_info');
   const openId = who.data && who.data.open_id;
@@ -9439,7 +9464,10 @@ async function cmdTodoSync(cfg, opts) {
   if (opts.json) return outputJson({ ok: true, ...stat });
   const bits = ['新建 ' + stat.created, '更新 ' + stat.updated, '完成 ' + (stat.forwardDone + stat.reverseDone), '重开 ' + (stat.forwardReopen + stat.reverseReopen)];
   if (stat.conflict) bits.push('冲突(Tinker 赢) ' + stat.conflict);
-  log(moss('  飞书同步完成 · ') + bits.join(' · '));
+  if (!opts.quiet) log(moss('  飞书同步完成 · ') + bits.join(' · '));
+  } finally {
+    try { fs.unlinkSync(FEISHU_SYNC_LOCK); } catch (e) { /* 释放锁 */ }
+  }
 }
 
 async function main() {
