@@ -1820,6 +1820,16 @@ async function shadowDo(opts) {
     ? { type: 'do-done', id, task: task.slice(0, 80), files: deliverables.length, depth: prof.depth }
     : { type: 'do-fail', id, task: task.slice(0, 80), reason: agentErr ? 'agent-error' : (!deliverables.length ? 'no-output' : (verifyFile ? 'verify-fail' : 'check-fail')) });
 
+  // 编排契约 · 落一个机器可读的结局文件 · 多分项调度器 / 依赖门控靠它判「这分项算不算干完」(不用 grep 日志)
+  // state: verified(验收过) | passthrough(没验收但正常产出) | rejected(验收没过) | failed(超时/出错/没产出)
+  const orchState = green
+    ? ((verifyFile || checkCmd) ? 'verified' : 'passthrough')
+    : ((agentErr || !deliverables.length) ? 'failed' : 'rejected');
+  try {
+    fs.writeFileSync(path.join(ws, '.verify-result.json'),
+      JSON.stringify({ id, state: orchState, files: deliverables.length, gate: opts.gate ? 'passed' : 'none' }) + '\n');
+  } catch {}
+
   log('');
   if (green) {
     fs.mkdirSync(SHADOW_OUT_DIR, { recursive: true });
