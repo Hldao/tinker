@@ -94,6 +94,26 @@ function saveConfig(cfg) {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
 }
+
+// 待办本地缓存 · ~/.tinker/todos-cache.json
+// 目的:todo list 离线可看 / 秒开 · 也给"到期提醒"每条 prompt 的探测提供零网络数据源
+// 尽力而为:读写失败都不抛 · 缓存坏了就当没缓存 · 绝不拖垮主命令
+const TODOS_CACHE_FILE = path.join(CONFIG_DIR, 'todos-cache.json');
+function saveTodosCache(todos) {
+  try {
+    if (!Array.isArray(todos)) return;
+    if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(TODOS_CACHE_FILE, JSON.stringify({ at: Date.now(), todos }, null, 2));
+  } catch (e) { /* 缓存写失败不影响主流程 */ }
+}
+function loadTodosCache() {
+  try {
+    if (!fs.existsSync(TODOS_CACHE_FILE)) return null;
+    const c = JSON.parse(fs.readFileSync(TODOS_CACHE_FILE, 'utf-8'));
+    if (!c || !Array.isArray(c.todos)) return null;
+    return c; // { at, todos }
+  } catch (e) { return null; }
+}
 // 默认 / 兜底 server URL (alpha 期生产 IP) · 旧 config 的 ngrok 地址会失效 · 这是 fallback
 const DEFAULT_SERVER_URL = 'http://120.26.46.217:8788';
 
@@ -170,7 +190,10 @@ async function safeFetchJson(cfg, path, init) {
 
 async function apiState(cfg) {
   const res = await safeFetch(cfg, '/api/state', { headers: authHeaders(cfg) });
-  return res.json();
+  const state = await res.json();
+  // 顺手刷待办本地缓存 · 任何拉 state 的命令都让缓存保鲜 · 供离线读 + 到期提醒探测
+  if (state && Array.isArray(state.todos)) saveTodosCache(state.todos);
+  return state;
 }
 async function apiMe(cfg) {
   const res = await safeFetch(cfg, '/api/auth/me', { headers: authHeaders(cfg) });
@@ -4712,6 +4735,44 @@ function cmdMaybeCheck(opts) {
   }
 }
 
+// 到期待办提醒 · 从本地缓存现算(零网络)· 挂在 pending --check 里 · 每条 prompt 探测
+// 为什么现算不入 jsonl:到期是"按今天"派生的 · 累积到 jsonl 会重复堆积 · 每次现算最干净
+// 冷却:同一批到期集合 3 小时内只提一次 · 集合变了(新的到期)立刻再提
+const TODO_DUE_COOLDOWN_MS = 3 * 60 * 60 * 1000;
+function todoDueNudgeLine() {
+  const cfg = loadConfig();
+  if (!cfg || !cfg.handle) return null;            // 没登录 · 不提
+  const cache = loadTodosCache();
+  if (!cache || !Array.isArray(cache.todos)) return null;
+  const today = todayKey();                          // 北京时间 YYYY-MM-DD · 跟 due 同格式
+  const me = cfg.handle;
+  // 属于我的 + 未完 + 到今天或已逾期:个人待办(我建的)或派给我的团队任务
+  const due = cache.todos.filter(t =>
+    !t.done && t.due && t.due <= today &&
+    ((t.scope === 'personal' && (!t.owner || t.owner === me)) ||
+     (t.scope === 'team' && t.assignee === me))
+  );
+  if (due.length === 0) return null;
+  // 用户在 webapp 关了 todo-due · 或勿扰窗口内 · 静默(白拿现成勿扰逻辑)
+  if (shouldSuppressKindLocal('todo-due', getPrefsSync())) return null;
+  // 冷却:到期集合签名 + 时间窗
+  const sig = due.map(t => t.id).sort().join(',');
+  const st = loadPromptState();
+  const last = st.todoDueNudge || {};
+  const now = Date.now();
+  if (last.sig === sig && last.at && (now - last.at) < TODO_DUE_COOLDOWN_MS) return null;
+  st.todoDueNudge = { sig, at: now };
+  savePromptState(st);
+  // 拼提醒行 · 逾期的单拎出来说
+  const overdue = due.filter(t => t.due < today);
+  const titles = due.slice(0, 3).map(t => '「' + t.text.slice(0, 12).trim() + '」').join('');
+  const more = due.length > 3 ? ' 等共 ' + due.length + ' 条' : '';
+  const cntPart = overdue.length > 0
+    ? `${due.length} 条待办到期(${overdue.length} 条已逾期)`
+    : `${due.length} 条待办今天到期`;
+  return `Tinker 待办提醒 · 你有 ${cntPart}: ${titles}${more} · tinker todo list 看 · 处理完 tinker todo done <id> · 别每次都催用户 · 看上下文挑合适时机提一句`;
+}
+
 // v0.17 `tinker pending` · 看 / 处理 hook 触发的待处理 reminder
 // 设计:
 //   --json           列待处理 (给 AI 工具用)
@@ -4748,6 +4809,8 @@ function cmdPending(opts) {
     // UserPromptSubmit hook 调用 · 跟用户每次说话时触发
     // 命中 pending → stdout 注入我 (AI) 的 context · 我看上下文判断要不要提醒用户
     // 没 pending → 静默退出 · 不打扰
+    // 先现算到期待办提醒 · 跟 jsonl pending 独立 · 出错绝不拖垮 hook
+    try { const dueLine = todoDueNudgeLine(); if (dueLine) process.stdout.write(dueLine + '\n'); } catch (e) {}
     if (pending.length === 0) return;
     // v0.35 服务器通知偏好闭环 · 屏蔽掉用户在 webapp 关掉的 kind + 勿扰窗口内全静默
     const prefs = getPrefsSync();
@@ -5529,6 +5592,7 @@ const VOICE_PROFILE_REGISTRY = {
   'maybe-check':    'internal',
   scenario:         'internal',
   stash:            'internal',   // -m 是给自己的现场标签 · 不公开 · 不查
+  feishu:           'internal',   // feishu notify 多是机器生成的投喂播报 · 不走 voice 守门
 };
 
 function warnIfVoiceProfileMissing(cmd, opts) {
@@ -9125,19 +9189,31 @@ async function cmdTodo(args, opts) {
   const cfg = mustHaveConfig();
   const sub = args[1] || 'list';
   if (sub === 'list' || sub === 'ls') return todoList(cfg, opts);
-  if (sub === 'add' || sub === 'a') return todoAdd(cfg, args, opts);
-  if (sub === 'done' || sub === 'x') return todoToggle(cfg, args[2], opts, !opts.undo);
-  if (sub === 'reopen') return todoToggle(cfg, args[2], opts, false);
-  if (sub === 'rm' || sub === 'del') return todoRm(cfg, args[2], opts);
-  if (sub === 'assign') return todoAssign(cfg, args[2], opts);
-  if (sub === 'promote') return todoPromote(cfg, args[2], opts);
-  err('未知子命令: ' + sub + ' · 用 list / add / done / reopen / rm / assign / promote'); process.exit(1);
+  if (sub === 'sync') return cmdTodoSync(cfg, opts);
+  // 改动类子命令 · 跑完后台自动同步飞书(没连飞书则跳过)
+  if (sub === 'add' || sub === 'a') await todoAdd(cfg, args, opts);
+  else if (sub === 'done' || sub === 'x') await todoToggle(cfg, args[2], opts, !opts.undo);
+  else if (sub === 'reopen') await todoToggle(cfg, args[2], opts, false);
+  else if (sub === 'rm' || sub === 'del') await todoRm(cfg, args[2], opts);
+  else if (sub === 'assign') await todoAssign(cfg, args[2], opts);
+  else if (sub === 'promote') await todoPromote(cfg, args[2], opts);
+  else { err('未知子命令: ' + sub + ' · 用 list / add / done / reopen / rm / assign / promote / sync'); process.exit(1); }
+  feishuMaybeSyncAsync();
 }
 
 async function todoList(cfg, opts) {
-  const state = await apiState(cfg);
-  const ts = state.todos || [];
-  if (opts.json) return outputJson({ ok: true, todos: ts });
+  // 联网优先 · 连不上就回退本地缓存(离线也能看待办)
+  let ts, offline = false, cachedAt = null;
+  try {
+    const state = await apiState(cfg);
+    ts = state.todos || [];
+  } catch (e) {
+    const cache = loadTodosCache();
+    if (!cache) { if (opts.json) return errJson(e.message, 'TODO_LIST_FAILED'); err(e.message); process.exit(1); }
+    ts = cache.todos; offline = true; cachedAt = cache.at;
+  }
+  if (opts.json) return outputJson({ ok: true, todos: ts, offline, cachedAt: cachedAt || undefined });
+  if (offline) log(sepia('  · 离线 · 显示 ' + agoZh(cachedAt) + '的缓存 · 连上后自动更新'));
   if (ts.length === 0) { log(sepia('  还没有待办 · tinker todo add "买菜" 记一条')); return; }
   for (const [label, list] of [['个人', ts.filter(t => t.scope === 'personal')], ['团队', ts.filter(t => t.scope === 'team')]]) {
     if (!list.length) continue;
@@ -9211,6 +9287,230 @@ async function todoPromote(cfg, partial, opts) {
   } catch (e) { if (opts.json) return errJson(e.message, 'TODO_PROMOTE_FAILED'); err(e.message); process.exit(1); }
 }
 
+// ============ 飞书同步 (待办 → 飞书任务 · 双向) ============
+// 令牌 ~/.tinker/feishu-token.json(app_id/app_secret/access/refresh)· 映射 ~/.tinker/feishu-sync.json
+// 生产化踩过的坑(见记忆 project_tinker_feishu_todo):
+//  · 建完任务必须 add_members 把 owner 加成 assignee · 否则裸任务隐形(list 返 0 · 不推送)
+//  · 完成状态走 PATCH completed_at(设时间戳=完成 / "0"=取消)· 没有 /complete 端点
+//  · 提醒内联 reminders 字段建任务时一起给 · 单独 /reminders 接口 404
+//  · 要落到本人列表 + 推送本人必须 user_access_token · refresh 要 scope 带 offline_access
+const FEISHU_TOKEN_FILE = path.join(CONFIG_DIR, 'feishu-token.json');
+const FEISHU_SYNC_FILE = path.join(CONFIG_DIR, 'feishu-sync.json');
+const FEISHU_BASE = 'https://open.feishu.cn';
+
+function feishuLoadToken() { try { return JSON.parse(fs.readFileSync(FEISHU_TOKEN_FILE, 'utf-8')); } catch (e) { return null; } }
+function feishuSaveToken(t) { fs.writeFileSync(FEISHU_TOKEN_FILE, JSON.stringify(t, null, 2)); try { fs.chmodSync(FEISHU_TOKEN_FILE, 0o600); } catch (e) {} }
+function feishuLoadSync() { try { return JSON.parse(fs.readFileSync(FEISHU_SYNC_FILE, 'utf-8')); } catch (e) { return { map: {} }; } }
+function feishuSaveSync(s) { fs.writeFileSync(FEISHU_SYNC_FILE, JSON.stringify(s, null, 2)); }
+function feishuDueTs(dueStr) { return new Date(dueStr + 'T09:00:00+08:00').getTime(); } // 截止日 → 北京 9 点
+const FEISHU_SYNC_LOCK = path.join(CONFIG_DIR, 'feishu-sync.lock');
+
+// 待办改动后 · 后台甩一个同步 · detached 不阻塞命令 · 没连飞书直接跳过
+function feishuMaybeSyncAsync() {
+  if (!fs.existsSync(FEISHU_TOKEN_FILE)) return; // 没连飞书 · 不同步
+  try {
+    const child = spawn(process.execPath, [__filename, 'todo', 'sync', '--quiet'], { detached: true, stdio: 'ignore' });
+    child.unref();
+  } catch (e) { /* 后台同步失败不影响主命令 */ }
+}
+
+// 拿有效 access token · 快过期(5 分钟内)就 refresh 续 · 续不动让用户重新 login
+async function feishuAccessToken() {
+  const t = feishuLoadToken();
+  if (!t || !t.access_token) throw new Error('还没连飞书 · 跑 ' + vermilion('tinker feishu login'));
+  if (t.expires_at && t.expires_at - Date.now() > 5 * 60 * 1000) return t.access_token;
+  if (!t.refresh_token || !t.app_id || !t.app_secret) throw new Error('飞书令牌过期且无法自动续 · 重新跑 ' + vermilion('tinker feishu login'));
+  let rf;
+  try {
+    rf = await fetch(FEISHU_BASE + '/open-apis/authen/v2/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grant_type: 'refresh_token', client_id: t.app_id, client_secret: t.app_secret, refresh_token: t.refresh_token }) }).then(r => r.json());
+  } catch (e) { throw new Error('连不上飞书 · ' + e.message); }
+  if (!rf.access_token) throw new Error('飞书刷新令牌失败(可能超 7 天没同步)· 重新跑 ' + vermilion('tinker feishu login') + ' · ' + (rf.error_description || rf.msg || ''));
+  const now = Date.now();
+  const updated = { ...t, access_token: rf.access_token, refresh_token: rf.refresh_token || t.refresh_token, expires_at: now + (rf.expires_in || 7200) * 1000, obtained_at: now };
+  feishuSaveToken(updated);
+  return updated.access_token;
+}
+
+async function feishuApi(token, method, apiPath, body) {
+  let res;
+  try { res = await fetch(FEISHU_BASE + apiPath, { method, headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); }
+  catch (e) { throw new Error('连不上飞书 · ' + e.message); }
+  const text = await res.text();
+  let j; try { j = JSON.parse(text); } catch (e) { throw new Error('飞书接口非 JSON 响应(' + res.status + ' ' + apiPath + '): ' + text.slice(0, 100)); }
+  return j;
+}
+
+// tinker feishu <status|login>
+async function cmdFeishu(args, opts) {
+  const sub = args[1] || 'status';
+  if (sub === 'status') {
+    const t = feishuLoadToken();
+    if (!t || !t.access_token) { log(sepia('  还没连飞书 · 跑 ') + vermilion('tinker feishu login')); return; }
+    try {
+      const tok = await feishuAccessToken();
+      const who = await feishuApi(tok, 'GET', '/open-apis/authen/v1/user_info');
+      const sync = feishuLoadSync();
+      log(moss('  已连飞书 · ') + '身份 ' + (who.data && who.data.name) + ' · 映射 ' + Object.keys(sync.map || {}).length + ' 条 · 上次同步 ' + (sync.at ? agoZh(sync.at) : '从没'));
+    } catch (e) { err(e.message); }
+    return;
+  }
+  if (sub === 'login') return cmdFeishuLogin(opts);
+  if (sub === 'chats') return cmdFeishuChats(opts);
+  if (sub === 'set-chat') {
+    const id = args[2];
+    if (!id) { err('用法: tinker feishu set-chat <chat_id>(用 tinker feishu chats 看)'); process.exit(1); }
+    feishuSaveToken({ ...(feishuLoadToken() || {}), notify_chat_id: id });
+    ok('默认通知群设为 ' + id); return;
+  }
+  if (sub === 'notify') return cmdFeishuNotify(opts);
+  err('用法: tinker feishu status | login | chats | set-chat <id> | notify -m "..." · 同步待办 tinker todo sync'); process.exit(1);
+}
+
+// 应用(机器人)令牌 · 发群消息用它(以机器人身份)· 跟 user token 分开
+async function feishuTenantToken() {
+  const t = feishuLoadToken();
+  if (!t || !t.app_id || !t.app_secret) throw new Error('缺飞书应用凭证 · 跑 ' + vermilion('tinker feishu login'));
+  const r = await fetch(FEISHU_BASE + '/open-apis/auth/v3/tenant_access_token/internal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app_id: t.app_id, app_secret: t.app_secret }) }).then(x => x.json());
+  if (!r.tenant_access_token) throw new Error('拿飞书应用令牌失败 · ' + (r.msg || ''));
+  return r.tenant_access_token;
+}
+
+// 列机器人所在的群 · 拿 chat_id
+async function cmdFeishuChats(opts) {
+  const tok = await feishuTenantToken();
+  const l = await feishuApi(tok, 'GET', '/open-apis/im/v1/chats?page_size=50');
+  const items = (l.data && l.data.items) || [];
+  if (opts.json) return outputJson({ ok: true, chats: items.map(c => ({ chat_id: c.chat_id, name: c.name })) });
+  if (!items.length) { log(sepia('  机器人不在任何群 · 先把机器人加进群')); return; }
+  const saved = (feishuLoadToken() || {}).notify_chat_id;
+  for (const c of items) log('  ' + (c.chat_id === saved ? moss('▸ ') : '  ') + (c.name || '(无名群)') + sepia(' · ' + c.chat_id));
+}
+
+// 往默认群发一条消息(机器人身份)· 供投喂脚本等外部调用
+async function cmdFeishuNotify(opts) {
+  const chatId = (feishuLoadToken() || {}).notify_chat_id;
+  if (!chatId) { err('还没设通知群 · tinker feishu chats 看群 · tinker feishu set-chat <chat_id> 设一个'); process.exit(1); }
+  if (!opts.text) { err('要发什么?tinker feishu notify -m "..."'); process.exit(1); }
+  const tok = await feishuTenantToken();
+  const r = await feishuApi(tok, 'POST', '/open-apis/im/v1/messages?receive_id_type=chat_id', { receive_id: chatId, msg_type: 'text', content: JSON.stringify({ text: opts.text }) });
+  if (r.code !== 0) { if (opts.json) return errJson(r.msg, 'FEISHU_NOTIFY_FAILED'); err('发群消息失败: ' + r.msg); process.exit(1); }
+  if (opts.json) return outputJson({ ok: true });
+  ok('已发到群 · ' + opts.text);
+}
+
+// OAuth 登录 · 起本地回调 · 换 user token(带 refresh)存本地
+async function cmdFeishuLogin(opts) {
+  const existing = feishuLoadToken() || {};
+  const appId = opts.appId || existing.app_id;
+  const appSecret = opts.appSecret || existing.app_secret;
+  if (!appId || !appSecret) { err('要飞书应用凭证 · tinker feishu login --app-id <id> --app-secret <secret>'); process.exit(1); }
+  const http = require('http');
+  const REDIRECT = 'http://localhost:3000/callback';
+  const SCOPES = 'task:task:write task:task:read offline_access';
+  const authUrl = 'https://accounts.feishu.cn/open-apis/authen/v1/authorize?client_id=' + appId + '&redirect_uri=' + encodeURIComponent(REDIRECT) + '&response_type=code&scope=' + encodeURIComponent(SCOPES) + '&state=tinker';
+  await new Promise((resolve) => {
+    const server = http.createServer(async (req, res) => {
+      const u = new URL(req.url, 'http://localhost:3000');
+      if (u.pathname !== '/callback') { res.end('ok'); return; }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      if (u.searchParams.get('error')) { res.end('<h2>授权出错，回终端</h2>'); err('授权失败: ' + u.searchParams.get('error_description')); server.close(); return resolve(); }
+      res.end('<h2>授权成功，回终端就行</h2>');
+      const tk = await fetch(FEISHU_BASE + '/open-apis/authen/v2/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ grant_type: 'authorization_code', client_id: appId, client_secret: appSecret, code: u.searchParams.get('code'), redirect_uri: REDIRECT }) }).then(r => r.json());
+      if (!tk.access_token) { err('换令牌失败: ' + JSON.stringify(tk).slice(0, 200)); server.close(); return resolve(); }
+      const now = Date.now();
+      feishuSaveToken({ app_id: appId, app_secret: appSecret, access_token: tk.access_token, refresh_token: tk.refresh_token || null, expires_at: now + (tk.expires_in || 7200) * 1000, obtained_at: now });
+      ok('飞书已连上 · 令牌存 ' + FEISHU_TOKEN_FILE);
+      server.close(); resolve();
+    });
+    server.listen(3000, () => { log(sepia('  浏览器里点「授权」…')); try { execSync('open "' + authUrl + '"'); } catch (e) { log(sepia('  手动开: ' + authUrl)); } });
+    setTimeout(() => { server.close(); resolve(); }, 300000);
+  });
+}
+
+// tinker todo sync · 把"我的"待办双向同步到飞书任务
+async function cmdTodoSync(cfg, opts) {
+  // 取锁 · 防并发同步重复建(后台自动同步 + 手动同步可能撞)· 60s 内活锁就跳过
+  try {
+    if (fs.existsSync(FEISHU_SYNC_LOCK)) {
+      const st = JSON.parse(fs.readFileSync(FEISHU_SYNC_LOCK, 'utf-8'));
+      if (Date.now() - (st.at || 0) < 60000) {
+        if (opts.json) return outputJson({ ok: true, skipped: 'another-sync-running' });
+        if (!opts.quiet) log(sepia('  另一个同步在跑 · 跳过'));
+        return;
+      }
+    }
+    fs.writeFileSync(FEISHU_SYNC_LOCK, JSON.stringify({ at: Date.now(), pid: process.pid }));
+  } catch (e) { /* 锁是尽力而为 */ }
+  try {
+  const token = await feishuAccessToken();
+  const who = await feishuApi(token, 'GET', '/open-apis/authen/v1/user_info');
+  const openId = who.data && who.data.open_id;
+  if (!openId) throw new Error('拿飞书身份失败 · 重新 ' + vermilion('tinker feishu login'));
+  const state = await apiState(cfg);
+  const me = cfg.handle;
+  const todos = (state.todos || []).filter(t =>
+    (t.scope === 'personal' && (!t.owner || t.owner === me)) ||
+    (t.scope === 'team' && t.assignee === me));
+  const sync = feishuLoadSync();
+  const map = sync.map || {};
+  const stat = { created: 0, updated: 0, forwardDone: 0, forwardReopen: 0, reverseDone: 0, reverseReopen: 0, conflict: 0 };
+  for (const todo of todos) {
+    const link = map[todo.id];
+    if (!link) {
+      if (todo.done) continue; // 已完成的没建过 · 不补历史
+      const body = { summary: todo.text };
+      if (todo.due) { body.due = { timestamp: String(feishuDueTs(todo.due)), is_all_day: false }; body.reminders = [{ relative_fire_minute: 0 }]; }
+      const cr = await feishuApi(token, 'POST', '/open-apis/task/v2/tasks', body);
+      if (cr.code !== 0) { if (!opts.json) log(sepia('  建任务失败: ' + todo.text + ' · ' + cr.msg)); continue; }
+      const guid = cr.data.task.guid;
+      // 必须加执行者 · 否则任务隐形不推送
+      await feishuApi(token, 'POST', '/open-apis/task/v2/tasks/' + guid + '/add_members?user_id_type=open_id', { members: [{ id: openId, type: 'user', role: 'assignee' }] });
+      map[todo.id] = { guid, done: false, summary: todo.text, due: todo.due || null };
+      stat.created++;
+      continue;
+    }
+    const gr = await feishuApi(token, 'GET', '/open-apis/task/v2/tasks/' + link.guid);
+    if (gr.code !== 0) { delete map[todo.id]; continue; } // 飞书那条没了 · 下轮重建
+    const task = gr.data.task;
+    const feishuDone = !!(task.completed_at && task.completed_at !== '0');
+    const base = !!link.done;
+    // 完成状态三方合并(base=上次同步态)
+    let agreedDone = todo.done;
+    if (todo.done !== feishuDone) {
+      const tinkerChanged = todo.done !== base, feishuChanged = feishuDone !== base;
+      if (feishuChanged && !tinkerChanged) {
+        // 飞书那边勾/取消了 → 回写 Tinker
+        await apiAction(cfg, 'toggleTodo', { todoId: todo.id, done: feishuDone });
+        agreedDone = feishuDone;
+        if (feishuDone) stat.reverseDone++; else stat.reverseReopen++;
+      } else {
+        // Tinker 改了(或都改了 · Tinker 赢)→ 推飞书
+        await feishuApi(token, 'PATCH', '/open-apis/task/v2/tasks/' + link.guid, { task: { completed_at: todo.done ? String(Date.now()) : '0' }, update_fields: ['completed_at'] });
+        agreedDone = todo.done;
+        if (tinkerChanged && feishuChanged) stat.conflict++;
+        else if (todo.done) stat.forwardDone++;
+        else stat.forwardReopen++;
+      }
+    }
+    // 文案 / 截止正向更新(飞书没编辑回传通道 · Tinker 为准)
+    if (task.summary !== todo.text || (link.due || null) !== (todo.due || null)) {
+      const upd = { task: { summary: todo.text }, update_fields: ['summary'] };
+      if (todo.due) { upd.task.due = { timestamp: String(feishuDueTs(todo.due)), is_all_day: false }; upd.update_fields.push('due'); }
+      await feishuApi(token, 'PATCH', '/open-apis/task/v2/tasks/' + link.guid, upd);
+      stat.updated++;
+    }
+    map[todo.id] = { guid: link.guid, done: agreedDone, summary: todo.text, due: todo.due || null };
+  }
+  sync.map = map; sync.at = Date.now(); feishuSaveSync(sync);
+  if (opts.json) return outputJson({ ok: true, ...stat });
+  const bits = ['新建 ' + stat.created, '更新 ' + stat.updated, '完成 ' + (stat.forwardDone + stat.reverseDone), '重开 ' + (stat.forwardReopen + stat.reverseReopen)];
+  if (stat.conflict) bits.push('冲突(Tinker 赢) ' + stat.conflict);
+  if (!opts.quiet) log(moss('  飞书同步完成 · ') + bits.join(' · '));
+  } finally {
+    try { fs.unlinkSync(FEISHU_SYNC_LOCK); } catch (e) { /* 释放锁 */ }
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
@@ -9280,6 +9580,7 @@ async function main() {
       }
       case 'seek': await cmdSeek(opts); break;
       case 'todo': case 'todos': await cmdTodo(args, opts); break;
+      case 'feishu': await cmdFeishu(args, opts); break;
       case 'contribute': await cmdContribute(args[1], opts); break;
       case 'recent': await cmdRecent(opts); break;
       case 'feed': await cmdFeed(args[1], opts); break;
@@ -9392,6 +9693,8 @@ async function main() {
 module.exports = {
   // 配置
   loadConfig, mustHaveConfig, CONFIG_DIR, CONFIG_FILE,
+  // 待办本地缓存 (离线读 + 到期提醒探测复用)
+  TODOS_CACHE_FILE, saveTodosCache, loadTodosCache,
   // API
   apiState, apiMe, apiAction, safeFetch,
   // 状态持久化

@@ -1,0 +1,43 @@
+name: 推送同步飞书
+
+# 往 main 推代码时 · 把这次上传的 commit 信息发到团队飞书群
+# 要连特性分支也发:把下面 branches 那行删掉即可
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    name: 推送信息发飞书群
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发 commit 信息到飞书
+        env:
+          APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          CHAT_ID: ${{ secrets.FEISHU_CHAT_ID }}
+          COMMITS_JSON: ${{ toJSON(github.event.commits) }}
+          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          COMPARE: ${{ github.event.compare }}
+        run: |
+          set -e
+          # 没配飞书密钥就静默跳过 · 不让通知失败拖垮任何东西
+          if [ -z "$APP_ID" ] || [ -z "$CHAT_ID" ]; then echo "没配飞书 secret · 跳过"; exit 0; fi
+          COUNT=$(printf "%s" "$COMMITS_JSON" | jq 'length')
+          if [ -z "$COUNT" ] || [ "$COUNT" = "0" ]; then echo "这次没有 commit · 跳过"; exit 0; fi
+          # 取应用令牌
+          TOKEN=$(curl -s -X POST https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal \
+            -H "Content-Type: application/json" \
+            -d "{\"app_id\":\"$APP_ID\",\"app_secret\":\"$APP_SECRET\"}" | jq -r '.tenant_access_token')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then echo "取飞书令牌失败 · 跳过"; exit 0; fi
+          # 拼消息:谁 · 推到哪个分支 · 几个 commit · 每条首行 + 作者 · 对比链接
+          TEXT=$(printf "%s" "$COMMITS_JSON" | jq -r --arg actor "$ACTOR" --arg branch "$BRANCH" --arg compare "$COMPARE" '
+            "🚀 \($actor) 推送到 \($branch) · \(length) 个 commit\n"
+            + (map("· " + (.message | split("\n")[0]) + "  — " + .author.name) | join("\n"))
+            + (if $compare != "" then "\n\n改动对比 " + $compare else "" end)')
+          PAYLOAD=$(jq -n --arg cid "$CHAT_ID" --arg text "$TEXT" '{receive_id:$cid, msg_type:"text", content: ({text:$text}|tostring)}')
+          RESP=$(curl -s -X POST "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$PAYLOAD")
+          CODE=$(echo "$RESP" | jq -r '.code')
+          if [ "$CODE" = "0" ]; then echo "✓ 已发飞书群"; else echo "::warning::飞书发群失败 · $RESP"; fi
