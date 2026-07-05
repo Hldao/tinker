@@ -210,4 +210,26 @@ function genCriteria(task, options) {
   return lines.length ? ('# 自动拆出的验收标准\n' + lines.join('\n') + '\n') : '';
 }
 
-module.exports = { verify, genCriteria };
+// 拍板判定官 · 影子干活前先判:这活让自动影子不问人就做,会不会捅出它担不起的后果?
+// 返回 { needsHuman, reason, by }。判定官够不着时保险起见 needsHuman=true(宁可多问一句)。
+function gateCheck(task, options) {
+  options = options || {};
+  const claudePath = options.claudePath || resolveClaude();
+  const prompt =
+    '你是「拍板判定官」。判断:下面这个任务 · 让一个【自动影子】不问人就直接做 · 会不会捅出影子担不起的后果?\n' +
+    '要人先拍板的红线(命中任一就要人):\n' +
+    '① 花真钱(付款 / 下单 / 买服务)② 对外不可逆(发给客户 / 对外发布 / 上线 / 发消息给真人)\n' +
+    '③ 删东西或动真实数据 / 真实系统 ④ 方向性岔路(选 A 还是 B · 定了后面全跟着走)\n' +
+    '纯写文档 / 分析 / 草稿这类可逆 · 不对外 · 不花钱的 · 放行不用问。\n\n' +
+    '任务:\n' + task + '\n\n' +
+    '只输出:\nGATE: 要人 或 放行\n再一句话理由。';
+  const { out, by } = judgeSemantic(prompt, o => /^GATE:/im.test(o), claudePath);
+  if (!out) return { needsHuman: true, reason: '拍板判定官够不着 · 保险起见先问你', by: null };
+  const gline = (out.split('\n').find(l => /^GATE:/i.test(l.trim())) || '');
+  const needsHuman = /要人/.test(gline);
+  const reason = out.split('\n').map(l => l.trim())
+    .filter(l => l && !/^GATE:/i.test(l)).join(' ').slice(0, 200);
+  return { needsHuman, reason, by };
+}
+
+module.exports = { verify, genCriteria, gateCheck };

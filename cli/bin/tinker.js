@@ -1704,11 +1704,25 @@ async function shadowDo(opts) {
   let boardTask = null;
   let task = (opts.task || '').trim();
   if (!task) { boardTask = pullNextTask(); if (boardTask) { task = boardTask.desc; log(sepia('  从任务板领了: ') + task); } }
-  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--check "命令"] [--verify 标准文件 | --auto-verify] [--max N]') + sepia(' · 或先 tinker task add')); process.exit(1); }
+  if (!task) { err('用法: ' + vermilion('tinker shadow do --task "要做的长任务" [--gate] [--check "命令"] [--verify 标准文件 | --auto-verify] [--max N]') + sepia(' · 或先 tinker task add')); process.exit(1); }
   const agentCmd = (opts.agent || cfg.shadowAgent || '').trim();
   if (!agentCmd) { err('先配 agent: ' + vermilion('tinker shadow agent set --agent \'claude -p "$TINKER_TASK" --permission-mode acceptEdits\'')); process.exit(1); }
   const checkCmd = (opts.check || (boardTask && boardTask.test) || '').trim();
   const minutes = opts.minutes ? (parseInt(opts.minutes, 10) || prof.minutes) : prof.minutes;
+
+  // 前门拍板判定 · --gate:影子动手前先判这活要不要先问人(花钱/对外/删数据/方向岔路)· 要人就停下不跑
+  if (opts.gate) {
+    log('');
+    log(sepia('  拍板判定 · 这活要不要先问你 ...'));
+    const g = require('../lib/shadow-verify').gateCheck(task);
+    if (g.needsHuman) {
+      recordShadowEvent({ type: 'do-gate', id: 'gate-' + Date.now(), task: task.slice(0, 80), reason: g.reason });
+      err('⛔ 这活要你先拍板 · 没自动干 · ' + g.reason);
+      log(sepia('  确认要做:去掉 --gate 再跑。'));
+      process.exit(2);
+    }
+    log(sepia('  放行(' + (g.by || '') + ')· ' + (g.reason || '').slice(0, 60)));
+  }
 
   const id = 'do-' + Date.now();
   const ws = path.join(SHADOW_WORK_DIR, id);
@@ -11690,6 +11704,7 @@ function parseArgs(args) {
     else if (a === '--check') opts.check = args[++i];
     else if (a === '--verify') opts.verify = args[++i];
     else if (a === '--auto-verify') opts.autoVerify = true;
+    else if (a === '--gate') opts.gate = true;
     else if (a === '--max') opts.max = args[++i];
     else if (a === '--encrypt') opts.encrypt = true;
     else if (a === '--plain') opts.plain = true;
