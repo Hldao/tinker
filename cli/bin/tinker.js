@@ -4735,6 +4735,44 @@ function cmdMaybeCheck(opts) {
   }
 }
 
+// 到期待办提醒 · 从本地缓存现算(零网络)· 挂在 pending --check 里 · 每条 prompt 探测
+// 为什么现算不入 jsonl:到期是"按今天"派生的 · 累积到 jsonl 会重复堆积 · 每次现算最干净
+// 冷却:同一批到期集合 3 小时内只提一次 · 集合变了(新的到期)立刻再提
+const TODO_DUE_COOLDOWN_MS = 3 * 60 * 60 * 1000;
+function todoDueNudgeLine() {
+  const cfg = loadConfig();
+  if (!cfg || !cfg.handle) return null;            // 没登录 · 不提
+  const cache = loadTodosCache();
+  if (!cache || !Array.isArray(cache.todos)) return null;
+  const today = todayKey();                          // 北京时间 YYYY-MM-DD · 跟 due 同格式
+  const me = cfg.handle;
+  // 属于我的 + 未完 + 到今天或已逾期:个人待办(我建的)或派给我的团队任务
+  const due = cache.todos.filter(t =>
+    !t.done && t.due && t.due <= today &&
+    ((t.scope === 'personal' && (!t.owner || t.owner === me)) ||
+     (t.scope === 'team' && t.assignee === me))
+  );
+  if (due.length === 0) return null;
+  // 用户在 webapp 关了 todo-due · 或勿扰窗口内 · 静默(白拿现成勿扰逻辑)
+  if (shouldSuppressKindLocal('todo-due', getPrefsSync())) return null;
+  // 冷却:到期集合签名 + 时间窗
+  const sig = due.map(t => t.id).sort().join(',');
+  const st = loadPromptState();
+  const last = st.todoDueNudge || {};
+  const now = Date.now();
+  if (last.sig === sig && last.at && (now - last.at) < TODO_DUE_COOLDOWN_MS) return null;
+  st.todoDueNudge = { sig, at: now };
+  savePromptState(st);
+  // 拼提醒行 · 逾期的单拎出来说
+  const overdue = due.filter(t => t.due < today);
+  const titles = due.slice(0, 3).map(t => '「' + t.text.slice(0, 12).trim() + '」').join('');
+  const more = due.length > 3 ? ' 等共 ' + due.length + ' 条' : '';
+  const cntPart = overdue.length > 0
+    ? `${due.length} 条待办到期(${overdue.length} 条已逾期)`
+    : `${due.length} 条待办今天到期`;
+  return `Tinker 待办提醒 · 你有 ${cntPart}: ${titles}${more} · tinker todo list 看 · 处理完 tinker todo done <id> · 别每次都催用户 · 看上下文挑合适时机提一句`;
+}
+
 // v0.17 `tinker pending` · 看 / 处理 hook 触发的待处理 reminder
 // 设计:
 //   --json           列待处理 (给 AI 工具用)
@@ -4771,6 +4809,8 @@ function cmdPending(opts) {
     // UserPromptSubmit hook 调用 · 跟用户每次说话时触发
     // 命中 pending → stdout 注入我 (AI) 的 context · 我看上下文判断要不要提醒用户
     // 没 pending → 静默退出 · 不打扰
+    // 先现算到期待办提醒 · 跟 jsonl pending 独立 · 出错绝不拖垮 hook
+    try { const dueLine = todoDueNudgeLine(); if (dueLine) process.stdout.write(dueLine + '\n'); } catch (e) {}
     if (pending.length === 0) return;
     // v0.35 服务器通知偏好闭环 · 屏蔽掉用户在 webapp 关掉的 kind + 勿扰窗口内全静默
     const prefs = getPrefsSync();
