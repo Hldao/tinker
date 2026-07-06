@@ -30,6 +30,9 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+      FEISHU_NOTIFY_CHAT_ID: ${FEISHU_NOTIFY_CHAT_ID:-}
     volumes:
       - ./data:/data
       # 网页文件挂到外面 · 改完只要 restart 不要 rebuild · 10 秒上线
