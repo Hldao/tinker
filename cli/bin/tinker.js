@@ -6999,6 +6999,14 @@ async function cmdNotifyDaemon(sub) {
 
   const bridgeLib = require('../lib/bridge');
 
+  // 飞书通知是否已由 server 接管 · 是则客户端不再重复推(server 侧对全队零配置 · 是产品级正解)
+  // 查一次即可 · 查不到当作没接管 · 客户端兜底推
+  let serverFeishuActive = false;
+  try {
+    const r = await fetch(cfg.serverUrl + '/api/feishu/status', { headers: { Authorization: 'Bearer ' + cfg.token }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+    if (r.ok) { const d = await r.json(); serverFeishuActive = !!d.active; }
+  } catch {}
+
   // 初始化游标:第一次起设到当前最大 seq · 不为历史积压狂弹 · 只通知从现在起的新消息
   let cursor = 0;
   try { cursor = parseInt(fs.readFileSync(NOTIFYD_CURSOR_FILE, 'utf-8').trim(), 10) || 0; } catch {}
@@ -7027,7 +7035,7 @@ async function cmdNotifyDaemon(sub) {
         if (msg.fromHandle === cfg.handle) continue; // 不为自己发的弹
         const sum = summarizeForDesktop(msg, bridgeLib);
         fireDesktop(sum);
-        feishuNotifyBridgeAsync(sum).catch(() => {});   // 也推飞书群并 @ 到本人 · 不阻塞轮询
+        if (!serverFeishuActive) feishuNotifyBridgeAsync(sum).catch(() => {});   // server 没接管才客户端兜底推 · 不双份
         lastActivity = Date.now();
       }
       try { fs.writeFileSync(NOTIFYD_CURSOR_FILE, String(cursor)); } catch {}
@@ -9486,6 +9494,15 @@ async function cmdFeishuLogin(opts) {
       const now = Date.now();
       feishuSaveToken({ app_id: appId, app_secret: appSecret, access_token: tk.access_token, refresh_token: tk.refresh_token || null, expires_at: now + (tk.expires_in || 7200) * 1000, obtained_at: now });
       ok('飞书已连上 · 令牌存 ' + FEISHU_TOKEN_FILE);
+      // 顺手把自己的飞书 open_id 注册到 server · 之后 server 发通知能 @ 到本人(产品级联动 · 登录一次即可)
+      try {
+        const me = await feishuOwnerIdentity();
+        const cfg = loadConfig();
+        if (me && me.openId && cfg && cfg.serverUrl && cfg.token) {
+          await fetch(cfg.serverUrl + '/api/feishu/link', { method: 'POST', headers: { 'Authorization': 'Bearer ' + cfg.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ openId: me.openId, name: me.name }) }).then(r => r.json()).catch(() => {});
+          log(sepia('  已注册飞书身份到 server · 队友发你消息会在群里 @ 你'));
+        }
+      } catch (e) { /* 注册失败不影响登录本身 */ }
       server.close(); resolve();
     });
     server.listen(3000, () => { log(sepia('  浏览器里点「授权」…')); try { execSync('open "' + authUrl + '"'); } catch (e) { log(sepia('  手动开: ' + authUrl)); } });

@@ -26,6 +26,7 @@ const db = require('./db');                  // SQLite · 启动时自动跑 mig
 const { buildState, buildProjectUpdates, searchUpdates, searchWorkshops, getUserProfile } = require('./state');
 const actions = require('./actions-sql');
 const bridge = require('./bridge');
+const feishu = require('./feishu');
 const blobs = require('./blobs');
 const studios = require('./studios');
 const auth = require('./auth');
@@ -553,6 +554,24 @@ app.post('/api/bridge/send', actionLimiter, auth.requireSession, (req, res) => {
     req.log.warn({ err: e.message }, 'bridge send rejected');
     res.status(400).json({ error: e.message });
   }
+});
+
+// 飞书身份注册 · CLI 登录后把自己的 open_id 传上来 · 之后 server 发通知能 @ 到本人
+app.post('/api/feishu/link', actionLimiter, auth.requireSession, (req, res) => {
+  const { openId, name } = req.body || {};
+  if (!openId || typeof openId !== 'string') return res.status(400).json({ error: 'openId required' });
+  try {
+    feishu.linkIdentity(req.user.id, openId, name);
+    res.json({ ok: true });
+  } catch (e) {
+    req.log.warn({ err: e.message }, 'feishu link failed');
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// 飞书通知是否由 server 接管 · 客户端守护进程据此让位 · 避免和 server 双份通知
+app.get('/api/feishu/status', auth.requireSession, (req, res) => {
+  res.json({ ok: true, active: feishu.isConfigured() });
 });
 
 // 收 · GET ?since=<seq> · 长轮询 (没新消息挂 25s · 期间被唤醒立刻返)
