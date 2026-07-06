@@ -8620,6 +8620,10 @@ function parseArgs(args) {
     else if (a.startsWith('--server=')) opts.server = a.slice('--server='.length);
     else if (a === '--token') opts.token = args[++i];
     else if (a.startsWith('--token=')) opts.token = a.slice('--token='.length);
+    else if (a === '--app-id') opts.appId = args[++i];
+    else if (a.startsWith('--app-id=')) opts.appId = a.slice('--app-id='.length);
+    else if (a === '--app-secret') opts.appSecret = args[++i];
+    else if (a.startsWith('--app-secret=')) opts.appSecret = a.slice('--app-secret='.length);
     else if (a === '--studio') opts.studio = args[++i];
     else if (a.startsWith('--studio=')) opts.studio = a.slice('--studio='.length);
     else if (a === '--solo') opts.solo = true;
