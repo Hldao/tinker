@@ -7025,7 +7025,9 @@ async function cmdNotifyDaemon(sub) {
       for (const msg of (data.messages || [])) {
         cursor = Math.max(cursor, msg.seq);
         if (msg.fromHandle === cfg.handle) continue; // 不为自己发的弹
-        fireDesktop(summarizeForDesktop(msg, bridgeLib));
+        const sum = summarizeForDesktop(msg, bridgeLib);
+        fireDesktop(sum);
+        feishuNotifyBridgeAsync(sum).catch(() => {});   // 也推飞书群并 @ 到本人 · 不阻塞轮询
         lastActivity = Date.now();
       }
       try { fs.writeFileSync(NOTIFYD_CURSOR_FILE, String(cursor)); } catch {}
@@ -9344,6 +9346,38 @@ function feishuNotifyAssignAsync(cfg, handle, text, due) {
     child.unref();
     flog('已触发播报 spawn · handle=' + handle + ' · ' + msg.slice(0, 60));
   } catch (e) { flog('播报异常 · handle=' + handle + ' · ' + (e && e.message)); }
+}
+
+// 拿守护进程主人自己的飞书 open_id + 名字 · 用来在群里真 @ 到本人(静音也戳得到)· 取一次缓存进 token
+async function feishuOwnerIdentity() {
+  const t = feishuLoadToken() || {};
+  if (t.owner_open_id) return { openId: t.owner_open_id, name: t.owner_name || '你' };
+  try {
+    const tok = await feishuAccessToken();
+    const who = await feishuApi(tok, 'GET', '/open-apis/authen/v1/user_info');
+    const oid = who && who.data && who.data.open_id;
+    if (oid) { feishuSaveToken({ ...(feishuLoadToken() || {}), owner_open_id: oid, owner_name: who.data.name || '' }); return { openId: oid, name: who.data.name || '你' }; }
+  } catch (e) {}
+  return null;
+}
+
+// 队友通过 bridge 发来消息时 · 也往飞书群推一条并 @ 到本人 · 免得对方还要人工喊"给你发消息了"
+// 复用守护进程本来就有的近实时轮询(cmdNotifyDaemon)· 不另开进程 · detached spawn 复用 tinker feishu notify
+async function feishuNotifyBridgeAsync(sum) {
+  const flog = (s) => { try { fs.appendFileSync(FEISHU_NOTIFY_LOG, '[' + new Date().toISOString() + '] ' + s + '\n'); } catch (e) {} };
+  try {
+    if (!sum || !fs.existsSync(FEISHU_TOKEN_FILE)) return;
+    const tok = feishuLoadToken() || {};
+    if (!tok.notify_chat_id) return;                   // 没配通知群 · 静默跳过
+    let at = '';
+    const me = await feishuOwnerIdentity();
+    if (me && me.openId) at = ' <at user_id="' + me.openId + '">' + me.name + '</at> 去查看';   // 真 @ · 静音群也戳得到
+    const text = '🌉 ' + (sum.title || 'Tinker') + ' · ' + (sum.body || '发来一条消息') + at + ' · tinker inbox';
+    let out; try { out = fs.openSync(FEISHU_NOTIFY_LOG, 'a'); } catch (e) { out = null; }
+    const child = spawn(process.execPath, [__filename, 'feishu', 'notify', '-m', text], { detached: true, stdio: out == null ? 'ignore' : ['ignore', out, out] });
+    child.unref();
+    flog('bridge → 飞书 · ' + text.slice(0, 80));
+  } catch (e) { flog('bridge飞书播报异常 · ' + (e && e.message)); }
 }
 
 // 拿有效 access token · 快过期(5 分钟内)就 refresh 续 · 续不动让用户重新 login
