@@ -15,6 +15,7 @@
 const db = require('./db');
 const crypto = require('crypto');
 const studios = require('./studios');
+const feishu = require('./feishu');
 
 const KINDS = new Set(['noti', 'file', 'task']);
 const MAX_PAYLOAD = 10 * 1024 * 1024;
@@ -56,6 +57,10 @@ function bridgeSend({ to, toStudio, kind, payload }, { currentUserId }) {
   if (toStudio) notifyWaiters('studio:' + toStudio);
   else if (to) notifyWaiters('handle:' + to);
   else notifyWaiters('*');
+
+  // 产品级飞书联动:server 侧主动推通知群并 @ 收件人 · 团队所有人零配置就能收到
+  // 明文只有 from/to/kind(payload 加密) · 通知也只需要这个 · 失败绝不影响消息本身
+  feishu.notifyBridge({ from: fromRow.handle, to: to || null, toStudio: toStudio || null, kind }).catch(() => {});
 
   return { id, seq: result.lastInsertRowid, createdAt };
 }
