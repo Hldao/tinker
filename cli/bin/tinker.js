@@ -9235,6 +9235,11 @@ async function todoAdd(cfg, args, opts) {
   text = (text || '').trim();
   if (!text) { err('待办内容不能空 · tinker todo add "买菜" 或 -m "买菜"'); process.exit(1); }
   const team = !!opts.team || !!opts.studio;
+  // 派给别人必须是团队任务 · 否则 handle 会被静默吞掉 · 队友永远收不到(也不会有飞书播报)
+  if (opts.toHandle && !team) {
+    err('派给别人得是团队任务 · 加 --team(或 --studio <名>) · 例: ' + vermilion('tinker todo add "…" --team -t @' + opts.toHandle));
+    process.exit(1);
+  }
   const payload = { scope: team ? 'team' : 'personal', text, due: opts.due || null };
   if (team) {
     const state = await apiState(cfg);
@@ -9243,6 +9248,7 @@ async function todoAdd(cfg, args, opts) {
   }
   try {
     const r = await apiAction(cfg, 'addTodo', payload);
+    if (team && payload.assigneeHandle) feishuNotifyAssignAsync(cfg, payload.assigneeHandle, text, opts.due);
     if (opts.json) return outputJson({ ok: true, todoId: r.result?.id });
     log(moss('  记下了 · ') + sepia(team ? '团队 ' : '个人 ') + text + (payload.assigneeHandle ? sepia(' → @' + payload.assigneeHandle) : '') + (opts.due ? sepia(' · 截 ' + opts.due) : ''));
   } catch (e) { if (opts.json) return errJson(e.message, 'TODO_ADD_FAILED'); err(e.message); process.exit(1); }
@@ -9271,6 +9277,7 @@ async function todoAssign(cfg, partial, opts) {
   const t = todoFind(await apiState(cfg), partial);
   try {
     await apiAction(cfg, 'assignTodo', { todoId: t.id, assigneeHandle: opts.toHandle });
+    feishuNotifyAssignAsync(cfg, opts.toHandle, t.text, t.due);
     if (opts.json) return outputJson({ ok: true });
     log(moss('  派给 @' + opts.toHandle + ' · ') + t.text);
   } catch (e) { if (opts.json) return errJson(e.message, 'TODO_ASSIGN_FAILED'); err(e.message); process.exit(1); }
@@ -9282,6 +9289,7 @@ async function todoPromote(cfg, partial, opts) {
   const studioId = todoResolveStudioId(state, cfg, opts.studio);
   try {
     await apiAction(cfg, 'promoteTodo', { todoId: t.id, studioId, assigneeHandle: opts.toHandle || undefined });
+    if (opts.toHandle) feishuNotifyAssignAsync(cfg, opts.toHandle, t.text, t.due);
     if (opts.json) return outputJson({ ok: true });
     log(moss('  同步成团队任务 · ') + t.text);
   } catch (e) { if (opts.json) return errJson(e.message, 'TODO_PROMOTE_FAILED'); err(e.message); process.exit(1); }
@@ -9296,6 +9304,7 @@ async function todoPromote(cfg, partial, opts) {
 //  · 要落到本人列表 + 推送本人必须 user_access_token · refresh 要 scope 带 offline_access
 const FEISHU_TOKEN_FILE = path.join(CONFIG_DIR, 'feishu-token.json');
 const FEISHU_SYNC_FILE = path.join(CONFIG_DIR, 'feishu-sync.json');
+const FEISHU_NOTIFY_LOG = path.join(CONFIG_DIR, 'feishu-notify.log');   // 派任务播报的成败留痕 · 别再当哑炮
 const FEISHU_BASE = 'https://open.feishu.cn';
 
 function feishuLoadToken() { try { return JSON.parse(fs.readFileSync(FEISHU_TOKEN_FILE, 'utf-8')); } catch (e) { return null; } }
@@ -9312,6 +9321,25 @@ function feishuMaybeSyncAsync() {
     const child = spawn(process.execPath, [__filename, 'todo', 'sync', '--quiet'], { detached: true, stdio: 'ignore' });
     child.unref();
   } catch (e) { /* 后台同步失败不影响主命令 */ }
+}
+
+// 团队任务派给别人时 · 往飞书通知群甩一条"@谁 接了个新任务"
+// 我自己的待办同步进我自己的飞书任务(feishuMaybeSyncAsync)· 但派给队友的落不到队友飞书
+// 所以走通知群补这个缺口 · 后台 detached · 复用 tinker feishu notify(应用级 token · 不需队友连飞书)
+function feishuNotifyAssignAsync(cfg, handle, text, due) {
+  const flog = (s) => { try { fs.appendFileSync(FEISHU_NOTIFY_LOG, '[' + new Date().toISOString() + '] ' + s + '\n'); } catch (e) {} };
+  if (!handle || handle === cfg.handle) return;      // 派给自己不用广播
+  if (!fs.existsSync(FEISHU_TOKEN_FILE)) { flog('跳过播报 · 没连飞书 · handle=' + handle); return; }
+  try {
+    const tok = feishuLoadToken() || {};
+    if (!tok.notify_chat_id) { flog('跳过播报 · 没配通知群 notify_chat_id · handle=' + handle + ' · 用 tinker feishu set-chat 设一个'); return; }
+    const msg = '📋 @' + handle + ' 接了个新任务:' + text + (due ? ' · 截 ' + due : '');
+    // 子进程的成败(“已发到群”/报错)写进 feishu-notify.log · 失败不再无声无息
+    let out; try { out = fs.openSync(FEISHU_NOTIFY_LOG, 'a'); } catch (e) { out = null; }
+    const child = spawn(process.execPath, [__filename, 'feishu', 'notify', '-m', msg], { detached: true, stdio: out == null ? 'ignore' : ['ignore', out, out] });
+    child.unref();
+    flog('已触发播报 spawn · handle=' + handle + ' · ' + msg.slice(0, 60));
+  } catch (e) { flog('播报异常 · handle=' + handle + ' · ' + (e && e.message)); }
 }
 
 // 拿有效 access token · 快过期(5 分钟内)就 refresh 续 · 续不动让用户重新 login
