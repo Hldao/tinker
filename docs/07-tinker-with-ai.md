@@ -15,7 +15,7 @@
 
 ## 协议
 
-- API base: http://120.26.46.217:8788
+- API base: https://daogu.cc
 - 鉴权: 所有 POST/GET 都加 header `Authorization: Bearer <我的钥匙>`
 - Content-Type: application/json
 - 我的钥匙: tk_这里粘上你在工作室生成的钥匙
@@ -130,7 +130,7 @@ Tinker 是工艺人日志气质,反 changelog,反 AI 装大佬。
 3. 起草 1 到 3 条候选进展(Tinker voice,每条 200 到 400 字)
 4. 给我看候选,每条附"自评"(一句话说为什么这条值得发),我挑
 5. 我挑了之后,调 addUpdate POST 出去
-6. 报告:成功 + web URL(http://120.26.46.217:8788/#/p/<我的 handle>/<项目 slug>)
+6. 报告:成功 + web URL(https://daogu.cc/#/p/<我的 handle>/<项目 slug>)
 
 ## 硬规则(别犯)
 
@@ -146,7 +146,7 @@ Tinker 是工艺人日志气质,反 changelog,反 AI 装大佬。
 - `401`: 钥匙失效 · 去 Tinker 工作室"CLI 钥匙"撤销 + 生成新的
 - `403`: 钥匙不能管理钥匙(预期行为 · 跟 token 滥用做了隔离)
 - `429`: 请求太频繁 · 等 1 分钟
-- `5xx`: server 有问题 · 让我去看 http://120.26.46.217:8788/api/health
+- `5xx`: server 有问题 · 让我去看 https://daogu.cc/api/health
 
 ## 进阶
 

@@ -114,8 +114,8 @@ function loadTodosCache() {
     return c; // { at, todos }
   } catch (e) { return null; }
 }
-// 默认 / 兜底 server URL (alpha 期生产 IP) · 旧 config 的 ngrok 地址会失效 · 这是 fallback
-const DEFAULT_SERVER_URL = 'http://120.26.46.217:8788';
+// 默认 / 兜底 server URL (备案后正式域名) · 旧 config 的 IP / ngrok 地址会失效 · 这是 fallback
+const DEFAULT_SERVER_URL = 'https://daogu.cc';
 
 function mustHaveConfig(opts) {
   const requireToken = !opts || opts.requireToken !== false;
@@ -762,7 +762,7 @@ async function cmdLogin(opts = {}) {
   log(sepia('  ━━━━━━━━━━━━━━━━━━━━━━━'));
   const serverUrl = await input({
     message: 'server URL',
-    default: 'http://120.26.46.217:8788',
+    default: 'https://daogu.cc',
   });
   log('');
   log(sepia('  到 ' + vermilion(serverUrl.replace(/\/$/, '') + '/#/w/<你的handle>') + sepia(' · 点 "CLI 钥匙" 生成一把')));

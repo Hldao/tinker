@@ -56,7 +56,7 @@ docker exec tinker-server node /app/server/scripts/merge-daodao-to-380855352.js
 
 ### 5. 浏览器刷新验证
 
-打开 [http://120.26.46.217:8788/](http://120.26.46.217:8788/)，强刷 (⌘+Shift+R)：
+打开 [https://daogu.cc/](https://daogu.cc/)，强刷 (⌘+Shift+R)：
 
 - masthead 右上角显示 `@daodao`
 - 进自己工作室能看到 Tinker / 捣鼓 + 箭证

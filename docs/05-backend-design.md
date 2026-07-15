@@ -9,7 +9,7 @@
 - **身份**: UUID 主键 + handle (display, 可改) + email (verification)
 - **匿名浏览保留**：互动触发登录 modal (已实现 pendingAfterLogin 沿用)
 - **文件**: 暂时 base64 in DB · OSS 单独 task
-- **生产 IP**: http://120.26.46.217:8788 (daogu.cc 备案中)
+- **生产地址**: https://daogu.cc (已备案 · nginx 反代 → tinker-server:8788)
 
 ## 为什么这么选
 
